@@ -6,10 +6,11 @@ SET search_path = tesla_oracle, public;
 
 CREATE TABLE partial_devices
 (
-    vin CHAR(17) PRIMARY KEY,
+    vin CHAR(17),
     synthetic_device_address BYTEA
         CONSTRAINT synthetic_device_address_check CHECK (length(synthetic_device_address) = 20),
-    wallet_child_num numeric(78, 0) UNIQUE NOT NULL
+    wallet_child_num numeric(78, 0) UNIQUE NOT NULL,
+    CONSTRAINT partial_device_pkey PRIMARY KEY (vin, synthetic_device_address)
 );
 
 -- +goose StatementEnd

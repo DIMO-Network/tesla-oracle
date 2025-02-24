@@ -2,14 +2,19 @@ package main
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"tesla-oracle/internal/config"
+	"tesla-oracle/internal/services"
 
 	"github.com/DIMO-Network/shared"
 	"github.com/DIMO-Network/shared/db"
+	"github.com/IBM/sarama"
 	"github.com/rs/zerolog"
+	"golang.org/x/sync/errgroup"
 )
 
 func main() {
@@ -42,5 +47,38 @@ func main() {
 
 	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
 	pdb.WaitForDB(logger)
+
+	config := sarama.NewConfig()
+	config.Version = sarama.V3_6_0_0
+
+	brokers := strings.Split(settings.KafkaBrokers, ",")
+	kClient, err := sarama.NewClient(brokers, config)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("error creating kafka client")
+	}
+
+	consumer, err := sarama.NewConsumerGroupFromClient(settings.TopicContractEvent, kClient)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("error creating consumer from client")
+	}
+
+	proc := services.NewProcessor("", 4, &logger)
+
+	group, gCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		for {
+			logger.Info().Msgf("starting consumer: %s", settings.TopicContractEvent)
+			if err := consumer.Consume(gCtx, strings.Split(settings.TopicContractEvent, ","), proc); err != nil {
+				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+					return nil
+				}
+				logger.Err(err).Msg("consumer failure")
+				return err
+			}
+			if gCtx.Err() != nil { // returning nil since this can only be context cancelled
+				return nil
+			}
+		}
+	})
 
 }
