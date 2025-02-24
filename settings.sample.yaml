@@ -1,0 +1,13 @@
+ENVIRONMENT: local
+PORT: 3555
+MON_PORT: 8888
+LOG_LEVEL: debug
+CHAIN_ID: 80001
+DB:
+  USER: dimo
+  PASSWORD: dimo
+  PORT: 5432
+  HOST: localhost
+  NAME: tesla-oracle
+  MAX_OPEN_CONNECTIONS: 5
+  MAX_IDLE_CONNECTIONS: 5
