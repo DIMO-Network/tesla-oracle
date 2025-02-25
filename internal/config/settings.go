@@ -6,7 +6,7 @@ import (
 
 type Settings struct {
 	Environment string      `yaml:"ENVIRONMENT"`
-	Port        int         `yaml:"PORT"`
+	GRPCPort    int         `yaml:"GRPC_PORT"`
 	MonPort     int         `yaml:"MON_PORT"`
 	LogLevel    string      `yaml:"LOG_LEVEL"`
 	ChainID     int         `yaml:"CHAIN_ID"`
