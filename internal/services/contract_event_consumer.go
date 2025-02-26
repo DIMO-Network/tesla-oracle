@@ -55,7 +55,7 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 			switch event.Type {
 			case sdmint.Type:
-				if err := p.handleMintEvent(session.Context(), event.Data); err != nil {
+				if err := p.handleSyntheticMintEvent(session.Context(), event.Data); err != nil {
 					p.logger.Err(err).Msg("failed to process tesla device mint")
 					continue
 				}
@@ -69,7 +69,7 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	}
 }
 
-func (p Processor) handleMintEvent(ctx context.Context, data json.RawMessage) error {
+func (p Processor) handleSyntheticMintEvent(ctx context.Context, data json.RawMessage) error {
 	var sdmint sdmint.Data
 	if err := json.Unmarshal(data, &sdmint); err != nil {
 		p.logger.Err(err).Msg("failed to marse tesla device mint event")
