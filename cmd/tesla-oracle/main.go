@@ -16,6 +16,7 @@ import (
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 
 	"github.com/DIMO-Network/shared"
@@ -24,13 +25,13 @@ import (
 )
 
 func main() {
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+	defer cancel()
+
 	logger := zerolog.New(os.Stdout).With().
 		Timestamp().
 		Str("app", "tesla-oracle").
 		Logger()
-
-	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
-	defer cancel()
 
 	settings, err := shared.LoadConfig[config.Settings]("settings.yaml")
 	if err != nil {
@@ -51,19 +52,12 @@ func main() {
 		return
 	}
 
+	mdw := middleware.New(&logger)
+
 	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
 	pdb.WaitForDB(logger)
 
 	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &settings, &logger)
-
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", settings.GRPCPort))
-	if err != nil {
-		logger.Fatal().Err(err).Msgf("Couldn't listen on gRPC port %d", settings.GRPCPort)
-	}
-
-	logger.Info().Msgf("Starting gRPC server on port %d", settings.GRPCPort)
-
-	mdw := middleware.New(&logger)
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
 			mdw.MetricsMiddleware(),
@@ -76,18 +70,43 @@ func main() {
 
 	grpc_oracle.RegisterTeslaOracleServer(server, teslaSvc)
 
-	go func() {
-		if err := server.Serve(lis); err != nil {
-			logger.Fatal().Err(err).Msg("gRPC server terminated unexpectedly")
-		}
-	}()
+	logger.Info().Msgf("Starting gRPC server on port %d", settings.GRPCPort)
 
-	c := make(chan os.Signal, 1)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	<-c
+	group, gCtx := errgroup.WithContext(ctx)
+	group.Go(func() error {
+		if err := StartGRPCServer(server, settings.GRPCPort, &logger); err != nil {
+			return err
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
+		<-gCtx.Done()
+		server.GracefulStop()
+		return nil
+	})
+
+	if err := group.Wait(); err != nil {
+		logger.Fatal().Err(err).Msg("Server error on shutdown.")
+	}
+
 	logger.Info().Msg("Gracefully shutting down and running cleanup tasks...")
 	_ = ctx.Done()
 	_ = pdb.DBS().Writer.Close()
 	_ = pdb.DBS().Reader.Close()
 
+}
+
+func StartGRPCServer(server *grpc.Server, grpcPort int, logger *zerolog.Logger) error {
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
+	if err != nil {
+		logger.Fatal().Err(err).Msgf("Couldn't listen on gRPC port %d", grpcPort)
+	}
+
+	if err := server.Serve(lis); err != nil {
+		logger.Fatal().Err(err).Msg("gRPC server terminated unexpectedly")
+	}
+
+	return nil
 }
