@@ -111,7 +111,7 @@ func main() {
 	})
 
 	group.Go(func() error {
-		<-ctx.Done()
+		<-gCtx.Done()
 		server.GracefulStop()
 		return nil
 	})
@@ -119,8 +119,6 @@ func main() {
 	if err := group.Wait(); err != nil {
 		logger.Fatal().Err(err).Msg("Server error on shutdown.")
 	}
-
-	logger.Info().Msg("graceful shutdown complete")
 
 	logger.Info().Msg("Gracefully shutting down and running cleanup tasks...")
 	_ = ctx.Done()
