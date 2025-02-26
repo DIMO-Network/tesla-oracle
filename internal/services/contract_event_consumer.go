@@ -6,17 +6,19 @@ import (
 
 	"github.com/DIMO-Network/shared"
 	"github.com/DIMO-Network/shared/db"
-	"github.com/DIMO-Network/shared/event/sdmint"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/IBM/sarama"
 	"github.com/ericlagergren/decimal"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/types"
 )
 
 const (
-	TeslaIntegrationID = "2"
+	TeslaIntegrationID        = 2
+	ContractEventType         = "zone.dimo.contract.event"
+	SyntheticDeviceNodeMinted = "SyntheticDeviceNodeMinted"
 )
 
 type Processor struct {
@@ -46,22 +48,29 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				return nil
 			}
 
-			var event shared.CloudEvent[json.RawMessage]
+			var event shared.CloudEvent[struct {
+				EventName string
+				Arguments json.RawMessage
+			}]
 			if err := json.Unmarshal(msg.Value, &event); err != nil {
 				p.logger.Err(err).Msg("failed to parse contract event")
 				session.MarkMessage(msg, "")
 				continue
 			}
 
-			switch event.Type {
-			case sdmint.Type:
-				if err := p.handleSyntheticMintEvent(session.Context(), event.Data); err != nil {
+			if event.Type != ContractEventType {
+				session.MarkMessage(msg, "")
+				continue
+			}
+
+			switch event.Data.EventName {
+			case SyntheticDeviceNodeMinted:
+				if err := p.handleSyntheticMintEvent(session.Context(), event.Data.Arguments); err != nil {
 					p.logger.Err(err).Msg("failed to process tesla device mint")
 					continue
 				}
 				session.MarkMessage(msg, "")
 			default:
-				p.logger.Info().Msg("event type not recognized. continuing")
 				session.MarkMessage(msg, "")
 			}
 
@@ -70,20 +79,20 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 }
 
 func (p Processor) handleSyntheticMintEvent(ctx context.Context, data json.RawMessage) error {
-	var sdmint sdmint.Data
-	if err := json.Unmarshal(data, &sdmint); err != nil {
+	var mint syntheticDeviceNodeMinted
+	if err := json.Unmarshal(data, &mint); err != nil {
 		p.logger.Err(err).Msg("failed to marse tesla device mint event")
 		return err
 	}
 
-	if sdmint.Integration.IntegrationID != TeslaIntegrationID { // only tesla mints
+	if mint.IntegrationNode != TeslaIntegrationID { // only tesla mints
 		p.logger.Info().Msg("only process tesla mints")
 		return nil
 	}
 
-	walletChildNum := types.NewDecimal(decimal.New(int64(sdmint.Device.WalletChildNumber), 0))
+	walletAddr := mint.SyntheticDeviceAddress
 	partial, err := models.Devices(
-		models.DeviceWhere.WalletChildNum.EQ(walletChildNum),
+		models.DeviceWhere.SyntheticDeviceAddress.EQ(walletAddr.Bytes()),
 		models.DeviceWhere.TokenID.IsNull(),
 	).One(ctx, p.pdb.DBS().Reader)
 	if err != nil {
@@ -95,10 +104,17 @@ func (p Processor) handleSyntheticMintEvent(ctx context.Context, data json.RawMe
 		Vin:                    partial.Vin,
 		SyntheticDeviceAddress: partial.SyntheticDeviceAddress,
 		WalletChildNum:         partial.WalletChildNum,
-		TokenID:                types.NewNullDecimal(decimal.New(int64(sdmint.Vehicle.TokenID), 0)),
-		SyntheticTokenID:       types.NewNullDecimal(decimal.New(int64(sdmint.Device.TokenID), 0)),
+		TokenID:                types.NewNullDecimal(decimal.New(int64(mint.VehicleNode), 0)),
+		SyntheticTokenID:       types.NewNullDecimal(decimal.New(int64(mint.SyntheticDeviceNode), 0)),
 	}
 
 	_, err = full.Update(ctx, p.pdb.DBS().Writer, boil.Infer())
 	return err
+}
+
+type syntheticDeviceNodeMinted struct {
+	IntegrationNode        int            `json:"integrationNode"`
+	SyntheticDeviceNode    int            `json:"syntheticDeviceNode"`
+	VehicleNode            int            `json:"vehicleNode"`
+	SyntheticDeviceAddress common.Address `json:"syntheticDeviceAddress"`
 }
