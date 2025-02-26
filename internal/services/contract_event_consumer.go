@@ -18,6 +18,7 @@ import (
 
 const (
 	TeslaIntegrationID = "2"
+	DeviceBurnEvent    = "com.dimo.zone.device.integration.delete"
 )
 
 type Processor struct {
@@ -65,6 +66,12 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 				session.MarkMessage(msg, "")
+			case DeviceBurnEvent:
+				if err := p.handleBurnEvent(session.Context(), event.Data); err != nil {
+					p.logger.Err(err).Msg("failed to process tesla device burn")
+					continue
+				}
+				session.MarkMessage(msg, "")
 			default:
 				p.logger.Info().Msg("event type not recognized. continuing")
 				session.MarkMessage(msg, "")
@@ -102,4 +109,22 @@ func (p Processor) handleMintEvent(ctx context.Context, data json.RawMessage) er
 	}
 
 	return full.Insert(ctx, p.pdb.DBS().Writer, boil.Infer())
+}
+
+func (p Processor) handleBurnEvent(ctx context.Context, data json.RawMessage) error {
+	var burn VehicleNodeBurned
+	if err := json.Unmarshal(data, &burn); err != nil {
+		p.logger.Err(err).Msg("failed to marse device burn event")
+		return err
+	}
+
+	if _, err := models.Devices(models.DeviceWhere.TokenID.EQ(types.NewDecimal(decimal.New(int64(burn.VehicleNode), 0)))).DeleteAll(ctx, p.pdb.DBS().Writer); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type VehicleNodeBurned struct {
+	VehicleNode int `json:"vehicleNode"`
 }
