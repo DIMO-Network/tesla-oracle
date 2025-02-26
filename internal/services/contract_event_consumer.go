@@ -2,7 +2,9 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 
 	"github.com/DIMO-Network/shared"
 	"github.com/DIMO-Network/shared/db"
@@ -19,7 +21,7 @@ const (
 	TeslaIntegrationID        = 2
 	ContractEventType         = "zone.dimo.contract.event"
 	SyntheticDeviceNodeMinted = "SyntheticDeviceNodeMinted"
-	VehicleNodeBurned         = "VehicleNodeBurned"
+	SyntheticDeviceNodeBurned = "SyntheticDeviceNodeBurned"
 )
 
 type Processor struct {
@@ -71,7 +73,7 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					continue
 				}
 				session.MarkMessage(msg, "")
-			case VehicleNodeBurned:
+			case SyntheticDeviceNodeBurned:
 				if err := p.handleBurnEvent(session.Context(), event.Data.Arguments); err != nil {
 					p.logger.Err(err).Msg("failed to process tesla device burn")
 					continue
@@ -128,6 +130,10 @@ func (p Processor) handleBurnEvent(ctx context.Context, data json.RawMessage) er
 	}
 
 	if _, err := models.Devices(models.DeviceWhere.TokenID.EQ(types.NewNullDecimal(decimal.New(int64(burn.VehicleNode), 0)))).DeleteAll(ctx, p.pdb.DBS().Writer); err != nil {
+		if errors.Is(sql.ErrNoRows, err) {
+			p.logger.Info().Msg("no vehicle record to delete")
+			return nil
+		}
 		return err
 	}
 
@@ -135,7 +141,8 @@ func (p Processor) handleBurnEvent(ctx context.Context, data json.RawMessage) er
 }
 
 type vehicleNodeBurnedArgs struct {
-	VehicleNode int `json:"vehicleNode"`
+	SyntheticDeviceNode int `json:"syntheticDeviceNode"`
+	VehicleNode         int `json:"vehicleNode"`
 }
 
 type syntheticDeviceNodeMinted struct {
