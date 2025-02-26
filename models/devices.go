@@ -14,55 +14,64 @@ import (
 	"time"
 
 	"github.com/friendsofgo/errors"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"github.com/volatiletech/sqlboiler/v4/queries/qmhelper"
-	"github.com/volatiletech/sqlboiler/v4/types"
 	"github.com/volatiletech/strmangle"
 )
 
 // Device is an object representing the database table.
 type Device struct {
-	Vin                    string            `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
-	SyntheticDeviceAddress []byte            `boil:"synthetic_device_address" json:"synthetic_device_address" toml:"synthetic_device_address" yaml:"synthetic_device_address"`
-	WalletChildNum         types.Decimal     `boil:"wallet_child_num" json:"wallet_child_num" toml:"wallet_child_num" yaml:"wallet_child_num"`
-	TokenID                types.NullDecimal `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
-	SyntheticTokenID       types.NullDecimal `boil:"synthetic_token_id" json:"synthetic_token_id,omitempty" toml:"synthetic_token_id" yaml:"synthetic_token_id,omitempty"`
+	SyntheticDeviceAddress []byte   `boil:"synthetic_device_address" json:"synthetic_device_address" toml:"synthetic_device_address" yaml:"synthetic_device_address"`
+	Vin                    string   `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
+	WalletChildNumber      int      `boil:"wallet_child_number" json:"wallet_child_number" toml:"wallet_child_number" yaml:"wallet_child_number"`
+	TokenID                null.Int `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
+	SyntheticTokenID       null.Int `boil:"synthetic_token_id" json:"synthetic_token_id,omitempty" toml:"synthetic_token_id" yaml:"synthetic_token_id,omitempty"`
 
 	R *deviceR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L deviceL  `boil:"-" json:"-" toml:"-" yaml:"-"`
 }
 
 var DeviceColumns = struct {
-	Vin                    string
 	SyntheticDeviceAddress string
-	WalletChildNum         string
+	Vin                    string
+	WalletChildNumber      string
 	TokenID                string
 	SyntheticTokenID       string
 }{
-	Vin:                    "vin",
 	SyntheticDeviceAddress: "synthetic_device_address",
-	WalletChildNum:         "wallet_child_num",
+	Vin:                    "vin",
+	WalletChildNumber:      "wallet_child_number",
 	TokenID:                "token_id",
 	SyntheticTokenID:       "synthetic_token_id",
 }
 
 var DeviceTableColumns = struct {
-	Vin                    string
 	SyntheticDeviceAddress string
-	WalletChildNum         string
+	Vin                    string
+	WalletChildNumber      string
 	TokenID                string
 	SyntheticTokenID       string
 }{
-	Vin:                    "devices.vin",
 	SyntheticDeviceAddress: "devices.synthetic_device_address",
-	WalletChildNum:         "devices.wallet_child_num",
+	Vin:                    "devices.vin",
+	WalletChildNumber:      "devices.wallet_child_number",
 	TokenID:                "devices.token_id",
 	SyntheticTokenID:       "devices.synthetic_token_id",
 }
 
 // Generated where
+
+type whereHelper__byte struct{ field string }
+
+func (w whereHelper__byte) EQ(x []byte) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelper__byte) NEQ(x []byte) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
+func (w whereHelper__byte) LT(x []byte) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelper__byte) LTE(x []byte) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
+func (w whereHelper__byte) GT(x []byte) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelper__byte) GTE(x []byte) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
 
 type whereHelperstring struct{ field string }
 
@@ -95,74 +104,79 @@ func (w whereHelperstring) NIN(slice []string) qm.QueryMod {
 	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
-type whereHelper__byte struct{ field string }
+type whereHelperint struct{ field string }
 
-func (w whereHelper__byte) EQ(x []byte) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
-func (w whereHelper__byte) NEQ(x []byte) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
-func (w whereHelper__byte) LT(x []byte) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.LT, x) }
-func (w whereHelper__byte) LTE(x []byte) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
-func (w whereHelper__byte) GT(x []byte) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
-func (w whereHelper__byte) GTE(x []byte) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
-
-type whereHelpertypes_Decimal struct{ field string }
-
-func (w whereHelpertypes_Decimal) EQ(x types.Decimal) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.EQ, x)
+func (w whereHelperint) EQ(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelperint) NEQ(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
+func (w whereHelperint) LT(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelperint) LTE(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
+func (w whereHelperint) GT(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelperint) GTE(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
+func (w whereHelperint) IN(slice []int) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
 }
-func (w whereHelpertypes_Decimal) NEQ(x types.Decimal) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.NEQ, x)
-}
-func (w whereHelpertypes_Decimal) LT(x types.Decimal) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LT, x)
-}
-func (w whereHelpertypes_Decimal) LTE(x types.Decimal) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LTE, x)
-}
-func (w whereHelpertypes_Decimal) GT(x types.Decimal) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GT, x)
-}
-func (w whereHelpertypes_Decimal) GTE(x types.Decimal) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GTE, x)
+func (w whereHelperint) NIN(slice []int) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
-type whereHelpertypes_NullDecimal struct{ field string }
+type whereHelpernull_Int struct{ field string }
 
-func (w whereHelpertypes_NullDecimal) EQ(x types.NullDecimal) qm.QueryMod {
+func (w whereHelpernull_Int) EQ(x null.Int) qm.QueryMod {
 	return qmhelper.WhereNullEQ(w.field, false, x)
 }
-func (w whereHelpertypes_NullDecimal) NEQ(x types.NullDecimal) qm.QueryMod {
+func (w whereHelpernull_Int) NEQ(x null.Int) qm.QueryMod {
 	return qmhelper.WhereNullEQ(w.field, true, x)
 }
-func (w whereHelpertypes_NullDecimal) LT(x types.NullDecimal) qm.QueryMod {
+func (w whereHelpernull_Int) LT(x null.Int) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.LT, x)
 }
-func (w whereHelpertypes_NullDecimal) LTE(x types.NullDecimal) qm.QueryMod {
+func (w whereHelpernull_Int) LTE(x null.Int) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.LTE, x)
 }
-func (w whereHelpertypes_NullDecimal) GT(x types.NullDecimal) qm.QueryMod {
+func (w whereHelpernull_Int) GT(x null.Int) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.GT, x)
 }
-func (w whereHelpertypes_NullDecimal) GTE(x types.NullDecimal) qm.QueryMod {
+func (w whereHelpernull_Int) GTE(x null.Int) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.GTE, x)
 }
-
-func (w whereHelpertypes_NullDecimal) IsNull() qm.QueryMod { return qmhelper.WhereIsNull(w.field) }
-func (w whereHelpertypes_NullDecimal) IsNotNull() qm.QueryMod {
-	return qmhelper.WhereIsNotNull(w.field)
+func (w whereHelpernull_Int) IN(slice []int) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
+}
+func (w whereHelpernull_Int) NIN(slice []int) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
+func (w whereHelpernull_Int) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
+func (w whereHelpernull_Int) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
+
 var DeviceWhere = struct {
-	Vin                    whereHelperstring
 	SyntheticDeviceAddress whereHelper__byte
-	WalletChildNum         whereHelpertypes_Decimal
-	TokenID                whereHelpertypes_NullDecimal
-	SyntheticTokenID       whereHelpertypes_NullDecimal
+	Vin                    whereHelperstring
+	WalletChildNumber      whereHelperint
+	TokenID                whereHelpernull_Int
+	SyntheticTokenID       whereHelpernull_Int
 }{
-	Vin:                    whereHelperstring{field: "\"tesla_oracle\".\"devices\".\"vin\""},
 	SyntheticDeviceAddress: whereHelper__byte{field: "\"tesla_oracle\".\"devices\".\"synthetic_device_address\""},
-	WalletChildNum:         whereHelpertypes_Decimal{field: "\"tesla_oracle\".\"devices\".\"wallet_child_num\""},
-	TokenID:                whereHelpertypes_NullDecimal{field: "\"tesla_oracle\".\"devices\".\"token_id\""},
-	SyntheticTokenID:       whereHelpertypes_NullDecimal{field: "\"tesla_oracle\".\"devices\".\"synthetic_token_id\""},
+	Vin:                    whereHelperstring{field: "\"tesla_oracle\".\"devices\".\"vin\""},
+	WalletChildNumber:      whereHelperint{field: "\"tesla_oracle\".\"devices\".\"wallet_child_number\""},
+	TokenID:                whereHelpernull_Int{field: "\"tesla_oracle\".\"devices\".\"token_id\""},
+	SyntheticTokenID:       whereHelpernull_Int{field: "\"tesla_oracle\".\"devices\".\"synthetic_token_id\""},
 }
 
 // DeviceRels is where relationship names are stored.
@@ -182,10 +196,10 @@ func (*deviceR) NewStruct() *deviceR {
 type deviceL struct{}
 
 var (
-	deviceAllColumns            = []string{"vin", "synthetic_device_address", "wallet_child_num", "token_id", "synthetic_token_id"}
-	deviceColumnsWithoutDefault = []string{"vin", "synthetic_device_address", "wallet_child_num"}
+	deviceAllColumns            = []string{"synthetic_device_address", "vin", "wallet_child_number", "token_id", "synthetic_token_id"}
+	deviceColumnsWithoutDefault = []string{"synthetic_device_address", "vin", "wallet_child_number"}
 	deviceColumnsWithDefault    = []string{"token_id", "synthetic_token_id"}
-	devicePrimaryKeyColumns     = []string{"vin", "synthetic_device_address"}
+	devicePrimaryKeyColumns     = []string{"synthetic_device_address"}
 	deviceGeneratedColumns      = []string{}
 )
 
@@ -507,7 +521,7 @@ func Devices(mods ...qm.QueryMod) deviceQuery {
 
 // FindDevice retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindDevice(ctx context.Context, exec boil.ContextExecutor, vin string, syntheticDeviceAddress []byte, selectCols ...string) (*Device, error) {
+func FindDevice(ctx context.Context, exec boil.ContextExecutor, syntheticDeviceAddress []byte, selectCols ...string) (*Device, error) {
 	deviceObj := &Device{}
 
 	sel := "*"
@@ -515,10 +529,10 @@ func FindDevice(ctx context.Context, exec boil.ContextExecutor, vin string, synt
 		sel = strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, selectCols), ",")
 	}
 	query := fmt.Sprintf(
-		"select %s from \"tesla_oracle\".\"devices\" where \"vin\"=$1 AND \"synthetic_device_address\"=$2", sel,
+		"select %s from \"tesla_oracle\".\"devices\" where \"synthetic_device_address\"=$1", sel,
 	)
 
-	q := queries.Raw(query, vin, syntheticDeviceAddress)
+	q := queries.Raw(query, syntheticDeviceAddress)
 
 	err := q.Bind(ctx, exec, deviceObj)
 	if err != nil {
@@ -876,7 +890,7 @@ func (o *Device) Delete(ctx context.Context, exec boil.ContextExecutor) (int64, 
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), devicePrimaryKeyMapping)
-	sql := "DELETE FROM \"tesla_oracle\".\"devices\" WHERE \"vin\"=$1 AND \"synthetic_device_address\"=$2"
+	sql := "DELETE FROM \"tesla_oracle\".\"devices\" WHERE \"synthetic_device_address\"=$1"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -973,7 +987,7 @@ func (o DeviceSlice) DeleteAll(ctx context.Context, exec boil.ContextExecutor) (
 // Reload refetches the object from the database
 // using the primary keys with an executor.
 func (o *Device) Reload(ctx context.Context, exec boil.ContextExecutor) error {
-	ret, err := FindDevice(ctx, exec, o.Vin, o.SyntheticDeviceAddress)
+	ret, err := FindDevice(ctx, exec, o.SyntheticDeviceAddress)
 	if err != nil {
 		return err
 	}
@@ -1012,16 +1026,16 @@ func (o *DeviceSlice) ReloadAll(ctx context.Context, exec boil.ContextExecutor) 
 }
 
 // DeviceExists checks if the Device row exists.
-func DeviceExists(ctx context.Context, exec boil.ContextExecutor, vin string, syntheticDeviceAddress []byte) (bool, error) {
+func DeviceExists(ctx context.Context, exec boil.ContextExecutor, syntheticDeviceAddress []byte) (bool, error) {
 	var exists bool
-	sql := "select exists(select 1 from \"tesla_oracle\".\"devices\" where \"vin\"=$1 AND \"synthetic_device_address\"=$2 limit 1)"
+	sql := "select exists(select 1 from \"tesla_oracle\".\"devices\" where \"synthetic_device_address\"=$1 limit 1)"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
 		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, vin, syntheticDeviceAddress)
+		fmt.Fprintln(writer, syntheticDeviceAddress)
 	}
-	row := exec.QueryRowContext(ctx, sql, vin, syntheticDeviceAddress)
+	row := exec.QueryRowContext(ctx, sql, syntheticDeviceAddress)
 
 	err := row.Scan(&exists)
 	if err != nil {
@@ -1033,5 +1047,5 @@ func DeviceExists(ctx context.Context, exec boil.ContextExecutor, vin string, sy
 
 // Exists checks if the Device row exists.
 func (o *Device) Exists(ctx context.Context, exec boil.ContextExecutor) (bool, error) {
-	return DeviceExists(ctx, exec, o.Vin, o.SyntheticDeviceAddress)
+	return DeviceExists(ctx, exec, o.SyntheticDeviceAddress)
 }
