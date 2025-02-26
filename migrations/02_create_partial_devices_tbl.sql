@@ -23,3 +23,4 @@ SET search_path = tesla_oracle, public;
 
 DROP TABLE partial_devices;
 -- +goose StatementEnd
+

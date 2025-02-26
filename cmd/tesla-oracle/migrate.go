@@ -3,9 +3,9 @@ package main
 import (
 	"context"
 	"database/sql"
-	"tesla-oracle/internal/config"
-	"tesla-oracle/migrations"
 
+	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/migrations"
 	"github.com/pressly/goose/v3"
 	"github.com/rs/zerolog"
 )

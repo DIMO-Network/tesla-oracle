@@ -3,12 +3,11 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"tesla-oracle/models"
-	"time"
 
 	"github.com/DIMO-Network/shared"
 	"github.com/DIMO-Network/shared/db"
 	"github.com/DIMO-Network/shared/event/sdmint"
+	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/IBM/sarama"
 	"github.com/ericlagergren/decimal"
 	"github.com/rs/zerolog"
@@ -21,20 +20,16 @@ const (
 )
 
 type Processor struct {
-	teslaTelemetryTopic string
-	pdb                 db.Store
-	waitFor             time.Duration
-	logger              *zerolog.Logger
+	pdb    db.Store
+	logger *zerolog.Logger
 }
 
 func NewProcessor(
-	teslaTelemetryTopic string,
-	batcherDurationSeconds int,
+	pdb db.Store,
 	logger *zerolog.Logger) *Processor {
 	return &Processor{
-		teslaTelemetryTopic: teslaTelemetryTopic,
-		waitFor:             time.Duration(batcherDurationSeconds) * time.Second,
-		logger:              logger,
+		pdb:    pdb,
+		logger: logger,
 	}
 }
 
