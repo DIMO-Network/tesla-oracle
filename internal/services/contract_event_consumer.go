@@ -3,12 +3,11 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"tesla-oracle/models"
-	"time"
 
 	"github.com/DIMO-Network/shared"
 	"github.com/DIMO-Network/shared/db"
 	"github.com/DIMO-Network/shared/event/sdmint"
+	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/IBM/sarama"
 	"github.com/ericlagergren/decimal"
 	"github.com/rs/zerolog"
@@ -22,20 +21,16 @@ const (
 )
 
 type Processor struct {
-	teslaTelemetryTopic string
-	pdb                 db.Store
-	waitFor             time.Duration
-	logger              *zerolog.Logger
+	pdb    db.Store
+	logger *zerolog.Logger
 }
 
 func NewProcessor(
-	teslaTelemetryTopic string,
-	batcherDurationSeconds int,
+	pdb db.Store,
 	logger *zerolog.Logger) *Processor {
 	return &Processor{
-		teslaTelemetryTopic: teslaTelemetryTopic,
-		waitFor:             time.Duration(batcherDurationSeconds) * time.Second,
-		logger:              logger,
+		pdb:    pdb,
+		logger: logger,
 	}
 }
 
@@ -61,7 +56,7 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 			switch event.Type {
 			case sdmint.Type:
-				if err := p.handleMintEvent(session.Context(), event.Data); err != nil {
+				if err := p.handleSyntheticMintEvent(session.Context(), event.Data); err != nil {
 					p.logger.Err(err).Msg("failed to process tesla device mint")
 					continue
 				}
@@ -81,7 +76,7 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	}
 }
 
-func (p Processor) handleMintEvent(ctx context.Context, data json.RawMessage) error {
+func (p Processor) handleSyntheticMintEvent(ctx context.Context, data json.RawMessage) error {
 	var sdmint sdmint.Data
 	if err := json.Unmarshal(data, &sdmint); err != nil {
 		p.logger.Err(err).Msg("failed to marse tesla device mint event")
@@ -94,7 +89,10 @@ func (p Processor) handleMintEvent(ctx context.Context, data json.RawMessage) er
 	}
 
 	walletChildNum := types.NewDecimal(decimal.New(int64(sdmint.Device.WalletChildNumber), 0))
-	partial, err := models.PartialDevices(models.PartialDeviceWhere.WalletChildNum.EQ(walletChildNum)).One(ctx, p.pdb.DBS().Reader)
+	partial, err := models.Devices(
+		models.DeviceWhere.WalletChildNum.EQ(walletChildNum),
+		models.DeviceWhere.TokenID.IsNull(),
+	).One(ctx, p.pdb.DBS().Reader)
 	if err != nil {
 		p.logger.Err(err).Msg("failed to find partial device")
 		return err
@@ -104,11 +102,12 @@ func (p Processor) handleMintEvent(ctx context.Context, data json.RawMessage) er
 		Vin:                    partial.Vin,
 		SyntheticDeviceAddress: partial.SyntheticDeviceAddress,
 		WalletChildNum:         partial.WalletChildNum,
-		TokenID:                types.NewDecimal(decimal.New(int64(sdmint.Vehicle.TokenID), 0)),
-		SyntheticTokenID:       types.NewDecimal(decimal.New(int64(sdmint.Device.TokenID), 0)),
+		TokenID:                types.NewNullDecimal(decimal.New(int64(sdmint.Vehicle.TokenID), 0)),
+		SyntheticTokenID:       types.NewNullDecimal(decimal.New(int64(sdmint.Device.TokenID), 0)),
 	}
 
-	return full.Insert(ctx, p.pdb.DBS().Writer, boil.Infer())
+	_, err = full.Update(ctx, p.pdb.DBS().Writer, boil.Infer())
+	return err
 }
 
 func (p Processor) handleBurnEvent(ctx context.Context, data json.RawMessage) error {

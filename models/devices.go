@@ -24,11 +24,11 @@ import (
 
 // Device is an object representing the database table.
 type Device struct {
-	Vin                    string        `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
-	SyntheticDeviceAddress []byte        `boil:"synthetic_device_address" json:"synthetic_device_address" toml:"synthetic_device_address" yaml:"synthetic_device_address"`
-	WalletChildNum         types.Decimal `boil:"wallet_child_num" json:"wallet_child_num" toml:"wallet_child_num" yaml:"wallet_child_num"`
-	TokenID                types.Decimal `boil:"token_id" json:"token_id" toml:"token_id" yaml:"token_id"`
-	SyntheticTokenID       types.Decimal `boil:"synthetic_token_id" json:"synthetic_token_id" toml:"synthetic_token_id" yaml:"synthetic_token_id"`
+	Vin                    string            `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
+	SyntheticDeviceAddress []byte            `boil:"synthetic_device_address" json:"synthetic_device_address" toml:"synthetic_device_address" yaml:"synthetic_device_address"`
+	WalletChildNum         types.Decimal     `boil:"wallet_child_num" json:"wallet_child_num" toml:"wallet_child_num" yaml:"wallet_child_num"`
+	TokenID                types.NullDecimal `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
+	SyntheticTokenID       types.NullDecimal `boil:"synthetic_token_id" json:"synthetic_token_id,omitempty" toml:"synthetic_token_id" yaml:"synthetic_token_id,omitempty"`
 
 	R *deviceR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L deviceL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -125,18 +125,44 @@ func (w whereHelpertypes_Decimal) GTE(x types.Decimal) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.GTE, x)
 }
 
+type whereHelpertypes_NullDecimal struct{ field string }
+
+func (w whereHelpertypes_NullDecimal) EQ(x types.NullDecimal) qm.QueryMod {
+	return qmhelper.WhereNullEQ(w.field, false, x)
+}
+func (w whereHelpertypes_NullDecimal) NEQ(x types.NullDecimal) qm.QueryMod {
+	return qmhelper.WhereNullEQ(w.field, true, x)
+}
+func (w whereHelpertypes_NullDecimal) LT(x types.NullDecimal) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.LT, x)
+}
+func (w whereHelpertypes_NullDecimal) LTE(x types.NullDecimal) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.LTE, x)
+}
+func (w whereHelpertypes_NullDecimal) GT(x types.NullDecimal) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.GT, x)
+}
+func (w whereHelpertypes_NullDecimal) GTE(x types.NullDecimal) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.GTE, x)
+}
+
+func (w whereHelpertypes_NullDecimal) IsNull() qm.QueryMod { return qmhelper.WhereIsNull(w.field) }
+func (w whereHelpertypes_NullDecimal) IsNotNull() qm.QueryMod {
+	return qmhelper.WhereIsNotNull(w.field)
+}
+
 var DeviceWhere = struct {
 	Vin                    whereHelperstring
 	SyntheticDeviceAddress whereHelper__byte
 	WalletChildNum         whereHelpertypes_Decimal
-	TokenID                whereHelpertypes_Decimal
-	SyntheticTokenID       whereHelpertypes_Decimal
+	TokenID                whereHelpertypes_NullDecimal
+	SyntheticTokenID       whereHelpertypes_NullDecimal
 }{
 	Vin:                    whereHelperstring{field: "\"tesla_oracle\".\"devices\".\"vin\""},
 	SyntheticDeviceAddress: whereHelper__byte{field: "\"tesla_oracle\".\"devices\".\"synthetic_device_address\""},
 	WalletChildNum:         whereHelpertypes_Decimal{field: "\"tesla_oracle\".\"devices\".\"wallet_child_num\""},
-	TokenID:                whereHelpertypes_Decimal{field: "\"tesla_oracle\".\"devices\".\"token_id\""},
-	SyntheticTokenID:       whereHelpertypes_Decimal{field: "\"tesla_oracle\".\"devices\".\"synthetic_token_id\""},
+	TokenID:                whereHelpertypes_NullDecimal{field: "\"tesla_oracle\".\"devices\".\"token_id\""},
+	SyntheticTokenID:       whereHelpertypes_NullDecimal{field: "\"tesla_oracle\".\"devices\".\"synthetic_token_id\""},
 }
 
 // DeviceRels is where relationship names are stored.
@@ -157,8 +183,8 @@ type deviceL struct{}
 
 var (
 	deviceAllColumns            = []string{"vin", "synthetic_device_address", "wallet_child_num", "token_id", "synthetic_token_id"}
-	deviceColumnsWithoutDefault = []string{"vin", "synthetic_device_address", "wallet_child_num", "token_id", "synthetic_token_id"}
-	deviceColumnsWithDefault    = []string{}
+	deviceColumnsWithoutDefault = []string{"vin", "synthetic_device_address", "wallet_child_num"}
+	deviceColumnsWithDefault    = []string{"token_id", "synthetic_token_id"}
 	devicePrimaryKeyColumns     = []string{"vin", "synthetic_device_address"}
 	deviceGeneratedColumns      = []string{}
 )
