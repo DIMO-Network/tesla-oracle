@@ -22,3 +22,5 @@ resources/redis/
 
 # ignore settings file as it could contain secrets
 settings.yaml
+
+*.txt
