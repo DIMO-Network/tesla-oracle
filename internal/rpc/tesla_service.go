@@ -37,7 +37,7 @@ type TeslaRPCService struct {
 func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewDeviceRequest) (*emptypb.Empty, error) {
 	walletChildNum := types.NewDecimal(decimal.New(int64(req.WalletChildNum), 0))
 
-	partial := models.PartialDevice{
+	partial := models.Device{
 		Vin:                    req.Vin,
 		SyntheticDeviceAddress: req.SyntheticDeviceAddress,
 		WalletChildNum:         walletChildNum,
@@ -46,11 +46,7 @@ func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.Regis
 	if err := partial.Insert(
 		ctx,
 		t.dbs().Writer,
-		boil.Whitelist(
-			models.PartialDeviceColumns.Vin,
-			models.PartialDeviceColumns.SyntheticDeviceAddress,
-			models.PartialDeviceColumns.WalletChildNum,
-		),
+		boil.Whitelist(models.DeviceColumns.Vin, models.DeviceColumns.SyntheticDeviceAddress, models.DeviceColumns.WalletChildNum),
 	); err != nil {
 		return nil, err
 	}
@@ -59,7 +55,11 @@ func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.Regis
 }
 
 func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevicesByVINRequest) (*grpc.GetDevicesByVINResponse, error) {
-	devices, err := models.Devices(models.DeviceWhere.Vin.EQ(req.Vin)).All(ctx, t.dbs().Reader)
+	devices, err := models.Devices(
+		models.DeviceWhere.Vin.EQ(req.Vin),
+		models.DeviceWhere.TokenID.IsNotNull(),
+		models.DeviceWhere.SyntheticTokenID.IsNotNull(),
+	).All(ctx, t.dbs().Reader)
 	if err != nil {
 		return nil, err
 	}

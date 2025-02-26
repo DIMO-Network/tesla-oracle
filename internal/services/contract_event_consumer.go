@@ -82,7 +82,10 @@ func (p Processor) handleMintEvent(ctx context.Context, data json.RawMessage) er
 	}
 
 	walletChildNum := types.NewDecimal(decimal.New(int64(sdmint.Device.WalletChildNumber), 0))
-	partial, err := models.PartialDevices(models.PartialDeviceWhere.WalletChildNum.EQ(walletChildNum)).One(ctx, p.pdb.DBS().Reader)
+	partial, err := models.Devices(
+		models.DeviceWhere.WalletChildNum.EQ(walletChildNum),
+		models.DeviceWhere.TokenID.IsNull(),
+	).One(ctx, p.pdb.DBS().Reader)
 	if err != nil {
 		p.logger.Err(err).Msg("failed to find partial device")
 		return err
@@ -92,9 +95,10 @@ func (p Processor) handleMintEvent(ctx context.Context, data json.RawMessage) er
 		Vin:                    partial.Vin,
 		SyntheticDeviceAddress: partial.SyntheticDeviceAddress,
 		WalletChildNum:         partial.WalletChildNum,
-		TokenID:                types.NewDecimal(decimal.New(int64(sdmint.Vehicle.TokenID), 0)),
-		SyntheticTokenID:       types.NewDecimal(decimal.New(int64(sdmint.Device.TokenID), 0)),
+		TokenID:                types.NewNullDecimal(decimal.New(int64(sdmint.Vehicle.TokenID), 0)),
+		SyntheticTokenID:       types.NewNullDecimal(decimal.New(int64(sdmint.Device.TokenID), 0)),
 	}
 
-	return full.Insert(ctx, p.pdb.DBS().Writer, boil.Infer())
+	_, err = full.Update(ctx, p.pdb.DBS().Writer, boil.Infer())
+	return err
 }
