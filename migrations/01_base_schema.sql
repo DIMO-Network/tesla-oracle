@@ -9,5 +9,5 @@ CREATE SCHEMA IF NOT EXISTS tesla_oracle;
 -- +goose StatementBegin
 SELECT 'down SQL query';
 DROP SCHEMA tesla_oracle CASCADE;
-GRANT CREATE, USAGE ON schema public TO public;
+GRANT CREATE USAGE ON schema public TO public;
 -- +goose StatementEnd

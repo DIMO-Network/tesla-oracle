@@ -7,10 +7,8 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/DIMO-Network/tesla-oracle/pkg/grpc"
-	"github.com/ericlagergren/decimal"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/sqlboiler/v4/boil"
-	"github.com/volatiletech/sqlboiler/v4/types"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -35,22 +33,16 @@ type TeslaRPCService struct {
 }
 
 func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewDeviceRequest) (*emptypb.Empty, error) {
-	walletChildNum := types.NewDecimal(decimal.New(int64(req.WalletChildNum), 0))
-
-	partial := models.PartialDevice{
-		Vin:                    req.Vin,
-		SyntheticDeviceAddress: req.SyntheticDeviceAddress,
-		WalletChildNum:         walletChildNum,
+	partial := models.SyntheticDevice{
+		Vin:               req.Vin,
+		Address:           req.SyntheticDeviceAddress,
+		WalletChildNumber: int(req.GetWalletChildNum()),
 	}
 
 	if err := partial.Insert(
 		ctx,
 		t.dbs().Writer,
-		boil.Whitelist(
-			models.PartialDeviceColumns.Vin,
-			models.PartialDeviceColumns.SyntheticDeviceAddress,
-			models.PartialDeviceColumns.WalletChildNum,
-		),
+		boil.Whitelist(models.SyntheticDeviceColumns.Vin, models.SyntheticDeviceColumns.Address, models.SyntheticDeviceColumns.WalletChildNumber),
 	); err != nil {
 		return nil, err
 	}
@@ -59,25 +51,25 @@ func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.Regis
 }
 
 func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevicesByVINRequest) (*grpc.GetDevicesByVINResponse, error) {
-	devices, err := models.Devices(models.DeviceWhere.Vin.EQ(req.Vin)).All(ctx, t.dbs().Reader)
+	devices, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.Vin.EQ(req.Vin),
+		models.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
+		models.SyntheticDeviceWhere.TokenID.IsNotNull(),
+	).All(ctx, t.dbs().Reader)
 	if err != nil {
 		return nil, err
 	}
 
 	var all []*grpc.Device
 	for _, dev := range devices {
-		walletChildNum, _ := dev.WalletChildNum.Uint64()
-		tokenID, _ := dev.TokenID.Uint64()
-		syntheticTokenID, _ := dev.SyntheticTokenID.Uint64()
-
 		all = append(
 			all,
 			&grpc.Device{
 				Vin:                    dev.Vin,
-				SyntheticDeviceAddress: dev.SyntheticDeviceAddress,
-				WalletChildNum:         walletChildNum,
-				TokenId:                tokenID,
-				SyntheticTokenId:       syntheticTokenID,
+				SyntheticDeviceAddress: dev.Address,
+				WalletChildNum:         uint64(dev.WalletChildNumber),
+				TokenId:                uint64(dev.VehicleTokenID.Int),
+				SyntheticTokenId:       uint64(dev.TokenID.Int),
 			},
 		)
 	}

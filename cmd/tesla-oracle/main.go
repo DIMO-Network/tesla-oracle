@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -9,9 +10,11 @@ import (
 	"syscall"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
 	grpc_oracle "github.com/DIMO-Network/tesla-oracle/pkg/grpc"
+	"github.com/IBM/sarama"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
@@ -70,12 +73,28 @@ func main() {
 
 	grpc_oracle.RegisterTeslaOracleServer(server, teslaSvc)
 
+	config := sarama.NewConfig()
+	config.Version = sarama.V3_6_0_0
 	logger.Info().Msgf("Starting gRPC server on port %d", settings.GRPCPort)
+	cGroup, err := sarama.NewConsumerGroup([]string{settings.KafkaBrokers}, settings.TopicContractEvent, config)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("error creating consumer from client")
+	}
+
+	proc := consumer.New(pdb, &logger)
 
 	group, gCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
+		if err := StartContractEventConsumer(gCtx, proc, cGroup, settings.TopicContractEvent, &logger); err != nil {
+			return fmt.Errorf("error starting contract event consumer: %w", err)
+		}
+
+		return nil
+	})
+
+	group.Go(func() error {
 		if err := StartGRPCServer(server, settings.GRPCPort, &logger); err != nil {
-			return err
+			return fmt.Errorf("error starting grpc server: %w", err)
 		}
 
 		return nil
@@ -109,4 +128,20 @@ func StartGRPCServer(server *grpc.Server, grpcPort int, logger *zerolog.Logger) 
 	}
 
 	return nil
+}
+
+func StartContractEventConsumer(ctx context.Context, proc *consumer.Processor, consumer sarama.ConsumerGroup, topic string, logger *zerolog.Logger) error {
+	for {
+		logger.Info().Msgf("starting consumer: %s", topic)
+		if err := consumer.Consume(ctx, []string{topic}, proc); err != nil {
+			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+				return nil
+			}
+			logger.Err(err).Msg("consumer failure")
+			return err
+		}
+		if ctx.Err() != nil { // returning nil since this can only be context cancelled
+			return nil
+		}
+	}
 }

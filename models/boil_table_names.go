@@ -4,9 +4,7 @@
 package models
 
 var TableNames = struct {
-	Devices        string
-	PartialDevices string
+	SyntheticDevices string
 }{
-	Devices:        "devices",
-	PartialDevices: "partial_devices",
+	SyntheticDevices: "synthetic_devices",
 }
