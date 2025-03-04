@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/DIMO-Network/shared/db"
-	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/rs/zerolog"
@@ -24,9 +23,8 @@ func NewTeslaRPCService(
 // TeslaRPCService is the grpc server implementation for the proto services
 type TeslaRPCService struct {
 	grpc.UnimplementedTeslaOracleServer
-	dbs      func() *db.ReaderWriter
-	settings *config.Settings
-	logger   *zerolog.Logger
+	dbs    func() *db.ReaderWriter
+	logger *zerolog.Logger
 }
 
 func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewSyntheticDeviceRequest) (*grpc.RegisterNewSyntheticDeviceResponse, error) {
@@ -47,7 +45,7 @@ func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.Regis
 	return &grpc.RegisterNewSyntheticDeviceResponse{}, nil
 }
 
-func (t *TeslaRPCService) GetSyntheticDeviceByVIN(ctx context.Context, req *grpc.GetSyntheticDeviceByVINRequest) (*grpc.GetSyntheticDeviceByVINResponse, error) {
+func (t *TeslaRPCService) GetSyntheticDevicesByVIN(ctx context.Context, req *grpc.GetSyntheticDevicesByVINRequest) (*grpc.GetSyntheticDevicesByVINResponse, error) {
 	devices, err := models.SyntheticDevices(
 		models.SyntheticDeviceWhere.Vin.EQ(req.GetVin()),
 		models.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
@@ -71,7 +69,7 @@ func (t *TeslaRPCService) GetSyntheticDeviceByVIN(ctx context.Context, req *grpc
 		)
 	}
 
-	return &grpc.GetSyntheticDeviceByVINResponse{
+	return &grpc.GetSyntheticDevicesByVINResponse{
 		SyntheticDevices: all,
 	}, nil
 }

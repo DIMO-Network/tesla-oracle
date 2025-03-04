@@ -9,7 +9,7 @@ package tesla_oracle;
 */
 service TeslaOracle {
   rpc RegisterNewSyntheticDevice(RegisterNewSyntheticDeviceRequest) returns (RegisterNewSyntheticDeviceResponse);
-  rpc GetSyntheticDeviceByVIN(GetSyntheticDeviceByVINRequest) returns (GetSyntheticDeviceByVINResponse);
+  rpc GetSyntheticDevicesByVIN(GetSyntheticDevicesByVINRequest) returns (GetSyntheticDevicesByVINResponse);
 }
 
 message RegisterNewSyntheticDeviceRequest {
@@ -22,11 +22,11 @@ message RegisterNewSyntheticDeviceResponse {
 }
 
 
-message GetSyntheticDeviceByVINRequest {
+message GetSyntheticDevicesByVINRequest {
   string vin = 1;
 }
 
-message GetSyntheticDeviceByVINResponse {
+message GetSyntheticDevicesByVINResponse {
   repeated SyntheticDevice synthetic_devices = 1;
 }
 
