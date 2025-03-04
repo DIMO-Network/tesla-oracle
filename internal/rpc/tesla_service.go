@@ -49,7 +49,7 @@ func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.Regis
 	}, nil
 }
 
-func (t *TeslaRPCService) GetVehicleByVIN(ctx context.Context, req *grpc.GetVehicleByVINRequest) (*grpc.GetVehicleByVINResponse, error) {
+func (t *TeslaRPCService) GetSyntheticDeviceByVIN(ctx context.Context, req *grpc.GetSyntheticDeviceByVINRequest) (*grpc.GetSyntheticDeviceByVINResponse, error) {
 	devices, err := models.SyntheticDevices(
 		models.SyntheticDeviceWhere.Vin.EQ(req.GetVin()),
 		models.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
@@ -59,11 +59,11 @@ func (t *TeslaRPCService) GetVehicleByVIN(ctx context.Context, req *grpc.GetVehi
 		return nil, err
 	}
 
-	var all []*grpc.Vehicle
+	var all []*grpc.SyntheticDevice
 	for _, dev := range devices {
 		all = append(
 			all,
-			&grpc.Vehicle{
+			&grpc.SyntheticDevice{
 				Vin:                    dev.Vin,
 				SyntheticDeviceAddress: dev.Address,
 				WalletChildNum:         uint64(dev.WalletChildNumber),
@@ -73,7 +73,7 @@ func (t *TeslaRPCService) GetVehicleByVIN(ctx context.Context, req *grpc.GetVehi
 		)
 	}
 
-	return &grpc.GetVehicleByVINResponse{
-		Devices: all,
+	return &grpc.GetSyntheticDeviceByVINResponse{
+		SyntheticDevices: all,
 	}, nil
 }

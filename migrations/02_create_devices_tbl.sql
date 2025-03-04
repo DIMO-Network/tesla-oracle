@@ -1,8 +1,5 @@
 -- +goose Up
 -- +goose StatementBegin
-SELECT 'up SQL query';
-
-SET search_path = tesla_oracle, public;
 CREATE TABLE synthetic_devices
 (
     address BYTEA PRIMARY KEY
@@ -23,9 +20,5 @@ CREATE TABLE synthetic_devices
 
 -- +goose Down
 -- +goose StatementBegin
-SELECT 'down SQL query';
-
-SET search_path = tesla_oracle, public;
-
 DROP TABLE synthetic_devices;
 -- +goose StatementEnd

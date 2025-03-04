@@ -20,7 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	TeslaOracle_RegisterNewSyntheticDevice_FullMethodName = "/tesla_oracle.TeslaOracle/RegisterNewSyntheticDevice"
-	TeslaOracle_GetVehiclesByVIN_FullMethodName           = "/tesla_oracle.TeslaOracle/GetVehiclesByVIN"
+	TeslaOracle_GetSyntheticDeviceByVIN_FullMethodName    = "/tesla_oracle.TeslaOracle/GetSyntheticDeviceByVIN"
 )
 
 // TeslaOracleClient is the client API for TeslaOracle service.
@@ -30,7 +30,7 @@ const (
 // TeslaOracle replaces devices-api for Tesla synthetic device calls.
 type TeslaOracleClient interface {
 	RegisterNewSyntheticDevice(ctx context.Context, in *RegisterNewSyntheticDeviceRequest, opts ...grpc.CallOption) (*RegisterNewSyntheticDeviceResponse, error)
-	GetVehiclesByVIN(ctx context.Context, in *GetVehicleByVINRequest, opts ...grpc.CallOption) (*GetVehicleByVINResponse, error)
+	GetSyntheticDeviceByVIN(ctx context.Context, in *GetSyntheticDeviceByVINRequest, opts ...grpc.CallOption) (*GetSyntheticDeviceByVINResponse, error)
 }
 
 type teslaOracleClient struct {
@@ -51,10 +51,10 @@ func (c *teslaOracleClient) RegisterNewSyntheticDevice(ctx context.Context, in *
 	return out, nil
 }
 
-func (c *teslaOracleClient) GetVehiclesByVIN(ctx context.Context, in *GetVehicleByVINRequest, opts ...grpc.CallOption) (*GetVehicleByVINResponse, error) {
+func (c *teslaOracleClient) GetSyntheticDeviceByVIN(ctx context.Context, in *GetSyntheticDeviceByVINRequest, opts ...grpc.CallOption) (*GetSyntheticDeviceByVINResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(GetVehicleByVINResponse)
-	err := c.cc.Invoke(ctx, TeslaOracle_GetVehiclesByVIN_FullMethodName, in, out, cOpts...)
+	out := new(GetSyntheticDeviceByVINResponse)
+	err := c.cc.Invoke(ctx, TeslaOracle_GetSyntheticDeviceByVIN_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -68,7 +68,7 @@ func (c *teslaOracleClient) GetVehiclesByVIN(ctx context.Context, in *GetVehicle
 // TeslaOracle replaces devices-api for Tesla synthetic device calls.
 type TeslaOracleServer interface {
 	RegisterNewSyntheticDevice(context.Context, *RegisterNewSyntheticDeviceRequest) (*RegisterNewSyntheticDeviceResponse, error)
-	GetVehiclesByVIN(context.Context, *GetVehicleByVINRequest) (*GetVehicleByVINResponse, error)
+	GetSyntheticDeviceByVIN(context.Context, *GetSyntheticDeviceByVINRequest) (*GetSyntheticDeviceByVINResponse, error)
 	mustEmbedUnimplementedTeslaOracleServer()
 }
 
@@ -82,8 +82,8 @@ type UnimplementedTeslaOracleServer struct{}
 func (UnimplementedTeslaOracleServer) RegisterNewSyntheticDevice(context.Context, *RegisterNewSyntheticDeviceRequest) (*RegisterNewSyntheticDeviceResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RegisterNewSyntheticDevice not implemented")
 }
-func (UnimplementedTeslaOracleServer) GetVehiclesByVIN(context.Context, *GetVehicleByVINRequest) (*GetVehicleByVINResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method GetVehiclesByVIN not implemented")
+func (UnimplementedTeslaOracleServer) GetSyntheticDeviceByVIN(context.Context, *GetSyntheticDeviceByVINRequest) (*GetSyntheticDeviceByVINResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetSyntheticDeviceByVIN not implemented")
 }
 func (UnimplementedTeslaOracleServer) mustEmbedUnimplementedTeslaOracleServer() {}
 func (UnimplementedTeslaOracleServer) testEmbeddedByValue()                     {}
@@ -124,20 +124,20 @@ func _TeslaOracle_RegisterNewSyntheticDevice_Handler(srv interface{}, ctx contex
 	return interceptor(ctx, in, info, handler)
 }
 
-func _TeslaOracle_GetVehiclesByVIN_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(GetVehicleByVINRequest)
+func _TeslaOracle_GetSyntheticDeviceByVIN_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetSyntheticDeviceByVINRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(TeslaOracleServer).GetVehiclesByVIN(ctx, in)
+		return srv.(TeslaOracleServer).GetSyntheticDeviceByVIN(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: TeslaOracle_GetVehiclesByVIN_FullMethodName,
+		FullMethod: TeslaOracle_GetSyntheticDeviceByVIN_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(TeslaOracleServer).GetVehiclesByVIN(ctx, req.(*GetVehicleByVINRequest))
+		return srv.(TeslaOracleServer).GetSyntheticDeviceByVIN(ctx, req.(*GetSyntheticDeviceByVINRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -154,8 +154,8 @@ var TeslaOracle_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _TeslaOracle_RegisterNewSyntheticDevice_Handler,
 		},
 		{
-			MethodName: "GetVehiclesByVIN",
-			Handler:    _TeslaOracle_GetVehiclesByVIN_Handler,
+			MethodName: "GetSyntheticDeviceByVIN",
+			Handler:    _TeslaOracle_GetSyntheticDeviceByVIN_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
