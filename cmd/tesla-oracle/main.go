@@ -119,11 +119,11 @@ func main() {
 func StartGRPCServer(server *grpc.Server, grpcPort int, logger *zerolog.Logger) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
 	if err != nil {
-		logger.Fatal().Err(err).Msgf("Couldn't listen on gRPC port %d", grpcPort)
+		return fmt.Errorf("Couldn't listen on gRPC port %d: %w", grpcPort, err)
 	}
 
 	if err := server.Serve(lis); err != nil {
-		logger.Fatal().Err(err).Msg("gRPC server terminated unexpectedly")
+		return fmt.Errorf("gRPC server terminated unexpectedly: %w", err)
 	}
 
 	return nil
@@ -136,7 +136,6 @@ func StartContractEventConsumer(ctx context.Context, proc *consumer.Processor, c
 			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 				return nil
 			}
-			logger.Err(err).Msg("consumer failure")
 			return err
 		}
 		if ctx.Err() != nil { // returning nil since this can only be context cancelled
