@@ -33,16 +33,16 @@ type TeslaRPCService struct {
 }
 
 func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewDeviceRequest) (*emptypb.Empty, error) {
-	partial := models.Device{
-		Vin:                    req.Vin,
-		SyntheticDeviceAddress: req.SyntheticDeviceAddress,
-		WalletChildNumber:      int(req.WalletChildNum),
+	partial := models.SyntheticDevice{
+		Vin:               req.Vin,
+		DeviceAddress:     req.SyntheticDeviceAddress,
+		WalletChildNumber: int(req.GetWalletChildNum()),
 	}
 
 	if err := partial.Insert(
 		ctx,
 		t.dbs().Writer,
-		boil.Whitelist(models.DeviceColumns.Vin, models.DeviceColumns.SyntheticDeviceAddress, models.DeviceColumns.WalletChildNumber),
+		boil.Whitelist(models.SyntheticDeviceColumns.Vin, models.SyntheticDeviceColumns.DeviceAddress, models.SyntheticDeviceColumns.WalletChildNumber),
 	); err != nil {
 		return nil, err
 	}
@@ -51,10 +51,10 @@ func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.Regis
 }
 
 func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevicesByVINRequest) (*grpc.GetDevicesByVINResponse, error) {
-	devices, err := models.Devices(
-		models.DeviceWhere.Vin.EQ(req.Vin),
-		models.DeviceWhere.TokenID.IsNotNull(),
-		models.DeviceWhere.SyntheticTokenID.IsNotNull(),
+	devices, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.Vin.EQ(req.Vin),
+		models.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
+		models.SyntheticDeviceWhere.SyntheticTokenID.IsNotNull(),
 	).All(ctx, t.dbs().Reader)
 	if err != nil {
 		return nil, err
@@ -66,9 +66,9 @@ func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevi
 			all,
 			&grpc.Device{
 				Vin:                    dev.Vin,
-				SyntheticDeviceAddress: dev.SyntheticDeviceAddress,
+				SyntheticDeviceAddress: dev.DeviceAddress,
 				WalletChildNum:         uint64(dev.WalletChildNumber),
-				TokenId:                uint64(dev.TokenID.Int),
+				TokenId:                uint64(dev.VehicleTokenID.Int),
 				SyntheticTokenId:       uint64(dev.SyntheticTokenID.Int),
 			},
 		)

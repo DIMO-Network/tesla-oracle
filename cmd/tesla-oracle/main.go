@@ -7,13 +7,12 @@ import (
 	"net"
 	"os"
 	"os/signal"
-	"strings"
 	"syscall"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
-	"github.com/DIMO-Network/tesla-oracle/internal/services"
 	grpc_oracle "github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/IBM/sarama"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -76,27 +75,18 @@ func main() {
 
 	config := sarama.NewConfig()
 	config.Version = sarama.V3_6_0_0
-
-	brokers := strings.Split(settings.KafkaBrokers, ",")
-	kClient, err := sarama.NewClient(brokers, config)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("error creating kafka client")
-	}
-
 	logger.Info().Msgf("Starting gRPC server on port %d", settings.GRPCPort)
-
-	consumer, err := sarama.NewConsumerGroupFromClient(settings.TopicContractEvent, kClient)
+	cGroup, err := sarama.NewConsumerGroup([]string{settings.KafkaBrokers}, settings.TopicContractEvent, config)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("error creating consumer from client")
 	}
 
-	proc := services.NewProcessor(pdb, &logger)
+	proc := consumer.New(pdb, &logger)
 
 	group, gCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
-		if err := StartContractEventConsumer(gCtx, proc, consumer, settings.TopicContractEvent, &logger); err != nil {
-			logger.Fatal().Err(err).Msg("error starting contract event consumer")
-			return err
+		if err := StartContractEventConsumer(gCtx, proc, cGroup, settings.TopicContractEvent, &logger); err != nil {
+			return fmt.Errorf("error starting contract event consumer: %w", err)
 		}
 
 		return nil
@@ -104,7 +94,7 @@ func main() {
 
 	group.Go(func() error {
 		if err := StartGRPCServer(server, settings.GRPCPort, &logger); err != nil {
-			return err
+			return fmt.Errorf("error starting grpc server: %w", err)
 		}
 
 		return nil
@@ -140,10 +130,10 @@ func StartGRPCServer(server *grpc.Server, grpcPort int, logger *zerolog.Logger) 
 	return nil
 }
 
-func StartContractEventConsumer(ctx context.Context, proc *services.Processor, consumer sarama.ConsumerGroup, topic string, logger *zerolog.Logger) error {
+func StartContractEventConsumer(ctx context.Context, proc *consumer.Processor, consumer sarama.ConsumerGroup, topic string, logger *zerolog.Logger) error {
 	for {
 		logger.Info().Msgf("starting consumer: %s", topic)
-		if err := consumer.Consume(ctx, strings.Split(topic, ","), proc); err != nil {
+		if err := consumer.Consume(ctx, []string{topic}, proc); err != nil {
 			if errors.Is(err, sarama.ErrClosedConsumerGroup) {
 				return nil
 			}
