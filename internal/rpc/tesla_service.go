@@ -9,18 +9,15 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/sqlboiler/v4/boil"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func NewTeslaRPCService(
 	dbs func() *db.ReaderWriter,
-	settings *config.Settings,
 	logger *zerolog.Logger,
 ) grpc.TeslaOracleServer {
 	return &TeslaRPCService{
-		dbs:      dbs,
-		logger:   logger,
-		settings: settings,
+		dbs:    dbs,
+		logger: logger,
 	}
 }
 
@@ -32,7 +29,7 @@ type TeslaRPCService struct {
 	logger   *zerolog.Logger
 }
 
-func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewDeviceRequest) (*emptypb.Empty, error) {
+func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewSyntheticDeviceRequest) (*grpc.RegisterNewSyntheticDeviceResponse, error) {
 	partial := models.SyntheticDevice{
 		Vin:               req.Vin,
 		Address:           req.SyntheticDeviceAddress,
@@ -47,12 +44,14 @@ func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.Regis
 		return nil, err
 	}
 
-	return nil, nil
+	return &grpc.RegisterNewSyntheticDeviceResponse{
+		Success: true,
+	}, nil
 }
 
-func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevicesByVINRequest) (*grpc.GetDevicesByVINResponse, error) {
+func (t *TeslaRPCService) GetVehicleByVIN(ctx context.Context, req *grpc.GetVehicleByVINRequest) (*grpc.GetVehicleByVINResponse, error) {
 	devices, err := models.SyntheticDevices(
-		models.SyntheticDeviceWhere.Vin.EQ(req.Vin),
+		models.SyntheticDeviceWhere.Vin.EQ(req.GetVin()),
 		models.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
 		models.SyntheticDeviceWhere.TokenID.IsNotNull(),
 	).All(ctx, t.dbs().Reader)
@@ -60,11 +59,11 @@ func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevi
 		return nil, err
 	}
 
-	var all []*grpc.Device
+	var all []*grpc.Vehicle
 	for _, dev := range devices {
 		all = append(
 			all,
-			&grpc.Device{
+			&grpc.Vehicle{
 				Vin:                    dev.Vin,
 				SyntheticDeviceAddress: dev.Address,
 				WalletChildNum:         uint64(dev.WalletChildNumber),
@@ -74,7 +73,7 @@ func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevi
 		)
 	}
 
-	return &grpc.GetDevicesByVINResponse{
+	return &grpc.GetVehicleByVINResponse{
 		Devices: all,
 	}, nil
 }

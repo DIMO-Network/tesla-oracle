@@ -9,6 +9,8 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/DIMO-Network/shared"
+	"github.com/DIMO-Network/shared/db"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
@@ -19,12 +21,9 @@ import (
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-
-	"github.com/DIMO-Network/shared"
-	"github.com/DIMO-Network/shared/db"
-	"github.com/rs/zerolog"
 )
 
 func main() {
@@ -60,7 +59,7 @@ func main() {
 	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
 	pdb.WaitForDB(logger)
 
-	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &settings, &logger)
+	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &logger)
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
 			mdw.MetricsMiddleware(),
