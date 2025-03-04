@@ -9,7 +9,7 @@ CREATE TABLE synthetic_devices
         CONSTRAINT synthetic_device_address_check CHECK (length(device_address) = 20),
     vin text NOT NULL UNIQUE
         CONSTRAINT valid_vin_check CHECK (length(vin) = 17),
-    wallet_child_number int NOT NULL UNIQUE,
+    wallet_child_number int NOT NULL UNIQUE CHECK(wallet_child_number > 0),
     vehicle_token_id int UNIQUE,
     synthetic_token_id int UNIQUE
         CONSTRAINT only_complete_mints CHECK (
