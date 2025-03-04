@@ -19,7 +19,6 @@ message RegisterNewSyntheticDeviceRequest {
 }
 
 message RegisterNewSyntheticDeviceResponse {
-  bool success = 1;
 }
 
 
