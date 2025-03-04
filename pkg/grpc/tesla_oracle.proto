@@ -35,7 +35,7 @@ message SyntheticDevice {
   string vin = 1;
   bytes synthetic_device_address = 2;
   uint64 wallet_child_num = 3;
-  uint64 token_id = 4;
+  uint64 vehicle_token_id = 4;
   uint64 synthetic_token_id = 5;
 }
 

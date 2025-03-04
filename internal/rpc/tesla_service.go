@@ -67,7 +67,7 @@ func (t *TeslaRPCService) GetSyntheticDeviceByVIN(ctx context.Context, req *grpc
 				Vin:                    dev.Vin,
 				SyntheticDeviceAddress: dev.Address,
 				WalletChildNum:         uint64(dev.WalletChildNumber),
-				TokenId:                uint64(dev.VehicleTokenID.Int),
+				VehicleTokenId:         uint64(dev.VehicleTokenID.Int),
 				SyntheticTokenId:       uint64(dev.TokenID.Int),
 			},
 		)
