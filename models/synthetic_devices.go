@@ -24,42 +24,42 @@ import (
 
 // SyntheticDevice is an object representing the database table.
 type SyntheticDevice struct {
-	DeviceAddress     []byte   `boil:"device_address" json:"device_address" toml:"device_address" yaml:"device_address"`
+	Address           []byte   `boil:"address" json:"address" toml:"address" yaml:"address"`
 	Vin               string   `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
 	WalletChildNumber int      `boil:"wallet_child_number" json:"wallet_child_number" toml:"wallet_child_number" yaml:"wallet_child_number"`
 	VehicleTokenID    null.Int `boil:"vehicle_token_id" json:"vehicle_token_id,omitempty" toml:"vehicle_token_id" yaml:"vehicle_token_id,omitempty"`
-	SyntheticTokenID  null.Int `boil:"synthetic_token_id" json:"synthetic_token_id,omitempty" toml:"synthetic_token_id" yaml:"synthetic_token_id,omitempty"`
+	TokenID           null.Int `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
 
 	R *syntheticDeviceR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L syntheticDeviceL  `boil:"-" json:"-" toml:"-" yaml:"-"`
 }
 
 var SyntheticDeviceColumns = struct {
-	DeviceAddress     string
+	Address           string
 	Vin               string
 	WalletChildNumber string
 	VehicleTokenID    string
-	SyntheticTokenID  string
+	TokenID           string
 }{
-	DeviceAddress:     "device_address",
+	Address:           "address",
 	Vin:               "vin",
 	WalletChildNumber: "wallet_child_number",
 	VehicleTokenID:    "vehicle_token_id",
-	SyntheticTokenID:  "synthetic_token_id",
+	TokenID:           "token_id",
 }
 
 var SyntheticDeviceTableColumns = struct {
-	DeviceAddress     string
+	Address           string
 	Vin               string
 	WalletChildNumber string
 	VehicleTokenID    string
-	SyntheticTokenID  string
+	TokenID           string
 }{
-	DeviceAddress:     "synthetic_devices.device_address",
+	Address:           "synthetic_devices.address",
 	Vin:               "synthetic_devices.vin",
 	WalletChildNumber: "synthetic_devices.wallet_child_number",
 	VehicleTokenID:    "synthetic_devices.vehicle_token_id",
-	SyntheticTokenID:  "synthetic_devices.synthetic_token_id",
+	TokenID:           "synthetic_devices.token_id",
 }
 
 // Generated where
@@ -166,17 +166,17 @@ func (w whereHelpernull_Int) IsNull() qm.QueryMod    { return qmhelper.WhereIsNu
 func (w whereHelpernull_Int) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
 
 var SyntheticDeviceWhere = struct {
-	DeviceAddress     whereHelper__byte
+	Address           whereHelper__byte
 	Vin               whereHelperstring
 	WalletChildNumber whereHelperint
 	VehicleTokenID    whereHelpernull_Int
-	SyntheticTokenID  whereHelpernull_Int
+	TokenID           whereHelpernull_Int
 }{
-	DeviceAddress:     whereHelper__byte{field: "\"tesla_oracle\".\"synthetic_devices\".\"device_address\""},
+	Address:           whereHelper__byte{field: "\"tesla_oracle\".\"synthetic_devices\".\"address\""},
 	Vin:               whereHelperstring{field: "\"tesla_oracle\".\"synthetic_devices\".\"vin\""},
 	WalletChildNumber: whereHelperint{field: "\"tesla_oracle\".\"synthetic_devices\".\"wallet_child_number\""},
 	VehicleTokenID:    whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"vehicle_token_id\""},
-	SyntheticTokenID:  whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"synthetic_token_id\""},
+	TokenID:           whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"token_id\""},
 }
 
 // SyntheticDeviceRels is where relationship names are stored.
@@ -196,10 +196,10 @@ func (*syntheticDeviceR) NewStruct() *syntheticDeviceR {
 type syntheticDeviceL struct{}
 
 var (
-	syntheticDeviceAllColumns            = []string{"device_address", "vin", "wallet_child_number", "vehicle_token_id", "synthetic_token_id"}
-	syntheticDeviceColumnsWithoutDefault = []string{"device_address", "vin", "wallet_child_number"}
-	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "synthetic_token_id"}
-	syntheticDevicePrimaryKeyColumns     = []string{"device_address"}
+	syntheticDeviceAllColumns            = []string{"address", "vin", "wallet_child_number", "vehicle_token_id", "token_id"}
+	syntheticDeviceColumnsWithoutDefault = []string{"address", "vin", "wallet_child_number"}
+	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "token_id"}
+	syntheticDevicePrimaryKeyColumns     = []string{"address"}
 	syntheticDeviceGeneratedColumns      = []string{}
 )
 
@@ -521,7 +521,7 @@ func SyntheticDevices(mods ...qm.QueryMod) syntheticDeviceQuery {
 
 // FindSyntheticDevice retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindSyntheticDevice(ctx context.Context, exec boil.ContextExecutor, deviceAddress []byte, selectCols ...string) (*SyntheticDevice, error) {
+func FindSyntheticDevice(ctx context.Context, exec boil.ContextExecutor, address []byte, selectCols ...string) (*SyntheticDevice, error) {
 	syntheticDeviceObj := &SyntheticDevice{}
 
 	sel := "*"
@@ -529,10 +529,10 @@ func FindSyntheticDevice(ctx context.Context, exec boil.ContextExecutor, deviceA
 		sel = strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, selectCols), ",")
 	}
 	query := fmt.Sprintf(
-		"select %s from \"tesla_oracle\".\"synthetic_devices\" where \"device_address\"=$1", sel,
+		"select %s from \"tesla_oracle\".\"synthetic_devices\" where \"address\"=$1", sel,
 	)
 
-	q := queries.Raw(query, deviceAddress)
+	q := queries.Raw(query, address)
 
 	err := q.Bind(ctx, exec, syntheticDeviceObj)
 	if err != nil {
@@ -890,7 +890,7 @@ func (o *SyntheticDevice) Delete(ctx context.Context, exec boil.ContextExecutor)
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), syntheticDevicePrimaryKeyMapping)
-	sql := "DELETE FROM \"tesla_oracle\".\"synthetic_devices\" WHERE \"device_address\"=$1"
+	sql := "DELETE FROM \"tesla_oracle\".\"synthetic_devices\" WHERE \"address\"=$1"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -987,7 +987,7 @@ func (o SyntheticDeviceSlice) DeleteAll(ctx context.Context, exec boil.ContextEx
 // Reload refetches the object from the database
 // using the primary keys with an executor.
 func (o *SyntheticDevice) Reload(ctx context.Context, exec boil.ContextExecutor) error {
-	ret, err := FindSyntheticDevice(ctx, exec, o.DeviceAddress)
+	ret, err := FindSyntheticDevice(ctx, exec, o.Address)
 	if err != nil {
 		return err
 	}
@@ -1026,16 +1026,16 @@ func (o *SyntheticDeviceSlice) ReloadAll(ctx context.Context, exec boil.ContextE
 }
 
 // SyntheticDeviceExists checks if the SyntheticDevice row exists.
-func SyntheticDeviceExists(ctx context.Context, exec boil.ContextExecutor, deviceAddress []byte) (bool, error) {
+func SyntheticDeviceExists(ctx context.Context, exec boil.ContextExecutor, address []byte) (bool, error) {
 	var exists bool
-	sql := "select exists(select 1 from \"tesla_oracle\".\"synthetic_devices\" where \"device_address\"=$1 limit 1)"
+	sql := "select exists(select 1 from \"tesla_oracle\".\"synthetic_devices\" where \"address\"=$1 limit 1)"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
 		fmt.Fprintln(writer, sql)
-		fmt.Fprintln(writer, deviceAddress)
+		fmt.Fprintln(writer, address)
 	}
-	row := exec.QueryRowContext(ctx, sql, deviceAddress)
+	row := exec.QueryRowContext(ctx, sql, address)
 
 	err := row.Scan(&exists)
 	if err != nil {
@@ -1047,5 +1047,5 @@ func SyntheticDeviceExists(ctx context.Context, exec boil.ContextExecutor, devic
 
 // Exists checks if the SyntheticDevice row exists.
 func (o *SyntheticDevice) Exists(ctx context.Context, exec boil.ContextExecutor) (bool, error) {
-	return SyntheticDeviceExists(ctx, exec, o.DeviceAddress)
+	return SyntheticDeviceExists(ctx, exec, o.Address)
 }

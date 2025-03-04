@@ -35,14 +35,14 @@ type TeslaRPCService struct {
 func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewDeviceRequest) (*emptypb.Empty, error) {
 	partial := models.SyntheticDevice{
 		Vin:               req.Vin,
-		DeviceAddress:     req.SyntheticDeviceAddress,
+		Address:           req.SyntheticDeviceAddress,
 		WalletChildNumber: int(req.GetWalletChildNum()),
 	}
 
 	if err := partial.Insert(
 		ctx,
 		t.dbs().Writer,
-		boil.Whitelist(models.SyntheticDeviceColumns.Vin, models.SyntheticDeviceColumns.DeviceAddress, models.SyntheticDeviceColumns.WalletChildNumber),
+		boil.Whitelist(models.SyntheticDeviceColumns.Vin, models.SyntheticDeviceColumns.Address, models.SyntheticDeviceColumns.WalletChildNumber),
 	); err != nil {
 		return nil, err
 	}
@@ -54,7 +54,7 @@ func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevi
 	devices, err := models.SyntheticDevices(
 		models.SyntheticDeviceWhere.Vin.EQ(req.Vin),
 		models.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
-		models.SyntheticDeviceWhere.SyntheticTokenID.IsNotNull(),
+		models.SyntheticDeviceWhere.TokenID.IsNotNull(),
 	).All(ctx, t.dbs().Reader)
 	if err != nil {
 		return nil, err
@@ -66,10 +66,10 @@ func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevi
 			all,
 			&grpc.Device{
 				Vin:                    dev.Vin,
-				SyntheticDeviceAddress: dev.DeviceAddress,
+				SyntheticDeviceAddress: dev.Address,
 				WalletChildNum:         uint64(dev.WalletChildNumber),
 				TokenId:                uint64(dev.VehicleTokenID.Int),
-				SyntheticTokenId:       uint64(dev.SyntheticTokenID.Int),
+				SyntheticTokenId:       uint64(dev.TokenID.Int),
 			},
 		)
 	}

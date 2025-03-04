@@ -100,7 +100,7 @@ func (p Processor) handleSyntheticDeviceNodeMinted(ctx context.Context, data jso
 
 	synthDeviceAddr := mint.SyntheticDeviceAddress
 	partSynthDev, err := models.SyntheticDevices(
-		models.SyntheticDeviceWhere.DeviceAddress.EQ(synthDeviceAddr.Bytes()),
+		models.SyntheticDeviceWhere.Address.EQ(synthDeviceAddr.Bytes()),
 		models.SyntheticDeviceWhere.VehicleTokenID.IsNull(),
 	).One(ctx, p.pdb.DBS().Reader)
 	if err != nil {
@@ -108,9 +108,9 @@ func (p Processor) handleSyntheticDeviceNodeMinted(ctx context.Context, data jso
 	}
 
 	partSynthDev.VehicleTokenID = null.IntFrom(int(mint.VehicleNode.Int64()))
-	partSynthDev.SyntheticTokenID = null.IntFrom(int(mint.SyntheticDeviceNode.Int64()))
+	partSynthDev.TokenID = null.IntFrom(int(mint.SyntheticDeviceNode.Int64()))
 	_, err = partSynthDev.Update(ctx, p.pdb.DBS().Writer, boil.Infer())
-	return fmt.Errorf("failed to update table for sythetic device %s: %w", partSynthDev.DeviceAddress, err)
+	return fmt.Errorf("failed to update table for sythetic device %s: %w", partSynthDev.Address, err)
 }
 
 type SyntheticDeviceNodeMinted struct {
