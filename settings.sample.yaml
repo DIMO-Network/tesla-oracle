@@ -11,6 +11,6 @@ DB:
   PASSWORD: dimo
   PORT: 5432
   HOST: localhost
-  NAME: tesla-oracle
+  NAME: tesla_oracle
   MAX_OPEN_CONNECTIONS: 5
   MAX_IDLE_CONNECTIONS: 5

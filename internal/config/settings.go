@@ -5,10 +5,11 @@ import (
 )
 
 type Settings struct {
-	LogLevel           string      `yaml:"LOG_LEVEL"`
 	Environment        string      `yaml:"ENVIRONMENT"`
-	MonPort            int         `yaml:"MON_PORT"`
+	Port               int         `yaml:"PORT"`
 	GRPCPort           int         `yaml:"GRPC_PORT"`
+	MonPort            int         `yaml:"MON_PORT"`
+	LogLevel           string      `yaml:"LOG_LEVEL"`
 	ChainID            int         `yaml:"CHAIN_ID"`
 	TopicContractEvent string      `yaml:"CONTRACT_EVENT_TOPIC"`
 	KafkaBrokers       string      `yaml:"KAFKA_BROKERS"`

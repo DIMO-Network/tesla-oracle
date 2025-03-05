@@ -18,7 +18,7 @@ import (
 var (
 	GRPCRequestCount = promauto.NewCounterVec(
 		prometheus.CounterOpts{
-			Name: "tesla_oracle_grpc_request_count",
+			Name: "rpc_request_count",
 			Help: "The total number of requests served by the GRPC Server",
 		},
 		[]string{"method", "status"},
