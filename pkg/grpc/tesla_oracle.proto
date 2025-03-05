@@ -2,37 +2,40 @@ syntax = "proto3";
 
 option go_package = "github.com/DIMO-Network/tesla-oracle/pkg/grpc";
 
-// more types here: https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Empty
-
-import "google/protobuf/empty.proto";
-
 package tesla_oracle;
 
+/*
+  TeslaOracle replaces devices-api for Tesla synthetic device calls.
+*/
 service TeslaOracle {
-  rpc RegisterNewDevice(RegisterNewDeviceRequest) returns (google.protobuf.Empty);
-  rpc GetDevicesByVIN(GetDevicesByVINRequest) returns (GetDevicesByVINResponse);
+  rpc RegisterNewSyntheticDevice(RegisterNewSyntheticDeviceRequest) returns (RegisterNewSyntheticDeviceResponse);
+  rpc GetSyntheticDevicesByVIN(GetSyntheticDevicesByVINRequest) returns (GetSyntheticDevicesByVINResponse);
 }
 
-message RegisterNewDeviceRequest {
+message RegisterNewSyntheticDeviceRequest {
   string vin = 1;
   bytes synthetic_device_address = 2;
   uint64 wallet_child_num = 3;
 }
 
-message GetDevicesByVINRequest {
+message RegisterNewSyntheticDeviceResponse {
+}
+
+
+message GetSyntheticDevicesByVINRequest {
   string vin = 1;
 }
 
-message GetDevicesByVINResponse {
-  repeated Device devices = 1;
+message GetSyntheticDevicesByVINResponse {
+  repeated SyntheticDevice synthetic_devices = 1;
 }
 
-message Device {
+message SyntheticDevice {
   string vin = 1;
-  bytes synthetic_device_address = 2;
+  bytes address = 2;
   uint64 wallet_child_num = 3;
   uint64 token_id = 4;
-  uint64 synthetic_token_id = 5;
+  uint64 vehicle_token_id = 5;
 }
 
 

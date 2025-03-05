@@ -4,85 +4,72 @@ import (
 	"context"
 
 	"github.com/DIMO-Network/shared/db"
-	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/DIMO-Network/tesla-oracle/pkg/grpc"
-	"github.com/ericlagergren/decimal"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/sqlboiler/v4/boil"
-	"github.com/volatiletech/sqlboiler/v4/types"
-	"google.golang.org/protobuf/types/known/emptypb"
 )
 
 func NewTeslaRPCService(
 	dbs func() *db.ReaderWriter,
-	settings *config.Settings,
 	logger *zerolog.Logger,
 ) grpc.TeslaOracleServer {
 	return &TeslaRPCService{
-		dbs:      dbs,
-		logger:   logger,
-		settings: settings,
+		dbs:    dbs,
+		logger: logger,
 	}
 }
 
 // TeslaRPCService is the grpc server implementation for the proto services
 type TeslaRPCService struct {
 	grpc.UnimplementedTeslaOracleServer
-	dbs      func() *db.ReaderWriter
-	settings *config.Settings
-	logger   *zerolog.Logger
+	dbs    func() *db.ReaderWriter
+	logger *zerolog.Logger
 }
 
-func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewDeviceRequest) (*emptypb.Empty, error) {
-	walletChildNum := types.NewDecimal(decimal.New(int64(req.WalletChildNum), 0))
-
-	partial := models.Device{
-		Vin:                    req.Vin,
-		SyntheticDeviceAddress: req.SyntheticDeviceAddress,
-		WalletChildNum:         walletChildNum,
+func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewSyntheticDeviceRequest) (*grpc.RegisterNewSyntheticDeviceResponse, error) {
+	partial := models.SyntheticDevice{
+		Vin:               req.Vin,
+		Address:           req.SyntheticDeviceAddress,
+		WalletChildNumber: int(req.GetWalletChildNum()),
 	}
 
 	if err := partial.Insert(
 		ctx,
 		t.dbs().Writer,
-		boil.Whitelist(models.DeviceColumns.Vin, models.DeviceColumns.SyntheticDeviceAddress, models.DeviceColumns.WalletChildNum),
+		boil.Whitelist(models.SyntheticDeviceColumns.Vin, models.SyntheticDeviceColumns.Address, models.SyntheticDeviceColumns.WalletChildNumber),
 	); err != nil {
 		return nil, err
 	}
 
-	return nil, nil
+	return &grpc.RegisterNewSyntheticDeviceResponse{}, nil
 }
 
-func (t *TeslaRPCService) GetDevicesByVIN(ctx context.Context, req *grpc.GetDevicesByVINRequest) (*grpc.GetDevicesByVINResponse, error) {
-	devices, err := models.Devices(
-		models.DeviceWhere.Vin.EQ(req.Vin),
-		models.DeviceWhere.TokenID.IsNotNull(),
-		models.DeviceWhere.SyntheticTokenID.IsNotNull(),
+func (t *TeslaRPCService) GetSyntheticDevicesByVIN(ctx context.Context, req *grpc.GetSyntheticDevicesByVINRequest) (*grpc.GetSyntheticDevicesByVINResponse, error) {
+	devices, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.Vin.EQ(req.GetVin()),
+		models.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
+		models.SyntheticDeviceWhere.TokenID.IsNotNull(),
 	).All(ctx, t.dbs().Reader)
 	if err != nil {
 		return nil, err
 	}
 
-	var all []*grpc.Device
+	var all []*grpc.SyntheticDevice
 	for _, dev := range devices {
-		walletChildNum, _ := dev.WalletChildNum.Uint64()
-		tokenID, _ := dev.TokenID.Uint64()
-		syntheticTokenID, _ := dev.SyntheticTokenID.Uint64()
-
 		all = append(
 			all,
-			&grpc.Device{
-				Vin:                    dev.Vin,
-				SyntheticDeviceAddress: dev.SyntheticDeviceAddress,
-				WalletChildNum:         walletChildNum,
-				TokenId:                tokenID,
-				SyntheticTokenId:       syntheticTokenID,
+			&grpc.SyntheticDevice{
+				Vin:            dev.Vin,
+				Address:        dev.Address,
+				WalletChildNum: uint64(dev.WalletChildNumber),
+				VehicleTokenId: uint64(dev.VehicleTokenID.Int),
+				TokenId:        uint64(dev.TokenID.Int),
 			},
 		)
 	}
 
-	return &grpc.GetDevicesByVINResponse{
-		Devices: all,
+	return &grpc.GetSyntheticDevicesByVINResponse{
+		SyntheticDevices: all,
 	}, nil
 }

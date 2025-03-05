@@ -10,11 +10,10 @@ import (
 	"github.com/DIMO-Network/shared/db"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/IBM/sarama"
-	"github.com/ericlagergren/decimal"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
-	"github.com/volatiletech/sqlboiler/v4/types"
 )
 
 const (
@@ -101,21 +100,21 @@ func (p Processor) handleSyntheticMintEvent(ctx context.Context, data json.RawMe
 	}
 
 	walletAddr := mint.SyntheticDeviceAddress
-	partial, err := models.Devices(
-		models.DeviceWhere.SyntheticDeviceAddress.EQ(walletAddr.Bytes()),
-		models.DeviceWhere.TokenID.IsNull(),
+	partial, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.Address.EQ(walletAddr.Bytes()),
+		models.SyntheticDeviceWhere.TokenID.IsNull(),
 	).One(ctx, p.pdb.DBS().Reader)
 	if err != nil {
 		p.logger.Err(err).Msg("failed to find partial device")
 		return err
 	}
 
-	full := models.Device{
-		Vin:                    partial.Vin,
-		SyntheticDeviceAddress: partial.SyntheticDeviceAddress,
-		WalletChildNum:         partial.WalletChildNum,
-		TokenID:                types.NewNullDecimal(decimal.New(int64(mint.VehicleNode), 0)),
-		SyntheticTokenID:       types.NewNullDecimal(decimal.New(int64(mint.SyntheticDeviceNode), 0)),
+	full := models.SyntheticDevice{
+		Vin:               partial.Vin,
+		Address:           partial.Address,
+		WalletChildNumber: partial.WalletChildNumber,
+		VehicleTokenID:    null.IntFrom(mint.VehicleNode),
+		TokenID:           null.IntFrom(mint.SyntheticDeviceNode),
 	}
 
 	_, err = full.Update(ctx, p.pdb.DBS().Writer, boil.Infer())
@@ -129,7 +128,7 @@ func (p Processor) handleBurnEvent(ctx context.Context, data json.RawMessage) er
 		return err
 	}
 
-	if _, err := models.Devices(models.DeviceWhere.TokenID.EQ(types.NewNullDecimal(decimal.New(int64(burn.VehicleNode), 0)))).DeleteAll(ctx, p.pdb.DBS().Writer); err != nil {
+	if _, err := models.SyntheticDevices(models.SyntheticDeviceWhere.TokenID.EQ(null.IntFrom(burn.VehicleNode))).DeleteAll(ctx, p.pdb.DBS().Writer); err != nil {
 		if errors.Is(sql.ErrNoRows, err) {
 			p.logger.Info().Msg("no vehicle record to delete")
 			return nil

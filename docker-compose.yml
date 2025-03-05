@@ -6,7 +6,7 @@ services:
     environment:
       - POSTGRES_USER=dimo
       - POSTGRES_PASSWORD=dimo
-      - POSTGRES_DB=tesla-oracle
+      - POSTGRES_DB=tesla_oracle
 
   redis:
     image: redis:latest
