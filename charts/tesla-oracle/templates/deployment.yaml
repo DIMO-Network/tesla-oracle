@@ -36,7 +36,17 @@ spec:
       serviceAccountName: {{ include "tesla-oracle.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
-      initContainers: []
+      initContainers:
+        - name: migrate
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command: ["/tesla-oracle", "migrate"]
+          envFrom:
+          - configMapRef:
+              name: {{ include "tesla-oracle.fullname" . }}-config
+          - secretRef:
+              name: {{ include "tesla-oracle.fullname" . }}-secret
       containers:
         - name: {{ .Chart.Name }}
           securityContext:
