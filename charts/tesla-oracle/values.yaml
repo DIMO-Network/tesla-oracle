@@ -1,0 +1,118 @@
+replicaCount: 1
+image:
+  repository: dimozone/tesla-oracle
+  pullPolicy: IfNotPresent
+  tag: 5a19806
+imagePullSecrets: []
+nameOverride: ''
+fullnameOverride: ''
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ''
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1001
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - all
+env:
+  LOG_LEVEL: debug
+  ENVIRONMENT: dev
+  MON_PORT: '8888'
+  GRPC_PORT: '8086'
+  CHAIN_ID: 80002
+  CONTRACT_EVENT_TOPIC: topic.contract.event
+  KAFKA_BROKERS: kafka-dev-dimo-kafka-kafka-brokers:9092
+  DB_PORT: '5432'
+  DB_NAME: tesla-oracle
+  DB_MAX_OPEN_CONNECTIONS: '10'
+  DB_MAX_IDLE_CONNECTIONS: '3'
+  DB_SSL_MODE: require
+service:
+  type: ClusterIP
+  ports:
+    mon-http:
+      port: 8888
+      targetPort: mon-http
+      protocol: TCP
+ports:
+  - name: mon-http
+    containerPort: 8888
+    protocol: TCP
+livenessProbe:
+  httpGet:
+    path: /
+    port: mon-http
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+readinessProbe:
+  httpGet:
+    path: /
+    port: mon-http
+  initialDelaySeconds: 10
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/auth-tls-secret: ingress/cf-origin-ca
+    nginx.ingress.kubernetes.io/auth-tls-verify-client: 'on'
+    nginx.ingress.kubernetes.io/enable-cors: 'true'
+    nginx.ingress.kubernetes.io/cors-allow-origin: https://tesla-oracle.dev.dimo.zone, https://app.dev.dimo.zone
+    external-dns.alpha.kubernetes.io/hostname: tesla-oracle.dev.dimo.zone
+  hosts:
+    - host: tesla-oracle.dev.dimo.zone
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+resources:
+  limits:
+    cpu: 250m
+    memory: 256Mi
+  requests:
+    cpu: 50m
+    memory: 128Mi
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podDisruptionBudget:
+  minAvailable: 0
+kafka:
+  clusterName: kafka-dev-dimo-kafka
+  topics:
+    - name: topic.device.integration.mapping.tesla
+      config:
+        segment.ms: '3600000'
+        compression.type: producer
+        cleanup.policy: compact,delete
+        min.compaction.lag.ms: '3600000'
+    - name: tesla-oracle-mapping-table
+      config:
+        segment.ms: '3600000'
+        compression.type: producer
+        cleanup.policy: compact
+        min.compaction.lag.ms: '3600000'
+        min.cleanable.dirty.ratio: '0.01'
+        delete.retention.ms: '3600000'
+serviceMonitor:
+  enabled: true
+  path: /metrics
+  port: mon-http
+  interval: 30s

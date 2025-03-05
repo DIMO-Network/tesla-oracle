@@ -1,0 +1,43 @@
+replicaCount: 3
+image:
+  repository: dimozone/tesla-oracle
+  pullPolicy: IfNotPresent
+  tag: 0.0.1
+env:
+  LOG_LEVEL: info
+  ENVIRONMENT: prod
+  CHAIN_ID: 137
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    nginx.ingress.kubernetes.io/auth-tls-secret: ingress/cf-origin-ca
+    nginx.ingress.kubernetes.io/auth-tls-verify-client: 'on'
+    nginx.ingress.kubernetes.io/enable-cors: 'true'
+    nginx.ingress.kubernetes.io/cors-allow-origin: https://app.dimo.zone
+    external-dns.alpha.kubernetes.io/hostname: tesla-oracle.dimo.zone
+  hosts:
+    - host: tesla-oracle.dimo.zone
+      paths:
+        - path: /
+          pathType: ImplementationSpecific
+  tls: []
+resources:
+  limits:
+    cpu: 1
+    memory: 1024Mi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 100
+  targetCPUUtilizationPercentage: 80
+nodeSelector: {}
+tolerations: []
+affinity: {}
+podDisruptionBudget:
+  minAvailable: 1
+kafka:
+  clusterName: kafka-prod-dimo-kafka
