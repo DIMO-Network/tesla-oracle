@@ -17,10 +17,13 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
 	grpc_oracle "github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/IBM/sarama"
+	"github.com/gofiber/fiber/v2"
+	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -55,6 +58,17 @@ func main() {
 	}
 
 	mdw := middleware.New(&logger)
+
+	go func() {
+		monApp := fiber.New(fiber.Config{DisableStartupMessage: true})
+		monApp.Get("/", func(c *fiber.Ctx) error {
+			return nil
+		})
+		monApp.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
+		if err := monApp.Listen(fmt.Sprintf(":%d", settings.MonPort)); err != nil {
+			logger.Fatal().Err(err).Int("port", settings.MonPort).Msg("Failed to start monitoring web server.")
+		}
+	}()
 
 	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
 	pdb.WaitForDB(logger)
@@ -119,7 +133,7 @@ func main() {
 func StartGRPCServer(server *grpc.Server, grpcPort int, logger *zerolog.Logger) error {
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
 	if err != nil {
-		return fmt.Errorf("Couldn't listen on gRPC port %d: %w", grpcPort, err)
+		return fmt.Errorf("couldn't listen on gRPC port %d: %w", grpcPort, err)
 	}
 
 	if err := server.Serve(lis); err != nil {
