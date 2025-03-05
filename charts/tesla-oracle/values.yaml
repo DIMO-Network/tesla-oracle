@@ -96,7 +96,7 @@ podDisruptionBudget:
   minAvailable: 0
 kafka:
   clusterName: kafka-dev-dimo-kafka
-  topics []
+  topics: []
 serviceMonitor:
   enabled: true
   path: /metrics
