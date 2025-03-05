@@ -25,7 +25,6 @@ NAME?="new"
 
 GOLANGCI_VERSION   = latest
 # Get binary versions from go.mod
-GQLGEN_VERSION     =  $(shell go list -m -f '{{.Version}}' github.com/99designs/gqlgen)
 GOOSE_VERSION      =  $(shell go list -m -f '{{.Version}}' github.com/pressly/goose/v3)
 SQLBOILER_VERSION  =  $(shell go list -m -f '{{.Version}}' github.com/volatiletech/sqlboiler/v4)
 
