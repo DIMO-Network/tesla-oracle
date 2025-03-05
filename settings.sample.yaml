@@ -1,13 +1,16 @@
 ENVIRONMENT: local
 PORT: 3555
+GRPC_PORT: 
 MON_PORT: 8888
 LOG_LEVEL: debug
 CHAIN_ID: 80001
+CONTRACT_EVENT_TOPIC: topic.contract.event
+KAFKA_BROKERS: localhost:9092
 DB:
   USER: dimo
   PASSWORD: dimo
   PORT: 5432
   HOST: localhost
-  NAME: tesla-oracle
+  NAME: tesla_oracle
   MAX_OPEN_CONNECTIONS: 5
   MAX_IDLE_CONNECTIONS: 5
