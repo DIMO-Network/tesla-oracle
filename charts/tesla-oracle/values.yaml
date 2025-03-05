@@ -40,9 +40,16 @@ service:
       port: 8888
       targetPort: mon-http
       protocol: TCP
+    grpc:
+      port: 8086
+      targetPort: grpc
+      protocol: TCP
 ports:
   - name: mon-http
     containerPort: 8888
+    protocol: TCP
+  - name: grpc
+    containerPort: 8086
     protocol: TCP
 livenessProbe:
   httpGet:
