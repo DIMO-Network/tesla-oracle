@@ -150,7 +150,7 @@ func (p Processor) handleSyntheticDeviceNodeBurned(ctx context.Context, data jso
 	}
 
 	if delCount != 1 {
-		return fmt.Errorf("synthetic device node %d burn even deleted unexpected number of devices: %d", args.SyntheticDeviceNode.Int64(), delCount)
+		p.logger.Warn().Int64("syntheticDeviceNode", args.SyntheticDeviceNode.Int64()).Int64("count", delCount).Msg("unexpected number of deletions on burn event")
 	}
 
 	return nil
