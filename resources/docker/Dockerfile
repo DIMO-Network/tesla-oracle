@@ -14,7 +14,7 @@ RUN go mod tidy
 RUN go mod vendor
 RUN make install
 
-FROM busybox AS package
+FROM gcr.io/distroless/static-debian12 AS package
 
 LABEL maintainer="DIMO <hello@dimo.zone>"
 
@@ -23,9 +23,11 @@ WORKDIR /
 COPY --from=build /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=build /etc/passwd /etc/passwd
 COPY --from=build /go/src/github.com/DIMO-Network/tesla-oracle/target/bin/tesla-oracle .
+COPY --from=build /go/src/github.com/DIMO-Network/tesla-oracle/migrations /migrations
 
 USER dimo
 
+EXPOSE 8080
 EXPOSE 8888
 
-CMD /tesla-oracle
+CMD ["/tesla-oracle"]
