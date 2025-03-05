@@ -82,7 +82,7 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				session.MarkMessage(msg, "")
 			case p.syntheticDeviceNodeBurnedEventID:
 				if err := p.handleSyntheticDeviceNodeBurned(session.Context(), event.Data.Arguments); err != nil {
-					p.logger.Err(err).Msg("failed to process tesla device mint")
+					p.logger.Err(err).Msg("failed to process tesla device burn")
 					continue
 				}
 				session.MarkMessage(msg, "")
