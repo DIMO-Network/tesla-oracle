@@ -94,7 +94,7 @@ func main() {
 		logger.Fatal().Err(err).Msg("error creating consumer from client")
 	}
 
-	proc := consumer.New(pdb, &logger)
+	proc := consumer.New(pdb, settings.TopicContractEvent, &logger)
 
 	group, gCtx := errgroup.WithContext(ctx)
 	group.Go(func() error {
