@@ -17,11 +17,8 @@ import (
 )
 
 const (
-	teslaIntegrationID               = 2
-	contractEventType                = "zone.dimo.contract.event"
-	syntheticDeviceNodeMinted        = "SyntheticDeviceNodeMinted"
-	syntheticDeviceNodeMintedEventID = "0x5a560c1adda92bd6cbf9c891dc38e9e2973b7963493f2364caa40a4218346280"
-	syntheticDeviceNodeBurnedEventID = "0xe4edc3c1f917608d486e02df63af34158f185b78cef44615aebee26c09064122"
+	teslaIntegrationID int64 = 2
+	contractEventType        = "zone.dimo.contract.event"
 )
 
 type contractEventData struct {
@@ -32,6 +29,7 @@ type contractEventData struct {
 
 type Processor struct {
 	pdb                              db.Store
+	topic                            string
 	logger                           *zerolog.Logger
 	syntheticDeviceNodeMintedEventID string
 	syntheticDeviceNodeBurnedEventID string
@@ -39,10 +37,12 @@ type Processor struct {
 
 func New(
 	pdb db.Store,
+	topic string,
 	logger *zerolog.Logger) *Processor {
 	return &Processor{
 		pdb:                              pdb,
 		logger:                           logger,
+		topic:                            topic,
 		syntheticDeviceNodeMintedEventID: syntheticDeviceNodeMintedEventID,
 		syntheticDeviceNodeBurnedEventID: syntheticDeviceNodeBurnedEventID,
 	}
@@ -126,7 +126,10 @@ func (p Processor) handleSyntheticDeviceNodeMinted(ctx context.Context, data jso
 	partSynthDev.VehicleTokenID = null.IntFrom(int(mint.VehicleNode.Int64()))
 	partSynthDev.TokenID = null.IntFrom(int(mint.SyntheticDeviceNode.Int64()))
 	_, err = partSynthDev.Update(ctx, p.pdb.DBS().Writer, boil.Infer())
-	return fmt.Errorf("failed to update table for sythetic device %s: %w", partSynthDev.Address, err)
+	if err != nil {
+		return fmt.Errorf("failed to update table for sythetic device %s: %w", common.Bytes2Hex(partSynthDev.Address), err)
+	}
+	return nil
 }
 
 type SyntheticDeviceNodeBurned struct {

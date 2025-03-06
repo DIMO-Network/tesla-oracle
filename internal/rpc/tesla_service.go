@@ -27,7 +27,7 @@ type TeslaRPCService struct {
 	logger *zerolog.Logger
 }
 
-func (t *TeslaRPCService) RegisterNewDevice(ctx context.Context, req *grpc.RegisterNewSyntheticDeviceRequest) (*grpc.RegisterNewSyntheticDeviceResponse, error) {
+func (t *TeslaRPCService) RegisterNewSyntheticDevice(ctx context.Context, req *grpc.RegisterNewSyntheticDeviceRequest) (*grpc.RegisterNewSyntheticDeviceResponse, error) {
 	partial := models.SyntheticDevice{
 		Vin:               req.Vin,
 		Address:           req.SyntheticDeviceAddress,
