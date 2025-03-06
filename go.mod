@@ -6,6 +6,7 @@ require (
 	github.com/DIMO-Network/model-garage v0.4.16
 	github.com/DIMO-Network/shared v0.12.9
 	github.com/IBM/sarama v1.43.3
+	github.com/ericlagergren/decimal v0.0.0-20190420051523-6335edbaa640
 	github.com/ethereum/go-ethereum v1.15.2
 	github.com/friendsofgo/errors v0.9.2
 	github.com/gofiber/fiber/v2 v2.52.5
