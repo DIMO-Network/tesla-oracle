@@ -43,8 +43,8 @@ func New(
 		pdb:                              pdb,
 		logger:                           logger,
 		topic:                            topic,
-		syntheticDeviceNodeMintedEventID: syntheticDeviceNodeMintedEventID,
-		syntheticDeviceNodeBurnedEventID: syntheticDeviceNodeBurnedEventID,
+		syntheticDeviceNodeMintedEventID: "0x5a560c1adda92bd6cbf9c891dc38e9e2973b7963493f2364caa40a4218346280",
+		syntheticDeviceNodeBurnedEventID: "0xe4edc3c1f917608d486e02df63af34158f185b78cef44615aebee26c09064122",
 	}
 }
 
