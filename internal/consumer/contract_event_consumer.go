@@ -64,12 +64,10 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			var event cloudevent.CloudEvent[contractEventData]
 			if err := json.Unmarshal(msg.Value, &event); err != nil {
 				p.logger.Err(err).Msg("failed to parse contract event")
-				session.MarkMessage(msg, "")
 				continue
 			}
 
 			if event.Type != contractEventType {
-				session.MarkMessage(msg, "")
 				continue
 			}
 
@@ -79,17 +77,14 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 					p.logger.Err(err).Msg("failed to process tesla device mint")
 					continue
 				}
-				session.MarkMessage(msg, "")
 			case p.syntheticDeviceNodeBurnedEventID:
 				if err := p.handleSyntheticDeviceNodeBurned(session.Context(), event.Data.Arguments); err != nil {
 					p.logger.Err(err).Msg("failed to process tesla device burn")
 					continue
 				}
-				session.MarkMessage(msg, "")
-			default:
-				session.MarkMessage(msg, "")
-
 			}
+
+			session.MarkMessage(msg, "")
 
 		}
 	}
@@ -117,16 +112,21 @@ func (p Processor) handleSyntheticDeviceNodeMinted(ctx context.Context, data jso
 	synthDeviceAddr := mint.SyntheticDeviceAddress
 	partSynthDev, err := models.SyntheticDevices(
 		models.SyntheticDeviceWhere.Address.EQ(synthDeviceAddr.Bytes()),
-		models.SyntheticDeviceWhere.VehicleTokenID.IsNull(),
 	).One(ctx, p.pdb.DBS().Reader)
 	if err != nil {
 		return fmt.Errorf("failed to find partial device: %w", err)
 	}
 
+	if !partSynthDev.VehicleTokenID.IsZero() {
+		if partSynthDev.VehicleTokenID.Int == int(mint.VehicleNode.Int64()) {
+			return nil
+		}
+		return fmt.Errorf("synthetic device already been minted. existing vehicle ID: %d; attempting to update value to: %d", partSynthDev.VehicleTokenID.Int, mint.VehicleNode.Int64())
+	}
+
 	partSynthDev.VehicleTokenID = null.IntFrom(int(mint.VehicleNode.Int64()))
 	partSynthDev.TokenID = null.IntFrom(int(mint.SyntheticDeviceNode.Int64()))
-	_, err = partSynthDev.Update(ctx, p.pdb.DBS().Writer, boil.Infer())
-	if err != nil {
+	if _, err := partSynthDev.Update(ctx, p.pdb.DBS().Writer, boil.Infer()); err != nil {
 		return fmt.Errorf("failed to update table for sythetic device %s: %w", common.Bytes2Hex(partSynthDev.Address), err)
 	}
 	return nil
