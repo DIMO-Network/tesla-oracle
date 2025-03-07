@@ -68,6 +68,7 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			}
 
 			if event.Type != contractEventType {
+				session.MarkMessage(msg, "")
 				continue
 			}
 
