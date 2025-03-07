@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/grpc-ecosystem/go-grpc-middleware/v2/interceptors/recovery"
+	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
@@ -73,7 +73,7 @@ func (m *Middleware) MetricsMiddleware() grpc.UnaryServerInterceptor {
 	}
 }
 
-func (m *Middleware) PanicMiddleware() recovery.RecoveryHandlerFunc {
+func (m *Middleware) PanicMiddleware() grpc_recovery.RecoveryHandlerFunc {
 	return func(p any) (err error) {
 		GRPCPanicCount.Inc()
 

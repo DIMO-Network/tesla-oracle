@@ -11,7 +11,6 @@ require (
 	github.com/friendsofgo/errors v0.9.2
 	github.com/gofiber/fiber/v2 v2.52.5
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
-	github.com/grpc-ecosystem/go-grpc-middleware/v2 v2.3.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/pressly/goose/v3 v3.24.1
 	github.com/prometheus/client_golang v1.18.0
