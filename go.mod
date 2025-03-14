@@ -6,7 +6,6 @@ require (
 	github.com/DIMO-Network/model-garage v0.4.16
 	github.com/DIMO-Network/shared v0.12.9
 	github.com/IBM/sarama v1.43.3
-	github.com/ericlagergren/decimal v0.0.0-20190420051523-6335edbaa640
 	github.com/ethereum/go-ethereum v1.15.2
 	github.com/friendsofgo/errors v0.9.2
 	github.com/gofiber/fiber/v2 v2.52.5
@@ -15,6 +14,7 @@ require (
 	github.com/pressly/goose/v3 v3.24.1
 	github.com/prometheus/client_golang v1.18.0
 	github.com/rs/zerolog v1.33.0
+	github.com/stretchr/testify v1.10.0
 	github.com/volatiletech/null/v8 v8.1.2
 	github.com/volatiletech/sqlboiler/v4 v4.18.0
 	github.com/volatiletech/strmangle v0.0.6
@@ -58,6 +58,7 @@ require (
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.6.0 // indirect
 	github.com/prometheus/common v0.47.0 // indirect
 	github.com/prometheus/procfs v0.12.0 // indirect
@@ -82,4 +83,5 @@ require (
 	golang.org/x/time v0.5.0 // indirect
 	golang.org/x/xerrors v0.0.0-20231012003039-104605ab7028 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240826202546-f6391c0de4c7 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
