@@ -6,6 +6,7 @@ import (
 	"github.com/DIMO-Network/shared/db"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/DIMO-Network/tesla-oracle/pkg/grpc"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 )
@@ -41,6 +42,8 @@ func (t *TeslaRPCService) RegisterNewSyntheticDevice(ctx context.Context, req *g
 	); err != nil {
 		return nil, err
 	}
+
+	t.logger.Info().Str("vin", req.Vin).Str("address", common.BytesToAddress(req.SyntheticDeviceAddress).Hex()).Msg("registered new device")
 
 	return &grpc.RegisterNewSyntheticDeviceResponse{}, nil
 }
