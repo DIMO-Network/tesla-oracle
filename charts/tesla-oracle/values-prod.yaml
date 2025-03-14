@@ -7,6 +7,7 @@ env:
   LOG_LEVEL: info
   ENVIRONMENT: prod
   CHAIN_ID: 137
+  KAFKA_BROKERS: kafka-prod-dimo-kafka-kafka-brokers:9092
 ingress:
   enabled: false
   className: nginx
