@@ -6,7 +6,6 @@ require (
 	github.com/DIMO-Network/model-garage v0.4.16
 	github.com/DIMO-Network/shared v0.12.9
 	github.com/IBM/sarama v1.43.3
-	github.com/ericlagergren/decimal v0.0.0-20190420051523-6335edbaa640
 	github.com/ethereum/go-ethereum v1.15.2
 	github.com/friendsofgo/errors v0.9.2
 	github.com/gofiber/fiber/v2 v2.52.5
@@ -75,7 +74,7 @@ require (
 	github.com/volatiletech/inflect v0.0.1 // indirect
 	github.com/volatiletech/randomize v0.0.1 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
-	golang.org/x/crypto v0.33.0 // indirect
+	golang.org/x/crypto v0.35.0 // indirect
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
