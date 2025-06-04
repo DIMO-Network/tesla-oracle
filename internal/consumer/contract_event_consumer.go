@@ -17,8 +17,13 @@ import (
 )
 
 const (
-	teslaIntegrationID int64 = 2
-	contractEventType        = "zone.dimo.contract.event"
+	contractEventType = "zone.dimo.contract.event"
+	teslaName         = "Tesla"
+)
+
+var (
+	teslaIntegrationID = big.NewInt(2)
+	teslaConnectionID  = new(big.Int).SetBytes(append([]byte(teslaName), make([]byte, 32-len(teslaName))...))
 )
 
 type contractEventData struct {
@@ -93,10 +98,18 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 
 type SyntheticDeviceNodeMinted struct {
 	IntegrationNode        *big.Int       `json:"integrationNode"`
+	ConnectionID           *big.Int       `json:"connectionId"`
 	SyntheticDeviceNode    *big.Int       `json:"syntheticDeviceNode"`
 	VehicleNode            *big.Int       `json:"vehicleNode"`
 	SyntheticDeviceAddress common.Address `json:"syntheticDeviceAddress"`
 	Owner                  common.Address `json:"owner"`
+}
+
+func takeFirst(x, y *big.Int) *big.Int {
+	if x != nil {
+		return x
+	}
+	return y
 }
 
 func (p Processor) handleSyntheticDeviceNodeMinted(ctx context.Context, data json.RawMessage) error {
@@ -105,8 +118,10 @@ func (p Processor) handleSyntheticDeviceNodeMinted(ctx context.Context, data jso
 		return fmt.Errorf("failed to parse tesla mint event: %w", err)
 	}
 
-	if mint.IntegrationNode.Int64() != teslaIntegrationID { // only tesla mints
-		p.logger.Debug().Int64("integrationNode", mint.IntegrationNode.Int64()).Msg("only process tesla mints")
+	rightID := takeFirst(mint.ConnectionID, mint.IntegrationNode)
+
+	if rightID.Cmp(teslaIntegrationID) != 0 && rightID.Cmp(teslaConnectionID) != 0 { // only tesla mints
+		p.logger.Debug().Int64("integrationNode", rightID.Int64()).Msg("only process tesla mints")
 		return nil
 	}
 
