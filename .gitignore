@@ -24,3 +24,5 @@ resources/redis/
 settings.yaml
 
 *.txt
+
+.idea

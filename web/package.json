@@ -1,0 +1,29 @@
+{
+  "name": "tesla-oracle-web",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsc && vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@lit/context": "^1.1.4",
+    "@tailwindcss/vite": "^4.0.14",
+    "events": "^3.3.0",
+    "lit": "^3.2.1",
+    "lodash": "^4.17.21",
+    "qs": "^6.14.0",
+    "tailwindcss": "^4.0.14"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.17.16",
+    "@types/qs": "^6.9.18",
+    "eslint-plugin-prettier": "^5.2.3",
+    "typescript": "^5.8.2",
+    "vite-plugin-eslint": "^1.8.1",
+    "vite-plugin-static-copy": "^2.2.0",
+    "vite-tsconfig-paths": "^5.1.4"
+  }
+}
