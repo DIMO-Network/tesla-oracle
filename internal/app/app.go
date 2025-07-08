@@ -2,7 +2,7 @@ package app
 
 import (
 	"errors"
-	"github.com/DIMO-Network/shared/middleware/metrics"
+	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"

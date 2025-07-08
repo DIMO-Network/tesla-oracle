@@ -7,7 +7,7 @@ import (
 	"math/big"
 
 	"github.com/DIMO-Network/model-garage/pkg/cloudevent"
-	"github.com/DIMO-Network/shared/db"
+	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/IBM/sarama"
 	"github.com/ethereum/go-ethereum/common"

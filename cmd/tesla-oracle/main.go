@@ -4,13 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net"
-	"os"
-	"os/signal"
-	"syscall"
-
-	"github.com/DIMO-Network/shared"
-	"github.com/DIMO-Network/shared/db"
+	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/DIMO-Network/shared/pkg/settings"
+	"github.com/DIMO-Network/tesla-oracle/internal/app"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
@@ -27,6 +23,11 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"net"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
 )
 
 func main() {
@@ -38,7 +39,7 @@ func main() {
 		Str("app", "tesla-oracle").
 		Logger()
 
-	settings, err := shared.LoadConfig[config.Settings]("settings.yaml")
+	settings, err := settings.LoadConfig[config.Settings]("settings.yaml")
 	if err != nil {
 		logger.Fatal().Err(err).Msg("could not load settings")
 	}
@@ -59,16 +60,16 @@ func main() {
 
 	mdw := middleware.New(&logger)
 
-	go func() {
-		monApp := fiber.New(fiber.Config{DisableStartupMessage: true})
-		monApp.Get("/", func(c *fiber.Ctx) error {
-			return nil
-		})
-		monApp.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
-		if err := monApp.Listen(fmt.Sprintf(":%d", settings.MonPort)); err != nil {
-			logger.Fatal().Err(err).Int("port", settings.MonPort).Msg("Failed to start monitoring web server.")
-		}
-	}()
+	group, gCtx := errgroup.WithContext(ctx)
+
+	monApp := createMonitoringServer()
+	webApp := app.App(&settings, &logger)
+
+	logger.Info().Str("port", strconv.Itoa(settings.MonPort)).Msgf("Starting monitoring server on port %d", settings.MonPort)
+	StartFiberApp(gCtx, monApp, fmt.Sprintf(":%d", settings.MonPort), group, &logger)
+
+	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
+	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger)
 
 	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
 	pdb.WaitForDB(logger)
@@ -88,24 +89,25 @@ func main() {
 
 	grpc_oracle.RegisterTeslaOracleServer(server, teslaSvc)
 
-	config := sarama.NewConfig()
-	config.Version = sarama.V3_6_0_0
-	logger.Info().Msgf("Starting gRPC server on port %d", settings.GRPCPort)
-	cGroup, err := sarama.NewConsumerGroup([]string{settings.KafkaBrokers}, settings.TopicContractEvent, config)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("error creating consumer from client")
-	}
-
-	proc := consumer.New(pdb, settings.TopicContractEvent, &logger)
-
-	group, gCtx := errgroup.WithContext(ctx)
-	group.Go(func() error {
-		if err := StartContractEventConsumer(gCtx, proc, cGroup, settings.TopicContractEvent, &logger); err != nil {
-			return fmt.Errorf("error starting contract event consumer: %w", err)
+	if settings.EnableContractEventConsumer {
+		config := sarama.NewConfig()
+		config.Version = sarama.V3_6_0_0
+		logger.Info().Msgf("Starting gRPC server on port %d", settings.GRPCPort)
+		cGroup, err := sarama.NewConsumerGroup([]string{settings.KafkaBrokers}, settings.TopicContractEvent, config)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("error creating consumer from client")
 		}
 
-		return nil
-	})
+		proc := consumer.New(pdb, settings.TopicContractEvent, &logger)
+
+		group.Go(func() error {
+			if err := StartContractEventConsumer(gCtx, proc, cGroup, settings.TopicContractEvent, &logger); err != nil {
+				return fmt.Errorf("error starting contract event consumer: %w", err)
+			}
+
+			return nil
+		})
+	}
 
 	group.Go(func() error {
 		if err := StartGRPCServer(server, settings.GRPCPort, &logger); err != nil {
@@ -133,6 +135,7 @@ func main() {
 }
 
 func StartGRPCServer(server *grpc.Server, grpcPort int, logger *zerolog.Logger) error {
+	logger.Info().Msgf("Starting gRPC server on port %d", grpcPort)
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", grpcPort))
 	if err != nil {
 		return fmt.Errorf("couldn't listen on gRPC port %d: %w", grpcPort, err)
@@ -158,4 +161,32 @@ func StartContractEventConsumer(ctx context.Context, proc *consumer.Processor, c
 			return nil
 		}
 	}
+}
+
+func StartFiberApp(ctx context.Context, fiberApp *fiber.App, addr string, group *errgroup.Group, logger *zerolog.Logger) {
+	group.Go(func() error {
+		logger.Info().Msgf("starting FiberApp: %s", addr)
+		if err := fiberApp.Listen(addr); err != nil {
+			return fmt.Errorf("failed to start server: %w", err)
+		}
+		return nil
+	})
+	group.Go(func() error {
+		<-ctx.Done()
+		logger.Info().Msgf("shutting down FiberApp: %s", addr)
+		if err := fiberApp.Shutdown(); err != nil {
+			return fmt.Errorf("failed to shutdown server: %w", err)
+		}
+		return nil
+	})
+}
+
+func createMonitoringServer() *fiber.App {
+	monApp := fiber.New(fiber.Config{DisableStartupMessage: true})
+	monApp.Get("/", func(c *fiber.Ctx) error {
+		return nil
+	})
+	monApp.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
+
+	return monApp
 }
