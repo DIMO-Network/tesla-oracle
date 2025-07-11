@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@lit/context": "^1.1.4",
+    "@tailwindcss/language-server": "^0.14.25",
     "@tailwindcss/vite": "^4.0.14",
     "events": "^3.3.0",
     "lit": "^3.2.1",
