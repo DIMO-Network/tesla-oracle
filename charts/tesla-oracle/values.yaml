@@ -44,7 +44,7 @@ service:
       protocol: TCP
     web-http:
       port: 8080
-      targetPort: mon-http
+      targetPort: web-http
       protocol: TCP
     grpc:
       port: 8086
