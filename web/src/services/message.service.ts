@@ -17,7 +17,9 @@ export class MessageService {
     };
 
     private constructor() {
+        // iOS uses window
         window.addEventListener('message', this.onMessage.bind(this));
+        // @ts-ignore Android uses document
         document.addEventListener('message', this.onMessage.bind(this));
     }
 
@@ -33,25 +35,31 @@ export class MessageService {
     }
 
     public sendMessage(message: Message) {
+        // @ts-ignore
         if (!!window.ReactNativeWebView) {
-            window.ReactNativeWebView.postMessage(message);
-        } else {
+            // @ts-ignore
+            window.ReactNativeWebView.postMessage(JSON.stringify(message));
+        } else if (window.top) {
             window.top.postMessage(message, 'https://localdev.dimo.org:3008');
         }
     }
 
     private onMessage(event: MessageEvent) {
-        if (!(['https://localdev.dimo.org:3008'].includes(event.origin))) {
-            return;
+        console.debug('MessageService.onMessage', event)
+
+        // @ts-ignore
+        if (!!window.ReactNativeWebView) {
+            // TODO: figure out a way to validate if the message was sent from the mobile app
+        } else {
+            // TODO: for the browser validate event origin (browser plugins may send messages too)
         }
 
-        const message = event.data as Message;
+        const message = JSON.parse(event.data) as Message;
         if (!message.type || !['message', 'sign','signature'].includes(message.type)) {
             return;
         }
 
         for (const handler of this.handlers[message.type]) {
-            console.debug('Handling message', message)
             handler(message);
         }
     }
