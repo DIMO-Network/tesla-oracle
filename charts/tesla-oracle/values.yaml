@@ -42,9 +42,9 @@ service:
       port: 8888
       targetPort: mon-http
       protocol: TCP
-    web-http:
+    http:
       port: 8080
-      targetPort: web-http
+      targetPort: http
       protocol: TCP
     grpc:
       port: 8086
@@ -54,7 +54,7 @@ ports:
   - name: mon-http
     containerPort: 8888
     protocol: TCP
-  - name: web-http
+  - name: http
     containerPort: 8080
     protocol: TCP
   - name: grpc
