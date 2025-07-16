@@ -8,6 +8,7 @@ require (
 	github.com/IBM/sarama v1.43.3
 	github.com/ethereum/go-ethereum v1.15.2
 	github.com/friendsofgo/errors v0.9.2
+	github.com/gofiber/contrib/jwt v1.1.2
 	github.com/gofiber/fiber/v2 v2.52.6
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
@@ -24,6 +25,7 @@ require (
 
 require (
 	github.com/DIMO-Network/yaml v0.1.0 // indirect
+	github.com/MicahParks/keyfunc/v2 v2.1.0 // indirect
 	github.com/andybalholm/brotli v1.1.1 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -32,6 +34,7 @@ require (
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
+	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect

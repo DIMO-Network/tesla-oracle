@@ -16,4 +16,8 @@ type Settings struct {
 	TopicContractEvent          string      `yaml:"CONTRACT_EVENT_TOPIC"`
 	KafkaBrokers                string      `yaml:"KAFKA_BROKERS"`
 	DB                          db.Settings `yaml:"DB"`
+	JwtKeySetURL                string      `yaml:"JWT_KEY_SET_URL"`
+	TeslaClientID               string      `yaml:"TESLA_CLIENT_ID"`
+	TeslaAuthURL                string      `yaml:"TESLA_AUTH_URL"`
+	TeslaRedirectURL            string      `yaml:"TESLA_REDIRECT_URL"`
 }

@@ -4,6 +4,8 @@ import (
 	"errors"
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
+	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
@@ -30,10 +32,10 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 	}))
 
 	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "https://localdev.dimo.org:3008", // localhost development
+		AllowOrigins:     "*", // localhost development
 		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
 		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-		AllowCredentials: true,
+		AllowCredentials: false,
 	}))
 
 	// serve static content for production
@@ -49,6 +51,16 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 
 	// application routes
 	app.Get("/health", healthCheck)
+
+	teslaCtrl := controllers.NewTeslaController(settings, logger)
+
+	jwtAuth := jwtware.New(jwtware.Config{
+		JWKSetURLs: []string{settings.JwtKeySetURL},
+	})
+
+	teslaGroup := app.Group("/v1/tesla", jwtAuth)
+	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
+	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
 
 	return app
 }
