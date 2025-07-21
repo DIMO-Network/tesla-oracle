@@ -2,7 +2,7 @@ import {createContext} from '@lit/context';
 
 export interface AuthContext {
     token: string;
-    email: string;
+
 }
 
 export enum AuthEventType {
@@ -10,13 +10,12 @@ export enum AuthEventType {
     LOGOUT = 'auth.logout',
 }
 
-export const createLoginEvent = (token: string, email: string) => {
+export const createLoginEvent = (token: string) => {
     return new CustomEvent(AuthEventType.LOGIN, {
         bubbles: true,
         composed: true,
         detail: {
             token,
-            email
         }
     });
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
+	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	grpc_oracle "github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/IBM/sarama"
 	"github.com/gofiber/fiber/v2"
@@ -57,6 +58,9 @@ func main() {
 		logger.Info().Msg("Migration complete")
 		return
 	}
+
+	ddSvc := service.NewDeviceDefinitionsAPIService(logger, settings)
+	identitySvc := service.NewIdentityAPIService(logger, settings)
 
 	mdw := middleware.New(&logger)
 

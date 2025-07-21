@@ -5,6 +5,7 @@ import (
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
+	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -52,7 +53,12 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 	// application routes
 	app.Get("/health", healthCheck)
 
-	teslaCtrl := controllers.NewTeslaController(settings, logger)
+	teslaFleetAPISvc, err := service.NewTeslaFleetAPIService(settings, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
+	}
+
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc)
 
 	jwtAuth := jwtware.New(jwtware.Config{
 		JWKSetURLs: []string{settings.JwtKeySetURL},

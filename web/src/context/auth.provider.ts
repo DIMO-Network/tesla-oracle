@@ -10,7 +10,6 @@ export class AuthProvider extends LitElement {
     @property({attribute: false})
     private _auth: AuthContext = {
         token: '',
-        email: '',
     };
 
     connectedCallback() {
@@ -25,10 +24,9 @@ export class AuthProvider extends LitElement {
         }
 
         const token = this.getToken();
-        const email = this.getEmail();
 
         if (token) {
-            this._auth = { ...this._auth, token, email};
+            this._auth = { ...this._auth, token};
         } else {
             this.logout();
         }
@@ -41,9 +39,9 @@ export class AuthProvider extends LitElement {
     logout() {
         console.debug('LOGOUT');
 
-        this._auth = { ...this._auth, token: '', email: ''};
+        this._auth = { ...this._auth, token: '', };
 
-        const keysToRemove = ['token', 'email'];
+        const keysToRemove = ['token'];
         keysToRemove.forEach(key => {
             localStorage.removeItem(key);
         });
@@ -55,7 +53,7 @@ export class AuthProvider extends LitElement {
         console.debug('QS Params:');
         params.forEach((value, key) => {
             console.debug(`${key}: ${value}`);
-            if (['email', 'token'].includes(key)) {
+            if (['token'].includes(key)) {
                 localStorage.setItem(key, value);
                 hadParams = true;
             }
@@ -79,9 +77,5 @@ export class AuthProvider extends LitElement {
             console.error("Invalid token:", error);
             return null;
         }
-    }
-
-    getEmail() {
-        return localStorage.getItem("email") || '';
     }
 }

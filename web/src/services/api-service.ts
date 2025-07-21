@@ -21,7 +21,7 @@ export class ApiService {
     }
 
     private getBaseUrl(): string {
-        return "http://192.168.50.215:4443"//window.origin;
+        return "http://192.168.50.215:8080"//window.origin;
     }
 
     private getAuthorizationHeader(auth: boolean): Record<string, string> {

@@ -17,7 +17,7 @@ export default defineConfig({
         tailwindcss(),
     ],
     server: {
-        port: 4444, // Use custom port, e.g., 3000
+        port: 4443, // Use custom port, e.g., 3000
         host: 'localtesla.dimo.org',
         https: false,
     },
