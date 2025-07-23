@@ -21,7 +21,8 @@ export class ApiService {
     }
 
     private getBaseUrl(): string {
-        return "http://192.168.50.215:8080"//window.origin;
+        // FIXME: get the proper non-local logic
+        return "https://192.168.50.215:8080"//window.origin;
     }
 
     private getAuthorizationHeader(auth: boolean): Record<string, string> {
