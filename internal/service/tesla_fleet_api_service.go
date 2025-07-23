@@ -3,9 +3,9 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
-	"github.com/DIMO-Network/tesla-oracle/internal/constants"
 	"io"
 	"mime"
 	"net/http"
@@ -14,6 +14,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/DIMO-Network/tesla-oracle/internal/constants"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	//"github.com/DIMO-Network/devices-api/internal/constants"
@@ -145,9 +147,20 @@ func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) 
 		return nil, err
 	}
 
+	var client *http.Client
+	if settings.Environment == "local" {
+		logger.Warn().Msg("LOCAL ENV - disabling cert verification")
+		tr := &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+		client = &http.Client{Transport: tr}
+	} else {
+		client = &http.Client{}
+	}
+
 	return &teslaFleetAPIService{
 		Settings:   settings,
-		HTTPClient: &http.Client{},
+		HTTPClient: client,
 		log:        logger,
 		FleetBase:  u,
 	}, nil

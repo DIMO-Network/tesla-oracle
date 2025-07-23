@@ -4,12 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	shttp "github.com/DIMO-Network/shared/pkg/http"
-	"github.com/DIMO-Network/tesla-oracle/internal/config"
-	"github.com/rs/zerolog"
 	"io"
 	"net/url"
 	"time"
+
+	shttp "github.com/DIMO-Network/shared/pkg/http"
+	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/rs/zerolog"
 )
 
 type DeviceDefinitionsAPIService interface {
@@ -18,11 +19,11 @@ type DeviceDefinitionsAPIService interface {
 
 type deviceDefinitionsAPIService struct {
 	baseURL url.URL
-	logger  zerolog.Logger
+	logger  *zerolog.Logger
 	auth    *DimoAuthService
 }
 
-func NewDeviceDefinitionsAPIService(logger zerolog.Logger, settings config.Settings) *deviceDefinitionsAPIService {
+func NewDeviceDefinitionsAPIService(logger *zerolog.Logger, settings *config.Settings) DeviceDefinitionsAPIService {
 	auth, err := NewDimoAuthService(logger, settings)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to create Dimo Auth service")

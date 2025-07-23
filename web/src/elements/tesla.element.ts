@@ -1,15 +1,34 @@
-import {html, LitElement, css, unsafeCSS} from 'lit'
+import {css, html, LitElement, unsafeCSS} from 'lit'
+import {Task} from '@lit/task'
 
 // @ts-ignore
 import styles from '@styles/main.css?inline'
 
-import {PropertyValues} from "@lit/reactive-element";
 import {customElement, property} from "lit/decorators.js";
 import {consume} from "@lit/context";
 
 import {TeslaSettingsContext, teslaSettingsContext} from "@context/tesla-settings.context.ts";
 import {TeslaAuthContext, teslaAuthContext} from "@context/tesla-auth.context.ts";
 import qs from "qs";
+import {ApiService} from "@services/api-service.ts";
+import {repeat} from "lit/directives/repeat.js";
+
+interface DeviceDefinition {
+    id: string;
+    make: string;
+    model: string;
+    year: number;
+}
+
+interface TeslaVehicle {
+    externalId: string;
+    vin: string;
+    definition: DeviceDefinition;
+}
+
+interface VehiclesResponse {
+    vehicles: TeslaVehicle[];
+}
 
 @customElement('tesla-element')
 export class TeslaElement extends LitElement {
@@ -23,32 +42,46 @@ export class TeslaElement extends LitElement {
     @property({attribute: false})
     private teslaAuth?: TeslaAuthContext;
 
+    private api = ApiService.getInstance();
 
+    private loadVehiclesTask = new Task(this, {
+        task: async ([authorizationCode, redirectUri], {}) => {
+            if (!authorizationCode || !redirectUri) {
+                return [];
+            }
 
-    constructor() {
-        super();
-    }
+            const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
+                authorizationCode,
+                redirectUri
+            }, true);
+            return response.data?.vehicles || [];
+        },
+        args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri]
+    });
 
-    async connectedCallback() {
-        super.connectedCallback();
-    }
-
-    willUpdate(p: PropertyValues) {
-        console.log('Tesla WILL UPDATE', p)
-        console.log(this.teslaAuth)
-        console.log(this.teslaSettings)
-
-        if (this.teslaAuth?.code && this.teslaSettings?.redirectUri) {
-            //this.teslaService.getVehicles(this.teslaAuth.code, this.teslaSettings.redirectUri!);
-            console.log('TESLA', this.teslaAuth, this.teslaSettings)
-        }
+    private renderVehicles(vehicles: TeslaVehicle[] | readonly[]) {
+        return html`
+            ${repeat(vehicles, (_, i) => i, (item) => html`
+                <div class="font-mono">${JSON.stringify(item)}</div>`)}
+        `
     }
 
     render() {
         return html`
-            <a href="${this.getAuthUrl()}" type="button" class="button">
-                Onboard my Tesla
-            </a>
+            <div>
+                <div>
+                    <a href="${this.getAuthUrl()}" type="button" class="button">
+                        Onboard my Tesla
+                    </a>
+                </div>
+                <div>
+                    ${this.loadVehiclesTask.render({
+                        pending: () => html`
+                            <div class="font-mono">Loading vehicles...</div>`,
+                        complete: (vehicles) => this.renderVehicles(vehicles),
+                    })}
+                </div>
+            </div>
         `;
     }
 

@@ -1,9 +1,10 @@
 package config
 
 import (
+	"net/url"
+
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/ethereum/go-ethereum/common"
-	"net/url"
 )
 
 type Settings struct {

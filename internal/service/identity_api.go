@@ -4,15 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"net/url"
+	"strconv"
+	"time"
+
 	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
-	"io"
-	"net/url"
-	"strconv"
-	"time"
 )
 
 type IdentityAPIService interface {
@@ -29,10 +30,10 @@ type identityAPIService struct {
 	apiURL     url.URL
 	cache      *cache.Cache
 	httpClient shttp.ClientWrapper
-	logger     zerolog.Logger
+	logger     *zerolog.Logger
 }
 
-func NewIdentityAPIService(logger zerolog.Logger, settings config.Settings) IdentityAPIService {
+func NewIdentityAPIService(logger *zerolog.Logger, settings *config.Settings) IdentityAPIService {
 	h := map[string]string{}
 	h["Content-Type"] = "application/json"
 	hcw, _ := shttp.NewClientWrapper("", "", 10*time.Second, h, false, shttp.WithRetry(3))

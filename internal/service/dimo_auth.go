@@ -4,6 +4,11 @@ import (
 	"crypto/ecdsa"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/url"
+	"sync"
+	"time"
+
 	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/ethereum/go-ethereum/common"
@@ -11,10 +16,6 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
-	"io"
-	"net/url"
-	"sync"
-	"time"
 )
 
 type DimoAuthService struct {
@@ -23,11 +24,11 @@ type DimoAuthService struct {
 	domain     string
 	privateKey *ecdsa.PrivateKey
 	token      *jwt.Token
-	logger     zerolog.Logger
+	logger     *zerolog.Logger
 	m          sync.RWMutex
 }
 
-func NewDimoAuthService(logger zerolog.Logger, settings config.Settings) (*DimoAuthService, error) {
+func NewDimoAuthService(logger *zerolog.Logger, settings *config.Settings) (*DimoAuthService, error) {
 	ecdsaPrivateKey, err := crypto.HexToECDSA(settings.DimoAuthPrivateKey)
 	if err != nil {
 		return nil, err

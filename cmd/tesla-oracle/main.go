@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/settings"
 	"github.com/DIMO-Network/tesla-oracle/internal/app"
@@ -11,7 +17,6 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
-	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	grpc_oracle "github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/IBM/sarama"
 	"github.com/gofiber/fiber/v2"
@@ -24,11 +29,6 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"net"
-	"os"
-	"os/signal"
-	"strconv"
-	"syscall"
 )
 
 func main() {
@@ -58,9 +58,6 @@ func main() {
 		logger.Info().Msg("Migration complete")
 		return
 	}
-
-	ddSvc := service.NewDeviceDefinitionsAPIService(logger, settings)
-	identitySvc := service.NewIdentityAPIService(logger, settings)
 
 	mdw := middleware.New(&logger)
 

@@ -2,7 +2,10 @@
 
 .button {
     @apply
-    inline-flex
+    block
+        m-3
+        w-full
+        text-center
     items-center
     rounded-md
     bg-red-600
@@ -12,7 +15,7 @@
     font-semibold
     text-white
     shadow-xs
-        shadow-gray-200
+    shadow-gray-200
     hover:bg-red-500
     hover:cursor-pointer
     focus-visible:outline-2
