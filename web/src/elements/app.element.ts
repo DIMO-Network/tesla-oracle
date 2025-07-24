@@ -85,6 +85,7 @@ export class AppElement extends LitElement {
                     <div>
                         <button class="button" type="button" @click=${this.handleSendMessage}>Send a message</button>
                         <button class="button" type="button" @click=${this.handleSignRequest}>Send sign request</button>
+                        <tesla-element></tesla-element>
                     </div>
                     <br/>
                     <br/q>

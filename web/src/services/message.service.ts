@@ -54,6 +54,10 @@ export class MessageService {
             // TODO: for the browser validate event origin (browser plugins may send messages too)
         }
 
+        if (typeof(event.data) != "string") {
+            return;
+        }
+
         const message = JSON.parse(event.data) as Message;
         if (!message.type || !['message', 'sign','signature'].includes(message.type)) {
             return;

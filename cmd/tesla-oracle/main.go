@@ -4,6 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os"
+	"os/signal"
+	"strconv"
+	"syscall"
+
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/settings"
 	"github.com/DIMO-Network/tesla-oracle/internal/app"
@@ -23,11 +29,6 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
-	"net"
-	"os"
-	"os/signal"
-	"strconv"
-	"syscall"
 )
 
 func main() {
@@ -65,11 +66,13 @@ func main() {
 	monApp := createMonitoringServer()
 	webApp := app.App(&settings, &logger)
 
+	useLocalTLS := settings.Environment == "local" && settings.UseLocalTLS
+
 	logger.Info().Str("port", strconv.Itoa(settings.MonPort)).Msgf("Starting monitoring server on port %d", settings.MonPort)
-	StartFiberApp(gCtx, monApp, fmt.Sprintf(":%d", settings.MonPort), group, &logger)
+	StartFiberApp(gCtx, monApp, fmt.Sprintf(":%d", settings.MonPort), group, &logger, useLocalTLS)
 
 	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
-	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger)
+	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger, useLocalTLS)
 
 	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
 	pdb.WaitForDB(logger)
@@ -163,12 +166,21 @@ func StartContractEventConsumer(ctx context.Context, proc *consumer.Processor, c
 	}
 }
 
-func StartFiberApp(ctx context.Context, fiberApp *fiber.App, addr string, group *errgroup.Group, logger *zerolog.Logger) {
+func StartFiberApp(ctx context.Context, fiberApp *fiber.App, addr string, group *errgroup.Group, logger *zerolog.Logger, useLocalTLS bool) {
 	group.Go(func() error {
 		logger.Info().Msgf("starting FiberApp: %s", addr)
-		if err := fiberApp.Listen(addr); err != nil {
-			return fmt.Errorf("failed to start server: %w", err)
+
+		if useLocalTLS {
+			logger.Info().Msgf("using local TLS")
+			if err := fiberApp.ListenTLS("0.0.0.0"+addr, "./web/.mkcert/cert.pem", "./web/.mkcert/dev.pem"); err != nil {
+				return fmt.Errorf("failed to start server: %w", err)
+			}
+		} else {
+			if err := fiberApp.Listen(addr); err != nil {
+				return fmt.Errorf("failed to start server: %w", err)
+			}
 		}
+
 		return nil
 	})
 	group.Go(func() error {

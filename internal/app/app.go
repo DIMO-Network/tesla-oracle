@@ -2,14 +2,22 @@ package app
 
 import (
 	"errors"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
+	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
+	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
-	"os"
-	"strconv"
 )
 
 func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
@@ -29,12 +37,21 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 		StackTraceHandler: nil,
 	}))
 
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     "https://localdev.dimo.org:3008", // localhost development
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
-		AllowCredentials: true,
-	}))
+	if settings.Environment == "local" {
+		app.Use(cors.New(cors.Config{
+			AllowOrigins:     "*",
+			AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+			AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+			AllowCredentials: false,
+		}))
+	} else {
+		app.Use(cors.New(cors.Config{
+			AllowOrigins:     "https://localdev.dimo.org:8080",
+			AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
+			AllowHeaders:     "Origin, Content-Type, Accept, Authorization",
+			AllowCredentials: true,
+		}))
+	}
 
 	// serve static content for production
 	app.Get("/", loadStaticIndex)
@@ -49,6 +66,30 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 
 	// application routes
 	app.Get("/health", healthCheck)
+
+	ddSvc := service.NewDeviceDefinitionsAPIService(logger, settings)
+	identitySvc := service.NewIdentityAPIService(logger, settings)
+	credStore := service.Store{
+		Cache: cache.New(5*time.Minute, 10*time.Minute),
+		// FIXME: for development only, use KMS
+		Cipher: new(cipher.ROT13Cipher),
+	}
+	teslaFleetAPISvc, err := service.NewTeslaFleetAPIService(settings, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
+	}
+
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore)
+
+	jwtAuth := jwtware.New(jwtware.Config{
+		JWKSetURLs: []string{settings.JwtKeySetURL},
+	})
+
+	walletMdw := helpers.NewWalletMiddleware()
+
+	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
+	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
+	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
 
 	return app
 }
