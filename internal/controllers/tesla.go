@@ -54,7 +54,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 }
 
 // GetSettings
-// @Summary Get private app configuration parameters
+// @Summary Get tesla-related configuration parameters
 // @Description Get config params for frontend app
 // @Tags Settings
 // @Produce json

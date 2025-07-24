@@ -70,7 +70,8 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 	ddSvc := service.NewDeviceDefinitionsAPIService(logger, settings)
 	identitySvc := service.NewIdentityAPIService(logger, settings)
 	credStore := service.Store{
-		Cache:  cache.New(5*time.Minute, 10*time.Minute),
+		Cache: cache.New(5*time.Minute, 10*time.Minute),
+		// FIXME: for development only, use KMS
 		Cipher: new(cipher.ROT13Cipher),
 	}
 	teslaFleetAPISvc, err := service.NewTeslaFleetAPIService(settings, logger)
