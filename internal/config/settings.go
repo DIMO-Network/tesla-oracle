@@ -19,6 +19,7 @@ type Settings struct {
 	TopicContractEvent          string      `yaml:"CONTRACT_EVENT_TOPIC"`
 	KafkaBrokers                string      `yaml:"KAFKA_BROKERS"`
 	DB                          db.Settings `yaml:"DB"`
+	ServiceName                 string      `yaml:"SERVICE_NAME"`
 	JwtKeySetURL                string      `yaml:"JWT_KEY_SET_URL"`
 	UseLocalTLS                 bool        `yaml:"USE_LOCAL_TLS"`
 

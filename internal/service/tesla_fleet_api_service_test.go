@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/test"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/suite"
-	//"github.com/DIMO-Network/devices-api/internal/config"
-	//"github.com/DIMO-Network/devices-api/internal/test"
 )
 
 const mockTeslaFleetBaseURL = "https://fleet-mock-api.dimo.zone"
