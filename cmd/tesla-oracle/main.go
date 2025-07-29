@@ -18,6 +18,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
+	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	grpc_oracle "github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/IBM/sarama"
 	"github.com/gofiber/fiber/v2"
@@ -64,12 +65,25 @@ func main() {
 		return
 	}
 
+	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
+	pdb.WaitForDB(logger)
+
+	transactionsClient, err := onboarding.NewTransactionsClient(&settings)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to create transactions client")
+	}
+
+	walletService := service.NewSDWalletsService(ctx, logger, settings)
+	if walletService == nil {
+		logger.Fatal().Err(err).Msg("Failed to create SD Wallets service")
+	}
+
 	mdw := middleware.New(&logger)
 
 	group, gCtx := errgroup.WithContext(ctx)
 
 	monApp := createMonitoringServer()
-	webApp := app.App(&settings, &logger)
+	webApp := app.App(&settings, &logger, &pdb)
 
 	useLocalTLS := settings.Environment == "local" && settings.UseLocalTLS
 
@@ -78,9 +92,6 @@ func main() {
 
 	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
 	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger, useLocalTLS)
-
-	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
-	pdb.WaitForDB(logger)
 
 	riverClient, _, dbPool, err := createRiverClientWithWorkersAndPool(gCtx, logger, &settings)
 	if err != nil {

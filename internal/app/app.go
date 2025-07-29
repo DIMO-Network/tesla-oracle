@@ -7,10 +7,12 @@ import (
 	"time"
 
 	"github.com/DIMO-Network/shared/pkg/cipher"
+	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
+	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
@@ -20,7 +22,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
+func App(settings *config.Settings, logger *zerolog.Logger, pdb *db.Store) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return ErrorHandler(c, err, logger)
@@ -80,6 +82,7 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 	}
 
 	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore)
+	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc)
 
 	jwtAuth := jwtware.New(jwtware.Config{
 		JWKSetURLs: []string{settings.JwtKeySetURL},
