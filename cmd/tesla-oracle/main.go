@@ -63,8 +63,11 @@ func main() {
 
 	group, gCtx := errgroup.WithContext(ctx)
 
+	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
+	pdb.WaitForDB(logger)
+
 	monApp := createMonitoringServer()
-	webApp := app.App(&settings, &logger)
+	webApp := app.App(&settings, &logger, pdb.DBS)
 
 	useLocalTLS := settings.Environment == "local" && settings.UseLocalTLS
 
@@ -73,9 +76,6 @@ func main() {
 
 	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
 	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger, useLocalTLS)
-
-	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
-	pdb.WaitForDB(logger)
 
 	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &logger)
 	server := grpc.NewServer(

@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"github.com/DIMO-Network/shared/pkg/db"
 	"os"
 	"strconv"
 	"time"
@@ -20,7 +21,7 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
+func App(settings *config.Settings, logger *zerolog.Logger, dbs func() *db.ReaderWriter) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return ErrorHandler(c, err, logger)
@@ -79,7 +80,7 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
 	}
 
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore, dbs)
 
 	jwtAuth := jwtware.New(jwtware.Config{
 		JWKSetURLs: []string{settings.JwtKeySetURL},

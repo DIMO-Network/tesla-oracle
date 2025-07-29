@@ -40,6 +40,7 @@ type TeslaFleetAPIService interface {
 	//GetAvailableCommands(token string) (*UserDeviceAPIIntegrationsMetadataCommands, error)
 	VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*VehicleFleetStatus, error)
 	SubscribeForTelemetryData(ctx context.Context, token, vin string) error
+	UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error
 	GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*VehicleTelemetryStatus, error)
 }
 
@@ -132,6 +133,10 @@ type SkippedVehicles struct {
 type SubscribeForTelemetryDataResponse struct {
 	UpdatedVehicles int             `json:"updated_vehicles"`
 	SkippedVehicles SkippedVehicles `json:"skipped_vehicles"`
+}
+
+type UnSubscribeFromTelemetryDataResponse struct {
+	UpdatedVehicles int `json:"updated_vehicles"`
 }
 
 type teslaFleetAPIService struct {
@@ -466,6 +471,33 @@ func (t *teslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context, to
 		return &TeslaSubscriptionError{internal: "vehicle firmware not supported", Type: MaxConfigs}
 	}
 
+	return nil
+}
+
+func (t *teslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error {
+	// Construct the URL for the DELETE request
+	url := t.FleetBase.JoinPath("api/1/vehicles", vin, "fleet_telemetry_config")
+
+	// Perform the DELETE request
+	body, err := t.performRequest(ctx, url, token, http.MethodDelete, nil)
+	if err != nil {
+		return fmt.Errorf("failed to unsubscribe from telemetry data: %w", err)
+	}
+
+	// Parse the response body
+	var response TeslaResponseWrapper[UnSubscribeFromTelemetryDataResponse]
+
+	err = json.Unmarshal(body, &response)
+	if err != nil {
+		return fmt.Errorf("failed to parse response body: %w", err)
+	}
+
+	// Check if the response indicates success
+	if response.Response.UpdatedVehicles != 1 {
+		return fmt.Errorf("unexpected response: updated_vehicles=%d", response.Response.UpdatedVehicles)
+	}
+
+	// Return nil if successful
 	return nil
 }
 
