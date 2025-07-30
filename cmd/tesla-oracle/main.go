@@ -16,6 +16,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
+	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
 	grpc_oracle "github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/IBM/sarama"
@@ -25,7 +26,11 @@ import (
 	grpc_recovery "github.com/grpc-ecosystem/go-grpc-middleware/recovery"
 	grpc_ctxtags "github.com/grpc-ecosystem/go-grpc-middleware/tags"
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
@@ -76,6 +81,17 @@ func main() {
 
 	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
 	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger, useLocalTLS)
+
+	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
+	pdb.WaitForDB(logger)
+
+	riverClient, _, dbPool, err := createRiverClientWithWorkersAndPool(gCtx, logger, &settings)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to create river client, workers and db pool")
+	}
+	defer dbPool.Close()
+
+	runRiver(gCtx, logger, riverClient, group)
 
 	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &logger)
 	server := grpc.NewServer(
@@ -201,4 +217,60 @@ func createMonitoringServer() *fiber.App {
 	monApp.Get("/metrics", adaptor.HTTPHandler(promhttp.Handler()))
 
 	return monApp
+}
+
+func createRiverClientWithWorkersAndPool(ctx context.Context, logger zerolog.Logger, settings *config.Settings) (*river.Client[pgx.Tx], *river.Workers, *pgxpool.Pool, error) {
+	workers := river.NewWorkers()
+
+	// TODO: Create and register workers
+	dummyWorker := onboarding.NewDummyWorker(settings, logger)
+
+	err := river.AddWorkerSafely(workers, dummyWorker)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to add dummy worker")
+		return nil, nil, nil, err
+	}
+	logger.Debug().Msg("Added dummy worker")
+
+	dbURL := settings.DB.BuildConnectionString(true)
+	dbPool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to connect to database")
+		return nil, nil, nil, err
+	}
+
+	logger.Debug().Msg("DB pool for workers created")
+
+	riverClient, err := river.NewClient(riverpgxv5.New(dbPool), &river.Config{
+		Queues: map[string]river.QueueConfig{
+			river.QueueDefault: {MaxWorkers: 100},
+		},
+		Workers: workers,
+	})
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to create river client")
+		return nil, nil, nil, err
+	}
+
+	return riverClient, workers, dbPool, err
+}
+
+func runRiver(ctx context.Context, logger zerolog.Logger, riverClient *river.Client[pgx.Tx], group *errgroup.Group) {
+	runCtx := context.Background()
+
+	group.Go(func() error {
+		logger.Debug().Msg("Starting river client")
+		if err := riverClient.Start(runCtx); err != nil {
+			logger.Fatal().Err(err).Msg("failed to start river client")
+		}
+		return nil
+	})
+	group.Go(func() error {
+		<-ctx.Done()
+		logger.Debug().Msg("Stopping river client")
+		if err := riverClient.Stop(runCtx); err != nil {
+			return fmt.Errorf("failed stop river client: %w", err)
+		}
+		return nil
+	})
 }
