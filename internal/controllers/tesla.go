@@ -102,108 +102,11 @@ var teslaCodeFailureCount = promauto.NewCounterVec(
 // TelemetrySubscribe godoc
 // @Summary     Subscribe vehicle for Tesla Telemetry Data
 // @Description Subscribe vehicle for Telemetry Data.
-// @Tags        tesla,command
+// @Tags        tesla,subsribe
 // @Produce     json
-// @Param       userDeviceID  path string true "Device ID"
 // @Security    BearerAuth
-// @Router /v1/tesla/{userDeviceID}/telemetry/subscribe [post]
-//func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
-//	// Extract path parameters
-//	userDeviceID := c.Params("userDeviceID")
-//	// TODO we know it in advance i think , so just hardcode it?
-//	integrationID := c.Params("integrationID")
-//
-//	// Logger setup
-//	logger := helpers.GetLogger(c, tc.logger).With().
-//		Str("IntegrationID", integrationID).
-//		Str("Name", "Telemetry/Subscribe").
-//		Logger()
-//
-//	logger.Info().Msg("Received telemetry subscribe request.")
-//
-//	// Fetch device record
-//	device, err := models.UserDevices(
-//		models.UserDeviceWhere.ID.EQ(userDeviceID),
-//	).One(c.Context(), tc.DBS().Reader)
-//	if err != nil {
-//		if errors.Is(err, sql.ErrNoRows) {
-//			return fiber.NewError(fiber.StatusNotFound, "Device not found.")
-//		}
-//		logger.Err(err).Msg("Failed to search for device.")
-//		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error.")
-//	}
-//
-//	// Fetch integration record
-//	udai, err := models.UserDeviceAPIIntegrations(
-//		models.UserDeviceAPIIntegrationWhere.UserDeviceID.EQ(userDeviceID),
-//		models.UserDeviceAPIIntegrationWhere.IntegrationID.EQ(integrationID),
-//	).One(c.Context(), tc.DBS().Reader)
-//	if err != nil {
-//		if errors.Is(err, sql.ErrNoRows) {
-//			return fiber.NewError(fiber.StatusNotFound, "Integration not found for this device.")
-//		}
-//		logger.Err(err).Msg("Failed to search for device integration record.")
-//		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error.")
-//	}
-//
-//	// Validate integration status
-//	if udai.Status == models.UserDeviceAPIIntegrationStatusAuthenticationFailure {
-//		return fiber.NewError(fiber.StatusBadRequest, "Integration credentials have expired. Reauthenticate before attempting to subscribe.")
-//	}
-//
-//	// Parse metadata
-//	md := new(services.UserDeviceAPIIntegrationsMetadata)
-//	if err := udai.Metadata.Unmarshal(md); err != nil {
-//		logger.Err(err).Msg("Couldn't parse metadata JSON.")
-//		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error.")
-//	}
-//
-//	// Validate commands
-//	if md.Commands == nil || !slices.Contains(md.Commands.Enabled, constants.TelemetrySubscribe) {
-//		return fiber.NewError(fiber.StatusBadRequest, "Telemetry command not available for device and integration combination.")
-//	}
-//
-//	// Fetch integration details
-//	integration, err := tc.DeviceDefSvc.GetIntegrationByID(c.Context(), udai.IntegrationID)
-//	if err != nil {
-//		return shared.GrpcErrorToFiber(err, "deviceDefSvc error getting integration id: "+udai.IntegrationID)
-//	}
-//
-//	// Handle Tesla-specific logic
-//	if integration.Vendor == constants.TeslaVendor {
-//		// Decrypt access token
-//		accessToken, err := tc.cipher.Decrypt(udai.AccessToken.String)
-//		if err != nil {
-//			return fiber.NewError(fiber.StatusInternalServerError, "Failed to decrypt access token.")
-//		}
-//
-//		// Call SubscribeForTelemetryData
-//		if err := tc.teslaFleetAPISvc.SubscribeForTelemetryData(c.Context(), accessToken, device.VinIdentifier.String); err != nil {
-//			logger.Error().Err(err).Msg("Error registering for telemetry")
-//			var subErr *services.TeslaSubscriptionError
-//			if errors.As(err, &subErr) {
-//				switch subErr.Type {
-//				case services.KeyUnpaired:
-//					return fiber.NewError(fiber.StatusBadRequest, "Virtual key not paired with vehicle.")
-//				case services.UnsupportedVehicle:
-//					return fiber.NewError(fiber.StatusBadRequest, "Pre-2021 Model S and X do not support telemetry.")
-//				case services.UnsupportedFirmware:
-//					return fiber.NewError(fiber.StatusBadRequest, "Vehicle firmware version is earlier than 2024.26.")
-//				}
-//			}
-//			return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
-//		}
-//	} else {
-//		return fiber.NewError(fiber.StatusBadRequest, "Integration not supported for this command.")
-//	}
-//
-//	logger.Info().Msg("Successfully subscribed to telemetry.")
-//	return c.JSON(fiber.Map{"message": "Successfully subscribed to vehicle telemetry."})
-//}
-
+// @Router /v1/tesla/telemetry/subscribe [post]
 func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
-	// Extract path parameters
-
 	// Logger setup
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Telemetry/Subscribe").
@@ -232,7 +135,9 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	// get VIN using the wallet address
 	// Call the FindSyntheticDevice function
-	device, err := mod.FindSyntheticDevice(c.Context(), tc.Dbc().Writer, walletAddress.Bytes())
+	device, err := mod.SyntheticDevices(
+		mod.SyntheticDeviceWhere.Address.EQ(walletAddress.Bytes()),
+	).One(c.Context(), tc.Dbc().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
@@ -257,6 +162,65 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	logger.Info().Msg("Successfully subscribed to telemetry.")
 	return c.JSON(fiber.Map{"message": "Successfully subscribed to vehicle telemetry."})
+}
+
+// UnsubscribeTelemetry godoc
+// @Summary     Unsubscribe vehicle from Tesla Telemetry Data
+// @Description Unsubscribe vehicle from Telemetry Data using the wallet address to determine the VIN.
+// @Tags        tesla,unsubscribe
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} map[string]string "Successfully unsubscribed from telemetry data"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/telemetry/unsubscribe [delete]
+func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
+	// Logger setup
+	logger := helpers.GetLogger(c, t.logger).With().
+		Str("Name", "Telemetry/Unsubscribe").
+		Logger()
+
+	logger.Info().Msg("Received telemetry unsubscribe request.")
+
+	// Fetch wallet address
+	walletAddress := helpers.GetWallet(c)
+
+	// Retrieve Tesla OAuth credentials from the store
+	cred, err := t.store.Retrieve(c.Context(), walletAddress)
+	if err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			logger.Warn().Msg("Tesla credentials not found in store.")
+			return fiber.NewError(fiber.StatusUnauthorized, "Tesla credentials not found. Please authenticate.")
+		}
+		logger.Err(err).Msg("Failed to retrieve Tesla credentials from store.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error while retrieving Tesla credentials.")
+	}
+
+	// Validate access token
+	if cred.AccessToken == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "Access token is missing. Please authenticate.")
+	}
+
+	// Retrieve VIN using the wallet address
+	device, err := mod.SyntheticDevices(
+		mod.SyntheticDeviceWhere.Address.EQ(walletAddress.Bytes()),
+	).One(c.Context(), t.Dbc().Reader)
+	if err != nil {
+		logger.Err(err).Msg("Failed to find synthetic device.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
+	}
+
+	// Call the UnSubscribeFromTelemetryData function
+	err = t.fleetAPISvc.UnSubscribeFromTelemetryData(c.Context(), cred.AccessToken, device.Vin)
+	if err != nil {
+		logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data")
+	}
+
+	logger.Info().Msg("Successfully unsubscribed from telemetry.")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Successfully unsubscribed from telemetry data",
+	})
 }
 
 func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
