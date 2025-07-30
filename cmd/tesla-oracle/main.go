@@ -82,9 +82,6 @@ func main() {
 	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
 	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger, useLocalTLS)
 
-	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
-	pdb.WaitForDB(logger)
-
 	riverClient, _, dbPool, err := createRiverClientWithWorkersAndPool(gCtx, logger, &settings)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to create river client, workers and db pool")
