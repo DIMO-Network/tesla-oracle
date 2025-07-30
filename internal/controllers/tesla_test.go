@@ -117,10 +117,8 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	)
 
 	// token
-	err, done := generateJWT(req)
-	if done {
-		return
-	}
+	err := generateJWT(req)
+	assert.NoError(s.T(), err)
 
 	// then
 	resp, err := app.Test(req)
@@ -186,10 +184,8 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	)
 
 	// Generate a valid JWT token
-	err, done := generateJWT(req)
-	if done {
-		return
-	}
+	err := generateJWT(req)
+	assert.NoError(s.T(), err)
 
 	// then
 	resp, err := app.Test(req)
@@ -203,7 +199,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockTeslaService.AssertExpectations(s.T())
 }
 
-func generateJWT(req *http.Request) (error, bool) {
+func generateJWT(req *http.Request) error {
 	// Define the secret key for signing the token
 	secretKey := []byte("your-secret-key")
 
@@ -220,12 +216,12 @@ func generateJWT(req *http.Request) (error, bool) {
 	signedToken, err := token.SignedString(secretKey)
 	if err != nil {
 		fmt.Println("Error signing token:", err)
-		return nil, true
+		return err
 	}
 
 	fmt.Println("Valid Token:", signedToken)
 	req.Header.Set("Authorization", "Bearer "+signedToken)
-	return err, false
+	return nil
 }
 
 // MockCredStore is a mock implementation of the CredStore interface.
