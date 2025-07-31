@@ -72,7 +72,8 @@ func TestTeslaControllerTestSuite(t *testing.T) {
 
 func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	// given
-	walletAddress := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
+	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
+	walletAddress := common.HexToAddress(ownerAdd)
 	walletAddressBytes := walletAddress.Bytes()
 
 	dbVin := models.SyntheticDevice{
@@ -92,7 +93,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	// when
 	mockIdentitySvc := new(MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
-		Owner: "0x1234567890abcdef1234567890abcdef12345678",
+		Owner: ownerAdd,
 	}
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
 
@@ -102,7 +103,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
 	mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, cred.AccessToken, vin).Return(nil)
 
-	settings := config.Settings{}
+	settings := config.Settings{MobileAppDevLicense: ownerAdd}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, s.pdb.DBS)
 
@@ -110,7 +111,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	app.Use(func(c *fiber.Ctx) error {
 		// Simulate JWT middleware setting the user in Locals
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"ethereum_address": "0x1234567890abcdef1234567890abcdef12345678",
+			"ethereum_address": ownerAdd,
 		})
 		c.Locals("user", token)
 		return c.Next()
@@ -140,7 +141,8 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// given
-	walletAddress := common.HexToAddress("0x1234567890abcdef1234567890abcdef12345678")
+	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
+	walletAddress := common.HexToAddress(ownerAdd)
 	walletAddressBytes := walletAddress.Bytes()
 
 	// Insert a synthetic device with the wallet address and VIN
@@ -161,7 +163,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// Set up mocks
 	mockIdentitySvc := new(MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
-		Owner: "0x1234567890abcdef1234567890abcdef12345678",
+		Owner: ownerAdd,
 	}
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
 	mockCredStore := new(MockCredStore)
@@ -171,7 +173,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockTeslaService.On("UnSubscribeFromTelemetryData", mock.Anything, cred.AccessToken, vin).Return(nil)
 
 	// Initialize the controller
-	settings := config.Settings{}
+	settings := config.Settings{MobileAppDevLicense: ownerAdd}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, s.pdb.DBS)
 

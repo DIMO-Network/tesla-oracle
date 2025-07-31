@@ -41,4 +41,6 @@ type Settings struct {
 	TeslaTelemetryPort          int    `yaml:"TESLA_TELEMETRY_PORT"`
 	TeslaTelemetryCACertificate string `yaml:"TESLA_TELEMETRY_CA_CERTIFICATE"`
 	TeslaRequiredScopes         string `yaml:"TESLA_REQUIRED_SCOPES"`
+
+	MobileAppDevLicense string `yaml:"MOBILE_APP_DEV_LICENSE"`
 }

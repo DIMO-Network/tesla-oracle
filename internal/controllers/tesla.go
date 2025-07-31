@@ -24,9 +24,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// TODO make it param in values file
-const mobileAppDevLicenseID = "0x1234567890abcdef1234567890abcdef12345678"
-
 type CredStore interface {
 	Store(ctx context.Context, user common.Address, cred *service.Credential) error
 	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
@@ -116,10 +113,10 @@ var teslaCodeFailureCount = promauto.NewCounterVec(
 // @Failure     404 {object} fiber.Error "Vehicle not found or owner information is missing."
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/tesla/telemetry/subscribe/{vehicleTokenId} [post]
-func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
+func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	vehicleTokenId := c.Params("vehicleTokenId")
 	// Logger setup
-	logger := helpers.GetLogger(c, tc.logger).With().
+	logger := helpers.GetLogger(c, t.logger).With().
 		Str("Name", "Telemetry/Subscribe").
 		Logger()
 
@@ -127,16 +124,16 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
-	if walletAddress != common.HexToAddress(mobileAppDevLicenseID) {
+	if walletAddress != common.HexToAddress(t.settings.MobileAppDevLicense) {
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
 	}
 
 	// Retrieve Tesla OAuth credentials from the store
-	owner, err := tc.fetchVehicleOwner(vehicleTokenId)
+	owner, err := t.fetchVehicleOwner(vehicleTokenId)
 	if err != nil {
 		return err
 	}
-	cred, err := tc.store.Retrieve(c.Context(), common.HexToAddress(owner))
+	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(owner))
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			logger.Warn().Msg("Tesla credentials not found in store.")
@@ -155,14 +152,14 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	// Call the FindSyntheticDevice function
 	device, err := mod.SyntheticDevices(
 		mod.SyntheticDeviceWhere.Address.EQ(walletAddress.Bytes()),
-	).One(c.Context(), tc.Dbc().Reader)
+	).One(c.Context(), t.Dbc().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
 	}
 
 	// Call SubscribeForTelemetryData
-	if err := tc.fleetAPISvc.SubscribeForTelemetryData(c.Context(), cred.AccessToken, device.Vin); err != nil {
+	if err := t.fleetAPISvc.SubscribeForTelemetryData(c.Context(), cred.AccessToken, device.Vin); err != nil {
 		logger.Err(err).Msg("Error registering for telemetry")
 		var subErr *service.TeslaSubscriptionError
 		if errors.As(err, &subErr) {
@@ -207,7 +204,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
-	if walletAddress != common.HexToAddress(mobileAppDevLicenseID) {
+	if walletAddress != common.HexToAddress(t.settings.MobileAppDevLicense) {
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to unsubscribe from telemetry.", walletAddress.Hex()))
 	}
 
