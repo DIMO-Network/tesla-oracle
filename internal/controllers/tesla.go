@@ -24,6 +24,9 @@ import (
 	"github.com/rs/zerolog"
 )
 
+// TODO make it param in values file
+const mobileAppDevLicenseID = "0x1234567890abcdef1234567890abcdef12345678"
+
 type CredStore interface {
 	Store(ctx context.Context, user common.Address, cred *service.Credential) error
 	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
@@ -101,24 +104,39 @@ var teslaCodeFailureCount = promauto.NewCounterVec(
 
 // TelemetrySubscribe godoc
 // @Summary     Subscribe vehicle for Tesla Telemetry Data
-// @Description Subscribe vehicle for Telemetry Data.
-// @Tags        tesla,subsribe
+// @Description Subscribes a vehicle for telemetry data using the provided vehicle token ID.
+// @Tags        tesla,subscribe
+// @Accept      json
 // @Produce     json
+// @Param       vehicleTokenId path string true "Vehicle Token ID"
 // @Security    BearerAuth
-// @Router /v1/tesla/telemetry/subscribe [post]
+// @Success     200 {object} map[string]string "Successfully subscribed to vehicle telemetry."
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     404 {object} fiber.Error "Vehicle not found or owner information is missing."
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/telemetry/subscribe/{vehicleTokenId} [post]
 func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
+	vehicleTokenId := c.Params("vehicleTokenId")
 	// Logger setup
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Telemetry/Subscribe").
 		Logger()
 
-	logger.Info().Msg("Received telemetry subscribe request.")
+	logger.Debug().Msg("Received telemetry subscribe request.")
 
 	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
+	if walletAddress != common.HexToAddress(mobileAppDevLicenseID) {
+		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
+	}
 
 	// Retrieve Tesla OAuth credentials from the store
-	cred, err := tc.store.Retrieve(c.Context(), walletAddress)
+	owner, err := tc.fetchVehicleOwner(vehicleTokenId)
+	if err != nil {
+		return err
+	}
+	cred, err := tc.store.Retrieve(c.Context(), common.HexToAddress(owner))
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			logger.Warn().Msg("Tesla credentials not found in store.")
@@ -166,15 +184,20 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 // UnsubscribeTelemetry godoc
 // @Summary     Unsubscribe vehicle from Tesla Telemetry Data
-// @Description Unsubscribe vehicle from Telemetry Data using the wallet address to determine the VIN.
+// @Description Unsubscribes a vehicle from telemetry data using the provided vehicle token ID.
 // @Tags        tesla,unsubscribe
+// @Accept      json
 // @Produce     json
+// @Param       vehicleTokenId path string true "Vehicle Token ID"
 // @Security    BearerAuth
-// @Success     200 {object} map[string]string "Successfully unsubscribed from telemetry data"
+// @Success     200 {object} map[string]string "Successfully unsubscribed from telemetry data."
+// @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     404 {object} fiber.Error "Vehicle not found or owner information is missing."
 // @Failure     500 {object} fiber.Error "Internal server error"
-// @Router      /v1/tesla/telemetry/unsubscribe [delete]
+// @Router      /v1/tesla/telemetry/unsubscribe/{vehicleTokenId} [post]
 func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
+	vehicleTokenId := c.Params("vehicleTokenId")
 	// Logger setup
 	logger := helpers.GetLogger(c, t.logger).With().
 		Str("Name", "Telemetry/Unsubscribe").
@@ -184,9 +207,16 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
+	if walletAddress != common.HexToAddress(mobileAppDevLicenseID) {
+		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to unsubscribe from telemetry.", walletAddress.Hex()))
+	}
 
 	// Retrieve Tesla OAuth credentials from the store
-	cred, err := t.store.Retrieve(c.Context(), walletAddress)
+	owner, err := t.fetchVehicleOwner(vehicleTokenId)
+	if err != nil {
+		return err
+	}
+	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(owner))
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			logger.Warn().Msg("Tesla credentials not found in store.")
@@ -316,6 +346,25 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(vehicleResp)
+}
+
+func (tc *TeslaController) fetchVehicleOwner(vehicleTokenId string) (string, error) {
+	tokenID, convErr := helpers.StringToInt64(vehicleTokenId)
+	if convErr != nil {
+		tc.logger.Err(convErr).Msg("Failed to convert vehicleTokenId to int64.")
+		return "", fiber.NewError(fiber.StatusBadRequest, "Invalid vehicle token ID format.")
+	}
+	vehicle, vehErr := tc.identitySvc.FetchVehicleByTokenID(tokenID)
+	if vehErr != nil {
+		tc.logger.Err(vehErr).Msg("Failed to fetch vehicle by token ID.")
+		return "", fiber.NewError(fiber.StatusInternalServerError, "Failed to fetch vehicle information.")
+	}
+
+	if vehicle == nil || vehicle.Owner == "" {
+		tc.logger.Warn().Msg("Vehicle not found or owner is missing.")
+		return "", fiber.NewError(fiber.StatusNotFound, "Vehicle not found or owner information is missing.")
+	}
+	return vehicle.Owner, nil
 }
 
 // CompleteOAuthExchangeRequest request object for completing tesla OAuth

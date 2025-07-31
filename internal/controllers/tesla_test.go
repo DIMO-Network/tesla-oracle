@@ -6,6 +6,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
+	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
@@ -89,6 +90,12 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	}
 
 	// when
+	mockIdentitySvc := new(MockIdentityAPIService)
+	mockVehicle := &mods.Vehicle{
+		Owner: "0x1234567890abcdef1234567890abcdef12345678",
+	}
+	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
+
 	mockCredStore := new(MockCredStore)
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
@@ -97,7 +104,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 	settings := config.Settings{}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, mockCredStore, s.pdb.DBS)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, s.pdb.DBS)
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -109,10 +116,10 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 		return c.Next()
 	})
 	app.Use(helpers.NewWalletMiddleware())
-	app.Post("/v1/tesla/telemetry/subscribe", controller.TelemetrySubscribe)
+	app.Post("/v1/tesla/telemetry/subscribe/:vehicleTokenId", controller.TelemetrySubscribe)
 	req, _ := http.NewRequest(
 		"POST",
-		"/v1/tesla/telemetry/subscribe",
+		"/v1/tesla/telemetry/subscribe/789",
 		strings.NewReader(""),
 	)
 
@@ -152,6 +159,11 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	}
 
 	// Set up mocks
+	mockIdentitySvc := new(MockIdentityAPIService)
+	mockVehicle := &mods.Vehicle{
+		Owner: "0x1234567890abcdef1234567890abcdef12345678",
+	}
+	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
 	mockCredStore := new(MockCredStore)
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
@@ -161,7 +173,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// Initialize the controller
 	settings := config.Settings{}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, mockCredStore, s.pdb.DBS)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, s.pdb.DBS)
 
 	// Set up the Fiber app
 	app := fiber.New()
@@ -174,12 +186,12 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 		return c.Next()
 	})
 	app.Use(helpers.NewWalletMiddleware())
-	app.Delete("/v1/tesla/telemetry/unsubscribe", controller.UnsubscribeTelemetry)
+	app.Delete("/v1/tesla/telemetry/unsubscribe/:vehicleTokenId", controller.UnsubscribeTelemetry)
 
 	// Create a test HTTP request
 	req, _ := http.NewRequest(
 		"DELETE",
-		"/v1/tesla/telemetry/unsubscribe",
+		"/v1/tesla/telemetry/unsubscribe/789",
 		nil,
 	)
 
@@ -282,4 +294,45 @@ func (m *MockTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Co
 func (m *MockTeslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context, accessToken, vin string) error {
 	args := m.Called(ctx, accessToken, vin)
 	return args.Error(0)
+}
+
+// MockIdentityAPIService is a mock implementation of the IdentityAPIService interface.
+type MockIdentityAPIService struct {
+	mock.Mock
+}
+
+func (m *MockIdentityAPIService) GetCachedVehicleByTokenID(tokenID int64) (*mods.Vehicle, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockIdentityAPIService) FetchVehiclesByWalletAddress(address string) ([]mods.Vehicle, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockIdentityAPIService) GetDeviceDefinitionByID(id string) (*mods.DeviceDefinition, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockIdentityAPIService) GetCachedDeviceDefinitionByID(id string) (*mods.DeviceDefinition, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockIdentityAPIService) FetchVehicleByTokenID(tokenID int64) (*mods.Vehicle, error) {
+	args := m.Called(tokenID)
+	if args.Get(0) != nil {
+		return args.Get(0).(*mods.Vehicle), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockIdentityAPIService) FetchDeviceDefinitionByID(deviceDefinitionID string) (*mods.DeviceDefinition, error) {
+	args := m.Called(deviceDefinitionID)
+	if args.Get(0) != nil {
+		return args.Get(0).(*mods.DeviceDefinition), args.Error(1)
+	}
+	return nil, args.Error(1)
 }

@@ -91,8 +91,10 @@ func App(settings *config.Settings, logger *zerolog.Logger, dbs func() *db.Reade
 	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
-	teslaGroup.Post("/telemetry/subscribe", teslaCtrl.TelemetrySubscribe)
-	teslaGroup.Post("/telemetry/unsubscribe", teslaCtrl.UnsubscribeTelemetry)
+
+	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
+	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
+	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
 
 	return app
 }
