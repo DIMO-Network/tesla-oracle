@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/DIMO-Network/shared/pkg/db"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +14,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	mod "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/friendsofgo/errors"
 	"github.com/gofiber/fiber/v2"
@@ -24,6 +26,7 @@ import (
 
 type CredStore interface {
 	Store(ctx context.Context, user common.Address, cred *service.Credential) error
+	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
 }
 
 type TeslaController struct {
@@ -34,9 +37,10 @@ type TeslaController struct {
 	identitySvc    service.IdentityAPIService
 	requiredScopes []string
 	store          CredStore
+	Dbc            func() *db.ReaderWriter
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, Dbc func() *db.ReaderWriter) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -50,6 +54,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		identitySvc:    identitySvc,
 		requiredScopes: requiredScopes,
 		store:          store,
+		Dbc:            Dbc,
 	}
 }
 
@@ -93,6 +98,165 @@ var teslaCodeFailureCount = promauto.NewCounterVec(
 	},
 	[]string{"type"},
 )
+
+// TelemetrySubscribe godoc
+// @Summary     Subscribe vehicle for Tesla Telemetry Data
+// @Description Subscribes a vehicle for telemetry data using the provided vehicle token ID.
+// @Tags        tesla,subscribe
+// @Accept      json
+// @Produce     json
+// @Param       vehicleTokenId path string true "Vehicle Token ID"
+// @Security    BearerAuth
+// @Success     200 {object} map[string]string "Successfully subscribed to vehicle telemetry."
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     404 {object} fiber.Error "Vehicle not found or owner information is missing."
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/telemetry/subscribe/{vehicleTokenId} [post]
+func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
+	vehicleTokenId := c.Params("vehicleTokenId")
+	if vehicleTokenId == "" {
+		t.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
+		return fiber.NewError(fiber.StatusBadRequest, "VehicleTokenId is required in the request path.")
+	}
+
+	// Logger setup
+	logger := helpers.GetLogger(c, t.logger).With().
+		Str("Name", "Telemetry/Subscribe").
+		Logger()
+
+	logger.Debug().Msg("Received telemetry subscribe request.")
+
+	// Fetch wallet address
+	walletAddress := helpers.GetWallet(c)
+	if walletAddress != t.settings.MobileAppDevLicense {
+		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
+	}
+
+	// Retrieve Tesla OAuth credentials from the store
+	vehicle, err := t.fetchVehicle(vehicleTokenId)
+	if err != nil {
+		return err
+	}
+	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(vehicle.Owner))
+	if err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			logger.Warn().Msg("Tesla credentials not found in store.")
+			return fiber.NewError(fiber.StatusUnauthorized, "Tesla credentials not found. Please authenticate.")
+		}
+		logger.Err(err).Msg("Failed to retrieve Tesla credentials from store.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error while retrieving Tesla credentials.")
+	}
+
+	// Validate access token
+	if cred.AccessToken == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "Access token is missing. Please authenticate.")
+	}
+
+	// get VIN using the synthetic device address
+	device, err := mod.SyntheticDevices(
+		mod.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
+	).One(c.Context(), t.Dbc().Reader)
+	if err != nil {
+		logger.Err(err).Msg("Failed to find synthetic device.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
+	}
+
+	// Call SubscribeForTelemetryData
+	if err := t.fleetAPISvc.SubscribeForTelemetryData(c.Context(), cred.AccessToken, device.Vin); err != nil {
+		logger.Err(err).Msg("Error registering for telemetry")
+		var subErr *service.TeslaSubscriptionError
+		if errors.As(err, &subErr) {
+			switch subErr.Type {
+			case service.KeyUnpaired:
+				return fiber.NewError(fiber.StatusBadRequest, "Virtual key not paired with vehicle.")
+			case service.UnsupportedVehicle:
+				return fiber.NewError(fiber.StatusBadRequest, "Pre-2021 Model S and X do not support telemetry.")
+			case service.UnsupportedFirmware:
+				return fiber.NewError(fiber.StatusBadRequest, "Vehicle firmware version is earlier than 2024.26.")
+			}
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
+	}
+
+	logger.Info().Msg("Successfully subscribed to telemetry.")
+	return c.JSON(fiber.Map{"message": "Successfully subscribed to vehicle telemetry."})
+}
+
+// UnsubscribeTelemetry godoc
+// @Summary     Unsubscribe vehicle from Tesla Telemetry Data
+// @Description Unsubscribes a vehicle from telemetry data using the provided vehicle token ID.
+// @Tags        tesla,unsubscribe
+// @Accept      json
+// @Produce     json
+// @Param       vehicleTokenId path string true "Vehicle Token ID"
+// @Security    BearerAuth
+// @Success     200 {object} map[string]string "Successfully unsubscribed from telemetry data."
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     404 {object} fiber.Error "Vehicle not found or owner information is missing."
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/telemetry/unsubscribe/{vehicleTokenId} [post]
+func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
+	vehicleTokenId := c.Params("vehicleTokenId")
+	if vehicleTokenId == "" {
+		t.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
+		return fiber.NewError(fiber.StatusBadRequest, "VehicleTokenId is required in the request path.")
+	}
+
+	// Logger setup
+	logger := helpers.GetLogger(c, t.logger).With().
+		Str("Name", "Telemetry/Unsubscribe").
+		Logger()
+
+	logger.Info().Msg("Received telemetry unsubscribe request.")
+
+	// Fetch wallet address
+	walletAddress := helpers.GetWallet(c)
+	if walletAddress != t.settings.MobileAppDevLicense {
+		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to unsubscribe from telemetry.", walletAddress.Hex()))
+	}
+
+	// Retrieve Tesla OAuth credentials from the store
+	vehicle, err := t.fetchVehicle(vehicleTokenId)
+	if err != nil {
+		return err
+	}
+	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(vehicle.Owner))
+	if err != nil {
+		if errors.Is(err, service.ErrNotFound) {
+			logger.Warn().Msg("Tesla credentials not found in store.")
+			return fiber.NewError(fiber.StatusUnauthorized, "Tesla credentials not found. Please authenticate.")
+		}
+		logger.Err(err).Msg("Failed to retrieve Tesla credentials from store.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error while retrieving Tesla credentials.")
+	}
+
+	// Validate access token
+	if cred.AccessToken == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "Access token is missing. Please authenticate.")
+	}
+
+	// get VIN using the synthetic device address
+	device, err := mod.SyntheticDevices(
+		mod.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.Dbc().Reader)
+	if err != nil {
+		logger.Err(err).Msg("Failed to find synthetic device.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
+	}
+
+	// Call the UnSubscribeFromTelemetryData function
+	err = t.fleetAPISvc.UnSubscribeFromTelemetryData(c.Context(), cred.AccessToken, device.Vin)
+	if err != nil {
+		logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data")
+	}
+
+	logger.Info().Msg("Successfully unsubscribed from telemetry.")
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Successfully unsubscribed from telemetry data",
+	})
+}
 
 func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
@@ -187,6 +351,25 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(vehicleResp)
+}
+
+func (tc *TeslaController) fetchVehicle(vehicleTokenId string) (*models.Vehicle, error) {
+	tokenID, convErr := helpers.StringToInt64(vehicleTokenId)
+	if convErr != nil {
+		tc.logger.Err(convErr).Msg("Failed to convert vehicleTokenId to int64.")
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid vehicle token ID format.")
+	}
+	vehicle, vehErr := tc.identitySvc.FetchVehicleByTokenID(tokenID)
+	if vehErr != nil {
+		tc.logger.Err(vehErr).Msg("Failed to fetch vehicle by token ID.")
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Failed to fetch vehicle information.")
+	}
+
+	if vehicle == nil || vehicle.Owner == "" || vehicle.SyntheticDevice.Address == "" {
+		tc.logger.Warn().Msg("Vehicle not found or owner information or synthetic device address is missing.")
+		return nil, fiber.NewError(fiber.StatusNotFound, "Vehicle not found or owner information or synthetic device address is missing.")
+	}
+	return vehicle, nil
 }
 
 // CompleteOAuthExchangeRequest request object for completing tesla OAuth
