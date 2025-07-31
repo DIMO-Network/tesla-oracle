@@ -129,7 +129,7 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
-	if walletAddress != common.HexToAddress(t.settings.MobileAppDevLicense) {
+	if walletAddress != t.settings.MobileAppDevLicense {
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
 	}
 
@@ -213,7 +213,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
-	if walletAddress != common.HexToAddress(t.settings.MobileAppDevLicense) {
+	if walletAddress != t.settings.MobileAppDevLicense {
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to unsubscribe from telemetry.", walletAddress.Hex()))
 	}
 

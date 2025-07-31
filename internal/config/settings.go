@@ -42,5 +42,5 @@ type Settings struct {
 	TeslaTelemetryCACertificate string `yaml:"TESLA_TELEMETRY_CA_CERTIFICATE"`
 	TeslaRequiredScopes         string `yaml:"TESLA_REQUIRED_SCOPES"`
 
-	MobileAppDevLicense string `yaml:"MOBILE_APP_DEV_LICENSE"`
+	MobileAppDevLicense common.Address `yaml:"MOBILE_APP_DEV_LICENSE"`
 }

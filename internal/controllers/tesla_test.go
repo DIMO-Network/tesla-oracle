@@ -107,7 +107,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
 	mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, cred.AccessToken, vin).Return(nil)
 
-	settings := config.Settings{MobileAppDevLicense: ownerAdd}
+	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, s.pdb.DBS)
 
@@ -181,7 +181,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockTeslaService.On("UnSubscribeFromTelemetryData", mock.Anything, cred.AccessToken, vin).Return(nil)
 
 	// Initialize the controller
-	settings := config.Settings{MobileAppDevLicense: ownerAdd}
+	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, s.pdb.DBS)
 
