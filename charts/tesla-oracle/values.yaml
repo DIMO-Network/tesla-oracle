@@ -48,7 +48,7 @@ env:
   TESLA_TOKEN_URL: https://auth.tesla.com/oauth2/v3/token
   TESLA_FLEET_URL: http://tesla-command-api-dev.dev.svc.cluster.local:8080
   TESLA_REQUIRED_SCOPES: vehicle_device_data,vehicle_location
-  MOBILE_APP_DEV_LICENSE: 'dimo-dev-license'
+  MOBILE_APP_DEV_LICENSE: '0x299671D2b32ED62Cc61ce65D8f2b9e4f78486B37'
 service:
   type: ClusterIP
   ports:
