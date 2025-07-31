@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"syscall"
 
+	"github.com/DIMO-Network/go-transactions"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/settings"
 	"github.com/DIMO-Network/tesla-oracle/internal/app"
@@ -73,6 +74,10 @@ func main() {
 		logger.Fatal().Err(err).Msg("failed to create transactions client")
 	}
 
+	onboardingService := service.NewVehicleService(&pdb, &logger)
+	identityService := service.NewIdentityAPIService(&logger, &settings)
+	deviceDefinitionsService := service.NewDeviceDefinitionsAPIService(&logger, &settings)
+
 	walletService := service.NewSDWalletsService(ctx, logger, settings)
 	if walletService == nil {
 		logger.Fatal().Err(err).Msg("Failed to create SD Wallets service")
@@ -82,8 +87,16 @@ func main() {
 
 	group, gCtx := errgroup.WithContext(ctx)
 
+	riverClient, _, dbPool, err := createRiverClientWithWorkersAndPool(gCtx, logger, &settings, identityService, deviceDefinitionsService, &pdb, transactionsClient, walletService)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("failed to create river client, workers and db pool")
+	}
+	defer dbPool.Close()
+
+	runRiver(gCtx, logger, riverClient, group)
+
 	monApp := createMonitoringServer()
-	webApp := app.App(&settings, &logger, &pdb)
+	webApp := app.App(&settings, &logger, identityService, deviceDefinitionsService, onboardingService, riverClient, walletService, transactionsClient)
 
 	useLocalTLS := settings.Environment == "local" && settings.UseLocalTLS
 
@@ -92,14 +105,6 @@ func main() {
 
 	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
 	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger, useLocalTLS)
-
-	riverClient, _, dbPool, err := createRiverClientWithWorkersAndPool(gCtx, logger, &settings)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("failed to create river client, workers and db pool")
-	}
-	defer dbPool.Close()
-
-	runRiver(gCtx, logger, riverClient, group)
 
 	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &logger)
 	server := grpc.NewServer(
@@ -227,18 +232,18 @@ func createMonitoringServer() *fiber.App {
 	return monApp
 }
 
-func createRiverClientWithWorkersAndPool(ctx context.Context, logger zerolog.Logger, settings *config.Settings) (*river.Client[pgx.Tx], *river.Workers, *pgxpool.Pool, error) {
+func createRiverClientWithWorkersAndPool(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dd service.DeviceDefinitionsAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI) (*river.Client[pgx.Tx], *river.Workers, *pgxpool.Pool, error) {
 	workers := river.NewWorkers()
 
 	// TODO: Create and register workers
-	dummyWorker := onboarding.NewDummyWorker(settings, logger)
+	onboardingWorker := onboarding.NewOnboardingWorker(settings, logger, identityService, dbs, tr, ws)
 
-	err := river.AddWorkerSafely(workers, dummyWorker)
+	err := river.AddWorkerSafely(workers, onboardingWorker)
 	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to add dummy worker")
+		logger.Fatal().Err(err).Msg("Failed to add onboarding worker")
 		return nil, nil, nil, err
 	}
-	logger.Debug().Msg("Added dummy worker")
+	logger.Debug().Msg("Added onboarding worker")
 
 	dbURL := settings.DB.BuildConnectionString(true)
 	dbPool, err := pgxpool.New(ctx, dbURL)

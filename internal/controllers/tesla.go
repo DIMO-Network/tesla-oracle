@@ -12,7 +12,9 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
+	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/friendsofgo/errors"
 	"github.com/gofiber/fiber/v2"
@@ -20,6 +22,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
+	"github.com/volatiletech/null/v8"
 )
 
 type CredStore interface {
@@ -34,9 +37,10 @@ type TeslaController struct {
 	identitySvc    service.IdentityAPIService
 	requiredScopes []string
 	store          CredStore
+	onboarding     *service.Vehicle
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.Vehicle) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -50,6 +54,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		identitySvc:    identitySvc,
 		requiredScopes: requiredScopes,
 		store:          store,
+		onboarding:     onboardingSvc,
 	}
 }
 
@@ -167,6 +172,26 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 			teslaCodeFailureCount.WithLabelValues("vin_decode").Inc()
 			logger.Err(err).Str("vin", v.VIN).Msg("Failed to decode Tesla VIN.")
 			return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
+		}
+
+		record, err := t.onboarding.GetVehicleByVin(c.Context(), v.VIN)
+		if err != nil {
+			if !errors.Is(err, service.ErrVehicleNotFound) {
+				logger.Err(err).Str("vin", v.VIN).Msg("Failed to fetch record.")
+			}
+		}
+
+		if record == nil {
+			err = t.onboarding.InsertVinToDB(c.Context(), &dbmodels.Onboarding{
+				Vin:                v.VIN,
+				DeviceDefinitionID: null.String{String: ddRes.DeviceDefinitionID, Valid: true},
+				OnboardingStatus:   onboarding.OnboardingStatusVendorValidationSuccess,
+				ExternalID:         null.String{String: strconv.Itoa(v.ID), Valid: true},
+			})
+
+			if err != nil {
+				return fiber.NewError(fiber.StatusInternalServerError, "Failed to create onboarding record.")
+			}
 		}
 
 		response = append(response, TeslaVehicle{

@@ -113,7 +113,7 @@ export class BaseOnboardingElement extends LitElement {
             vins: vins.map(v => ({vin: v, countryCode: 'USA'}))
         }
 
-        const submitStatus = await this.api.callApi('POST', '/vehicle/verify', payload, true);
+        const submitStatus = await this.api.callApi('POST', '/v1/vehicle/verify', payload, true);
         if (!submitStatus.success) {
             return false;
         }
@@ -122,7 +122,7 @@ export class BaseOnboardingElement extends LitElement {
         for (const attempt of range(10)) {
             success = true
             const query = qs.stringify({vins: vins.join(',')}, {arrayFormat: 'comma'});
-            const status = await this.api.callApi<VinsOnboardingResult>('GET', `/vehicle/verify?${query}`, null, true);
+            const status = await this.api.callApi<VinsOnboardingResult>('GET', `/v1/vehicle/verify?${query}`, null, true);
 
             if (!status.success || !status.data) {
                 return false;
@@ -151,7 +151,7 @@ export class BaseOnboardingElement extends LitElement {
 
     async getMintingData(vins: string[]) {
         const query = qs.stringify({vins: vins.join(',')}, {arrayFormat: 'comma'});
-        const mintData = await this.api.callApi<VinsMintDataResult>('GET', `/vehicle/mint?${query}`, null, true);
+        const mintData = await this.api.callApi<VinsMintDataResult>('GET', `/v1/vehicle/mint?${query}`, null, true);
         if (!mintData.success || !mintData.data) {
             return [];
         }
@@ -190,7 +190,7 @@ export class BaseOnboardingElement extends LitElement {
             payload.sacd = sacd
         }
 
-        const mintResponse = await this.api.callApi('POST', '/vehicle/mint', payload, true);
+        const mintResponse = await this.api.callApi('POST', '/v1/vehicle/mint', payload, true);
         if (!mintResponse.success || !mintResponse.data) {
             return false;
         }
@@ -199,7 +199,7 @@ export class BaseOnboardingElement extends LitElement {
         for (const attempt of range(30)) {
             success = true
             const query = qs.stringify({vins: mintingData.map(m => m.vin).join(',')}, {arrayFormat: 'comma'});
-            const status = await this.api.callApi<VinsOnboardingResult>('GET', `/vehicle/mint/status?${query}`, null, true);
+            const status = await this.api.callApi<VinsOnboardingResult>('GET', `/v1/vehicle/mint/status?${query}`, null, true);
 
             if (!status.success || !status.data) {
                 return false;
@@ -241,12 +241,6 @@ export class BaseOnboardingElement extends LitElement {
         if (!allVinsValid) {
             this.displayFailure("Some of the VINs are not valid");
             return false;
-        }
-
-        const verified = await this.verifyVehicles(vins);
-        if (!verified) {
-            this.displayFailure("Failed to verify at least one VIN");
-            return false
         }
 
         const mintData = await this.getMintingData(vins);
