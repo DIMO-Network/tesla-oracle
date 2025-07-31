@@ -115,6 +115,11 @@ var teslaCodeFailureCount = promauto.NewCounterVec(
 // @Router      /v1/tesla/telemetry/subscribe/{vehicleTokenId} [post]
 func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	vehicleTokenId := c.Params("vehicleTokenId")
+	if vehicleTokenId == "" {
+		t.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
+		return fiber.NewError(fiber.StatusBadRequest, "VehicleTokenId is required in the request path.")
+	}
+
 	// Logger setup
 	logger := helpers.GetLogger(c, t.logger).With().
 		Str("Name", "Telemetry/Subscribe").
@@ -129,11 +134,11 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	}
 
 	// Retrieve Tesla OAuth credentials from the store
-	owner, err := t.fetchVehicleOwner(vehicleTokenId)
+	vehicle, err := t.fetchVehicle(vehicleTokenId)
 	if err != nil {
 		return err
 	}
-	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(owner))
+	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(vehicle.Owner))
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			logger.Warn().Msg("Tesla credentials not found in store.")
@@ -148,10 +153,9 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "Access token is missing. Please authenticate.")
 	}
 
-	// get VIN using the wallet address
-	// Call the FindSyntheticDevice function
+	// get VIN using the synthetic device address
 	device, err := mod.SyntheticDevices(
-		mod.SyntheticDeviceWhere.Address.EQ(walletAddress.Bytes()),
+		mod.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
 	).One(c.Context(), t.Dbc().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
@@ -195,6 +199,11 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 // @Router      /v1/tesla/telemetry/unsubscribe/{vehicleTokenId} [post]
 func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	vehicleTokenId := c.Params("vehicleTokenId")
+	if vehicleTokenId == "" {
+		t.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
+		return fiber.NewError(fiber.StatusBadRequest, "VehicleTokenId is required in the request path.")
+	}
+
 	// Logger setup
 	logger := helpers.GetLogger(c, t.logger).With().
 		Str("Name", "Telemetry/Unsubscribe").
@@ -209,11 +218,11 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	}
 
 	// Retrieve Tesla OAuth credentials from the store
-	owner, err := t.fetchVehicleOwner(vehicleTokenId)
+	vehicle, err := t.fetchVehicle(vehicleTokenId)
 	if err != nil {
 		return err
 	}
-	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(owner))
+	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(vehicle.Owner))
 	if err != nil {
 		if errors.Is(err, service.ErrNotFound) {
 			logger.Warn().Msg("Tesla credentials not found in store.")
@@ -228,10 +237,9 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "Access token is missing. Please authenticate.")
 	}
 
-	// Retrieve VIN using the wallet address
+	// get VIN using the synthetic device address
 	device, err := mod.SyntheticDevices(
-		mod.SyntheticDeviceWhere.Address.EQ(walletAddress.Bytes()),
-	).One(c.Context(), t.Dbc().Reader)
+		mod.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.Dbc().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
@@ -345,23 +353,23 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	return c.JSON(vehicleResp)
 }
 
-func (tc *TeslaController) fetchVehicleOwner(vehicleTokenId string) (string, error) {
+func (tc *TeslaController) fetchVehicle(vehicleTokenId string) (*models.Vehicle, error) {
 	tokenID, convErr := helpers.StringToInt64(vehicleTokenId)
 	if convErr != nil {
 		tc.logger.Err(convErr).Msg("Failed to convert vehicleTokenId to int64.")
-		return "", fiber.NewError(fiber.StatusBadRequest, "Invalid vehicle token ID format.")
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Invalid vehicle token ID format.")
 	}
 	vehicle, vehErr := tc.identitySvc.FetchVehicleByTokenID(tokenID)
 	if vehErr != nil {
 		tc.logger.Err(vehErr).Msg("Failed to fetch vehicle by token ID.")
-		return "", fiber.NewError(fiber.StatusInternalServerError, "Failed to fetch vehicle information.")
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "Failed to fetch vehicle information.")
 	}
 
-	if vehicle == nil || vehicle.Owner == "" {
-		tc.logger.Warn().Msg("Vehicle not found or owner is missing.")
-		return "", fiber.NewError(fiber.StatusNotFound, "Vehicle not found or owner information is missing.")
+	if vehicle == nil || vehicle.Owner == "" || vehicle.SyntheticDevice.Address == "" {
+		tc.logger.Warn().Msg("Vehicle not found or owner information or synthetic device address is missing.")
+		return nil, fiber.NewError(fiber.StatusNotFound, "Vehicle not found or owner information or synthetic device address is missing.")
 	}
-	return vehicle.Owner, nil
+	return vehicle, nil
 }
 
 // CompleteOAuthExchangeRequest request object for completing tesla OAuth

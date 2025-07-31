@@ -73,11 +73,12 @@ func TestTeslaControllerTestSuite(t *testing.T) {
 func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	// given
 	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
+	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
+	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	walletAddress := common.HexToAddress(ownerAdd)
-	walletAddressBytes := walletAddress.Bytes()
 
 	dbVin := models.SyntheticDevice{
-		Address:           walletAddressBytes,
+		Address:           synthDeviceAddress.Bytes(),
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
 		VehicleTokenID:    null.NewInt(789, true),
@@ -94,6 +95,9 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockIdentitySvc := new(MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
 		Owner: ownerAdd,
+		SyntheticDevice: mods.SyntheticDevice{
+			Address: synthDeviceAddressStr,
+		},
 	}
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
 
@@ -142,12 +146,13 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// given
 	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
+	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
+	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	walletAddress := common.HexToAddress(ownerAdd)
-	walletAddressBytes := walletAddress.Bytes()
 
 	// Insert a synthetic device with the wallet address and VIN
 	dbVin := models.SyntheticDevice{
-		Address:           walletAddressBytes,
+		Address:           synthDeviceAddress.Bytes(),
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
 		VehicleTokenID:    null.NewInt(789, true),
@@ -164,6 +169,9 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockIdentitySvc := new(MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
 		Owner: ownerAdd,
+		SyntheticDevice: mods.SyntheticDevice{
+			Address: synthDeviceAddressStr,
+		},
 	}
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
 	mockCredStore := new(MockCredStore)

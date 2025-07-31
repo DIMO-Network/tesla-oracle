@@ -56,6 +56,7 @@ const VehicleByTokenIDQuery = `{
 			id
 			tokenId
 			mintedAt
+			address
 		}
   	}
 }`
