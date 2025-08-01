@@ -27,7 +27,8 @@
       "@context/*": ["./context/*"],
       "@elements/*": ["./elements/*"],
       "@services/*": ["./services/*"],
-      "@styles/*": ["./styles/*"]
+      "@styles/*": ["./styles/*"],
+      "@utils/*": ["./utils/*"]
     },
 
     "plugins": [{ "name": "typescript-plugin-css-modules" }],

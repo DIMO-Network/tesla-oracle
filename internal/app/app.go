@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/DIMO-Network/go-transactions"
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -16,11 +17,22 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/jackc/pgx/v5"
 	"github.com/patrickmn/go-cache"
+	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
 
-func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
+func App(
+	settings *config.Settings,
+	logger *zerolog.Logger,
+	identitySvc service.IdentityAPIService,
+	ddSvc service.DeviceDefinitionsAPIService,
+	onboardingSvc *service.Vehicle,
+	riverClient *river.Client[pgx.Tx],
+	ws service.SDWalletsAPI,
+	tr *transactions.Client,
+) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return ErrorHandler(c, err, logger)
@@ -67,8 +79,6 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 	// application routes
 	app.Get("/health", healthCheck)
 
-	ddSvc := service.NewDeviceDefinitionsAPIService(logger, settings)
-	identitySvc := service.NewIdentityAPIService(logger, settings)
 	credStore := service.Store{
 		Cache: cache.New(5*time.Minute, 10*time.Minute),
 		// FIXME: for development only, use KMS
@@ -79,7 +89,8 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
 	}
 
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore, onboardingSvc)
+	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr)
 
 	jwtAuth := jwtware.New(jwtware.Config{
 		JWKSetURLs: []string{settings.JwtKeySetURL},
@@ -90,6 +101,11 @@ func App(settings *config.Settings, logger *zerolog.Logger) *fiber.App {
 	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
+
+	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
+	vehicleGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)
+	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
+	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
 
 	return app
 }

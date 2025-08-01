@@ -31,6 +31,16 @@ type Settings struct {
 	DimoAuthDomain     url.URL        `yaml:"DIMO_AUTH_DOMAIN"`
 	DimoAuthPrivateKey string         `yaml:"DIMO_AUTH_PRIVATE_KEY"`
 
+	DeveloperAAWalletAddress common.Address `yaml:"DEVELOPER_AA_WALLET_ADDRESS"`
+	DeveloperPK              string         `yaml:"DEVELOPER_PK"`
+	RPCURL                   url.URL        `yaml:"RPC_URL"`
+	BundlerURL               url.URL        `yaml:"BUNDLER_URL"`
+	RegistryAddress          common.Address `yaml:"REGISTRY_ADDRESS"`
+	VehicleNftAddress        common.Address `yaml:"VEHICLE_NFT_ADDRESS"`
+	SyntheticNftAddress      common.Address `yaml:"SYNTHETIC_NFT_ADDRESS"`
+	SDWalletsSeed            string         `yaml:"SD_WALLETS_SEED"`
+	ConnectionTokenID        string         `yaml:"CONNECTION_TOKEN_ID"`
+
 	TeslaClientID               string `yaml:"TESLA_CLIENT_ID"`
 	TeslaClientSecret           string `yaml:"TESLA_CLIENT_SECRET"`
 	TeslaAuthURL                string `yaml:"TESLA_AUTH_URL"`

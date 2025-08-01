@@ -1,4 +1,4 @@
-import {css, html, LitElement, unsafeCSS} from 'lit'
+import {css, html,  unsafeCSS} from 'lit'
 import {Task} from '@lit/task'
 
 // @ts-ignore
@@ -10,8 +10,8 @@ import {consume} from "@lit/context";
 import {TeslaSettingsContext, teslaSettingsContext} from "@context/tesla-settings.context.ts";
 import {TeslaAuthContext, teslaAuthContext} from "@context/tesla-auth.context.ts";
 import qs from "qs";
-import {ApiService} from "@services/api-service.ts";
 import {repeat} from "lit/directives/repeat.js";
+import {BaseOnboardingElement, SacdInput} from "@elements/base-onboarding-element.ts";
 
 interface DeviceDefinition {
     id: string;
@@ -31,7 +31,7 @@ interface VehiclesResponse {
 }
 
 @customElement('tesla-element')
-export class TeslaElement extends LitElement {
+export class TeslaElement extends BaseOnboardingElement {
     static styles = css`${unsafeCSS(styles)}`;
 
     @consume({context: teslaSettingsContext, subscribe: true})
@@ -41,8 +41,6 @@ export class TeslaElement extends LitElement {
     @consume({context: teslaAuthContext, subscribe: true})
     @property({attribute: false})
     private teslaAuth?: TeslaAuthContext;
-
-    private api = ApiService.getInstance();
 
     private loadVehiclesTask = new Task(this, {
         task: async ([authorizationCode, redirectUri], {}) => {
@@ -59,10 +57,33 @@ export class TeslaElement extends LitElement {
         args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri]
     });
 
+    private onboardVehicleTask = new Task(this, {
+        task: async ([vin, sacd]: [string, sacd: SacdInput | null], {}) => {
+            if (!vin) {
+                return [];
+            }
+
+            return await this.onboardVINs([vin], sacd);
+        },
+        autoRun: false
+    });
+
     private renderVehicles(vehicles: TeslaVehicle[] | readonly[]) {
         return html`
             ${repeat(vehicles, (_, i) => i, (item) => html`
-                <div class="font-mono">${JSON.stringify(item)}</div>`)}
+                <div class="grid-cols-12">
+                    <div class="col-span-9">
+                        ${item.vin}: ${item.definition.model} ${item.definition.year}
+                    </div>
+                    <div class="col-span-3">
+                        ${this.onboardVehicleTask.render({
+                            initial: () => html`<button class="button" @click=${() => this.handleOnboardClick(item.vin)}>Onboard</button>`,
+                            pending: () => html`<button class="button in-progress" disabled>...</button>`,
+                            complete: () => html`<button class="button done" disabled>Finished</button>`,
+                            error: () => html`<button class="button" @click=${() => this.handleOnboardClick(item.vin)}>Onboard</button>`,
+                        })}
+                    </div>
+                </div>`)}
         `
     }
 
@@ -111,4 +132,7 @@ export class TeslaElement extends LitElement {
         return `${url}?${query}`;
     }
 
+    handleOnboardClick(vin: string) {
+        this.onboardVehicleTask.run([vin, null]);
+    }
 }
