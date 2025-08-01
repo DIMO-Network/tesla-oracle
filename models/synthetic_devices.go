@@ -24,62 +24,67 @@ import (
 
 // SyntheticDevice is an object representing the database table.
 type SyntheticDevice struct {
-	Address           []byte      `boil:"address" json:"address" toml:"address" yaml:"address"`
-	Vin               string      `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
-	WalletChildNumber int         `boil:"wallet_child_number" json:"wallet_child_number" toml:"wallet_child_number" yaml:"wallet_child_number"`
-	VehicleTokenID    null.Int    `boil:"vehicle_token_id" json:"vehicle_token_id,omitempty" toml:"vehicle_token_id" yaml:"vehicle_token_id,omitempty"`
-	TokenID           null.Int    `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
-	AccessToken       null.String `boil:"access_token" json:"access_token,omitempty" toml:"access_token" yaml:"access_token,omitempty"`
-	AccessExpiresAt   null.Time   `boil:"access_expires_at" json:"access_expires_at,omitempty" toml:"access_expires_at" yaml:"access_expires_at,omitempty"`
-	RefreshToken      null.String `boil:"refresh_token" json:"refresh_token,omitempty" toml:"refresh_token" yaml:"refresh_token,omitempty"`
-	RefreshExpiresAt  null.Time   `boil:"refresh_expires_at" json:"refresh_expires_at,omitempty" toml:"refresh_expires_at" yaml:"refresh_expires_at,omitempty"`
+	Address            []byte      `boil:"address" json:"address" toml:"address" yaml:"address"`
+	Vin                string      `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
+	WalletChildNumber  int         `boil:"wallet_child_number" json:"wallet_child_number" toml:"wallet_child_number" yaml:"wallet_child_number"`
+	VehicleTokenID     null.Int    `boil:"vehicle_token_id" json:"vehicle_token_id,omitempty" toml:"vehicle_token_id" yaml:"vehicle_token_id,omitempty"`
+	TokenID            null.Int    `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
+	AccessToken        null.String `boil:"access_token" json:"access_token,omitempty" toml:"access_token" yaml:"access_token,omitempty"`
+	AccessExpiresAt    null.Time   `boil:"access_expires_at" json:"access_expires_at,omitempty" toml:"access_expires_at" yaml:"access_expires_at,omitempty"`
+	RefreshToken       null.String `boil:"refresh_token" json:"refresh_token,omitempty" toml:"refresh_token" yaml:"refresh_token,omitempty"`
+	RefreshExpiresAt   null.Time   `boil:"refresh_expires_at" json:"refresh_expires_at,omitempty" toml:"refresh_expires_at" yaml:"refresh_expires_at,omitempty"`
+	SubscriptionStatus null.String `boil:"subscription_status" json:"subscription_status,omitempty" toml:"subscription_status" yaml:"subscription_status,omitempty"`
 
 	R *syntheticDeviceR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L syntheticDeviceL  `boil:"-" json:"-" toml:"-" yaml:"-"`
 }
 
 var SyntheticDeviceColumns = struct {
-	Address           string
-	Vin               string
-	WalletChildNumber string
-	VehicleTokenID    string
-	TokenID           string
-	AccessToken       string
-	AccessExpiresAt   string
-	RefreshToken      string
-	RefreshExpiresAt  string
+	Address            string
+	Vin                string
+	WalletChildNumber  string
+	VehicleTokenID     string
+	TokenID            string
+	AccessToken        string
+	AccessExpiresAt    string
+	RefreshToken       string
+	RefreshExpiresAt   string
+	SubscriptionStatus string
 }{
-	Address:           "address",
-	Vin:               "vin",
-	WalletChildNumber: "wallet_child_number",
-	VehicleTokenID:    "vehicle_token_id",
-	TokenID:           "token_id",
-	AccessToken:       "access_token",
-	AccessExpiresAt:   "access_expires_at",
-	RefreshToken:      "refresh_token",
-	RefreshExpiresAt:  "refresh_expires_at",
+	Address:            "address",
+	Vin:                "vin",
+	WalletChildNumber:  "wallet_child_number",
+	VehicleTokenID:     "vehicle_token_id",
+	TokenID:            "token_id",
+	AccessToken:        "access_token",
+	AccessExpiresAt:    "access_expires_at",
+	RefreshToken:       "refresh_token",
+	RefreshExpiresAt:   "refresh_expires_at",
+	SubscriptionStatus: "subscription_status",
 }
 
 var SyntheticDeviceTableColumns = struct {
-	Address           string
-	Vin               string
-	WalletChildNumber string
-	VehicleTokenID    string
-	TokenID           string
-	AccessToken       string
-	AccessExpiresAt   string
-	RefreshToken      string
-	RefreshExpiresAt  string
+	Address            string
+	Vin                string
+	WalletChildNumber  string
+	VehicleTokenID     string
+	TokenID            string
+	AccessToken        string
+	AccessExpiresAt    string
+	RefreshToken       string
+	RefreshExpiresAt   string
+	SubscriptionStatus string
 }{
-	Address:           "synthetic_devices.address",
-	Vin:               "synthetic_devices.vin",
-	WalletChildNumber: "synthetic_devices.wallet_child_number",
-	VehicleTokenID:    "synthetic_devices.vehicle_token_id",
-	TokenID:           "synthetic_devices.token_id",
-	AccessToken:       "synthetic_devices.access_token",
-	AccessExpiresAt:   "synthetic_devices.access_expires_at",
-	RefreshToken:      "synthetic_devices.refresh_token",
-	RefreshExpiresAt:  "synthetic_devices.refresh_expires_at",
+	Address:            "synthetic_devices.address",
+	Vin:                "synthetic_devices.vin",
+	WalletChildNumber:  "synthetic_devices.wallet_child_number",
+	VehicleTokenID:     "synthetic_devices.vehicle_token_id",
+	TokenID:            "synthetic_devices.token_id",
+	AccessToken:        "synthetic_devices.access_token",
+	AccessExpiresAt:    "synthetic_devices.access_expires_at",
+	RefreshToken:       "synthetic_devices.refresh_token",
+	RefreshExpiresAt:   "synthetic_devices.refresh_expires_at",
+	SubscriptionStatus: "synthetic_devices.subscription_status",
 }
 
 // Generated where
@@ -155,25 +160,27 @@ func (w whereHelpernull_Int) IsNull() qm.QueryMod    { return qmhelper.WhereIsNu
 func (w whereHelpernull_Int) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
 
 var SyntheticDeviceWhere = struct {
-	Address           whereHelper__byte
-	Vin               whereHelperstring
-	WalletChildNumber whereHelperint
-	VehicleTokenID    whereHelpernull_Int
-	TokenID           whereHelpernull_Int
-	AccessToken       whereHelpernull_String
-	AccessExpiresAt   whereHelpernull_Time
-	RefreshToken      whereHelpernull_String
-	RefreshExpiresAt  whereHelpernull_Time
+	Address            whereHelper__byte
+	Vin                whereHelperstring
+	WalletChildNumber  whereHelperint
+	VehicleTokenID     whereHelpernull_Int
+	TokenID            whereHelpernull_Int
+	AccessToken        whereHelpernull_String
+	AccessExpiresAt    whereHelpernull_Time
+	RefreshToken       whereHelpernull_String
+	RefreshExpiresAt   whereHelpernull_Time
+	SubscriptionStatus whereHelpernull_String
 }{
-	Address:           whereHelper__byte{field: "\"tesla_oracle\".\"synthetic_devices\".\"address\""},
-	Vin:               whereHelperstring{field: "\"tesla_oracle\".\"synthetic_devices\".\"vin\""},
-	WalletChildNumber: whereHelperint{field: "\"tesla_oracle\".\"synthetic_devices\".\"wallet_child_number\""},
-	VehicleTokenID:    whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"vehicle_token_id\""},
-	TokenID:           whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"token_id\""},
-	AccessToken:       whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_token\""},
-	AccessExpiresAt:   whereHelpernull_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_expires_at\""},
-	RefreshToken:      whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_token\""},
-	RefreshExpiresAt:  whereHelpernull_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_expires_at\""},
+	Address:            whereHelper__byte{field: "\"tesla_oracle\".\"synthetic_devices\".\"address\""},
+	Vin:                whereHelperstring{field: "\"tesla_oracle\".\"synthetic_devices\".\"vin\""},
+	WalletChildNumber:  whereHelperint{field: "\"tesla_oracle\".\"synthetic_devices\".\"wallet_child_number\""},
+	VehicleTokenID:     whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"vehicle_token_id\""},
+	TokenID:            whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"token_id\""},
+	AccessToken:        whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_token\""},
+	AccessExpiresAt:    whereHelpernull_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_expires_at\""},
+	RefreshToken:       whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_token\""},
+	RefreshExpiresAt:   whereHelpernull_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_expires_at\""},
+	SubscriptionStatus: whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"subscription_status\""},
 }
 
 // SyntheticDeviceRels is where relationship names are stored.
@@ -193,9 +200,9 @@ func (*syntheticDeviceR) NewStruct() *syntheticDeviceR {
 type syntheticDeviceL struct{}
 
 var (
-	syntheticDeviceAllColumns            = []string{"address", "vin", "wallet_child_number", "vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at"}
+	syntheticDeviceAllColumns            = []string{"address", "vin", "wallet_child_number", "vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at", "subscription_status"}
 	syntheticDeviceColumnsWithoutDefault = []string{"address", "vin", "wallet_child_number"}
-	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at"}
+	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at", "subscription_status"}
 	syntheticDevicePrimaryKeyColumns     = []string{"address"}
 	syntheticDeviceGeneratedColumns      = []string{}
 )
