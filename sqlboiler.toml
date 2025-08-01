@@ -1,6 +1,6 @@
 [psql]
 dbname = "tesla_oracle"
-blacklist = ["migrations"]
+blacklist = ["migrations", "river_client", "river_client_queue", "river_job", "river_leader", "river_migration", "river_queue"]
 host   = "localhost"
 port   = 5432
 user   = "dimo"
