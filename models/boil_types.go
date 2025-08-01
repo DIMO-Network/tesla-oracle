@@ -50,3 +50,28 @@ func makeCacheKey(cols boil.Columns, nzDefaults []string) string {
 	strmangle.PutBuffer(buf)
 	return str
 }
+
+// Enum values for RiverJobState
+const (
+	RiverJobStateAvailable string = "available"
+	RiverJobStateCancelled string = "cancelled"
+	RiverJobStateCompleted string = "completed"
+	RiverJobStateDiscarded string = "discarded"
+	RiverJobStatePending   string = "pending"
+	RiverJobStateRetryable string = "retryable"
+	RiverJobStateRunning   string = "running"
+	RiverJobStateScheduled string = "scheduled"
+)
+
+func AllRiverJobState() []string {
+	return []string{
+		RiverJobStateAvailable,
+		RiverJobStateCancelled,
+		RiverJobStateCompleted,
+		RiverJobStateDiscarded,
+		RiverJobStatePending,
+		RiverJobStateRetryable,
+		RiverJobStateRunning,
+		RiverJobStateScheduled,
+	}
+}

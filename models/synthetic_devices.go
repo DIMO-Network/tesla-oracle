@@ -24,11 +24,15 @@ import (
 
 // SyntheticDevice is an object representing the database table.
 type SyntheticDevice struct {
-	Address           []byte   `boil:"address" json:"address" toml:"address" yaml:"address"`
-	Vin               string   `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
-	WalletChildNumber int      `boil:"wallet_child_number" json:"wallet_child_number" toml:"wallet_child_number" yaml:"wallet_child_number"`
-	VehicleTokenID    null.Int `boil:"vehicle_token_id" json:"vehicle_token_id,omitempty" toml:"vehicle_token_id" yaml:"vehicle_token_id,omitempty"`
-	TokenID           null.Int `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
+	Address           []byte      `boil:"address" json:"address" toml:"address" yaml:"address"`
+	Vin               string      `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
+	WalletChildNumber int         `boil:"wallet_child_number" json:"wallet_child_number" toml:"wallet_child_number" yaml:"wallet_child_number"`
+	VehicleTokenID    null.Int    `boil:"vehicle_token_id" json:"vehicle_token_id,omitempty" toml:"vehicle_token_id" yaml:"vehicle_token_id,omitempty"`
+	TokenID           null.Int    `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
+	AccessToken       null.String `boil:"access_token" json:"access_token,omitempty" toml:"access_token" yaml:"access_token,omitempty"`
+	AccessExpiresAt   null.Time   `boil:"access_expires_at" json:"access_expires_at,omitempty" toml:"access_expires_at" yaml:"access_expires_at,omitempty"`
+	RefreshToken      null.String `boil:"refresh_token" json:"refresh_token,omitempty" toml:"refresh_token" yaml:"refresh_token,omitempty"`
+	RefreshExpiresAt  null.Time   `boil:"refresh_expires_at" json:"refresh_expires_at,omitempty" toml:"refresh_expires_at" yaml:"refresh_expires_at,omitempty"`
 
 	R *syntheticDeviceR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L syntheticDeviceL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -40,12 +44,20 @@ var SyntheticDeviceColumns = struct {
 	WalletChildNumber string
 	VehicleTokenID    string
 	TokenID           string
+	AccessToken       string
+	AccessExpiresAt   string
+	RefreshToken      string
+	RefreshExpiresAt  string
 }{
 	Address:           "address",
 	Vin:               "vin",
 	WalletChildNumber: "wallet_child_number",
 	VehicleTokenID:    "vehicle_token_id",
 	TokenID:           "token_id",
+	AccessToken:       "access_token",
+	AccessExpiresAt:   "access_expires_at",
+	RefreshToken:      "refresh_token",
+	RefreshExpiresAt:  "refresh_expires_at",
 }
 
 var SyntheticDeviceTableColumns = struct {
@@ -54,12 +66,20 @@ var SyntheticDeviceTableColumns = struct {
 	WalletChildNumber string
 	VehicleTokenID    string
 	TokenID           string
+	AccessToken       string
+	AccessExpiresAt   string
+	RefreshToken      string
+	RefreshExpiresAt  string
 }{
 	Address:           "synthetic_devices.address",
 	Vin:               "synthetic_devices.vin",
 	WalletChildNumber: "synthetic_devices.wallet_child_number",
 	VehicleTokenID:    "synthetic_devices.vehicle_token_id",
 	TokenID:           "synthetic_devices.token_id",
+	AccessToken:       "synthetic_devices.access_token",
+	AccessExpiresAt:   "synthetic_devices.access_expires_at",
+	RefreshToken:      "synthetic_devices.refresh_token",
+	RefreshExpiresAt:  "synthetic_devices.refresh_expires_at",
 }
 
 // Generated where
@@ -72,37 +92,6 @@ func (w whereHelper__byte) LT(x []byte) qm.QueryMod  { return qmhelper.Where(w.f
 func (w whereHelper__byte) LTE(x []byte) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
 func (w whereHelper__byte) GT(x []byte) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
 func (w whereHelper__byte) GTE(x []byte) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
-
-type whereHelperstring struct{ field string }
-
-func (w whereHelperstring) EQ(x string) qm.QueryMod      { return qmhelper.Where(w.field, qmhelper.EQ, x) }
-func (w whereHelperstring) NEQ(x string) qm.QueryMod     { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
-func (w whereHelperstring) LT(x string) qm.QueryMod      { return qmhelper.Where(w.field, qmhelper.LT, x) }
-func (w whereHelperstring) LTE(x string) qm.QueryMod     { return qmhelper.Where(w.field, qmhelper.LTE, x) }
-func (w whereHelperstring) GT(x string) qm.QueryMod      { return qmhelper.Where(w.field, qmhelper.GT, x) }
-func (w whereHelperstring) GTE(x string) qm.QueryMod     { return qmhelper.Where(w.field, qmhelper.GTE, x) }
-func (w whereHelperstring) LIKE(x string) qm.QueryMod    { return qm.Where(w.field+" LIKE ?", x) }
-func (w whereHelperstring) NLIKE(x string) qm.QueryMod   { return qm.Where(w.field+" NOT LIKE ?", x) }
-func (w whereHelperstring) ILIKE(x string) qm.QueryMod   { return qm.Where(w.field+" ILIKE ?", x) }
-func (w whereHelperstring) NILIKE(x string) qm.QueryMod  { return qm.Where(w.field+" NOT ILIKE ?", x) }
-func (w whereHelperstring) SIMILAR(x string) qm.QueryMod { return qm.Where(w.field+" SIMILAR TO ?", x) }
-func (w whereHelperstring) NSIMILAR(x string) qm.QueryMod {
-	return qm.Where(w.field+" NOT SIMILAR TO ?", x)
-}
-func (w whereHelperstring) IN(slice []string) qm.QueryMod {
-	values := make([]interface{}, 0, len(slice))
-	for _, value := range slice {
-		values = append(values, value)
-	}
-	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
-}
-func (w whereHelperstring) NIN(slice []string) qm.QueryMod {
-	values := make([]interface{}, 0, len(slice))
-	for _, value := range slice {
-		values = append(values, value)
-	}
-	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
-}
 
 type whereHelperint struct{ field string }
 
@@ -171,12 +160,20 @@ var SyntheticDeviceWhere = struct {
 	WalletChildNumber whereHelperint
 	VehicleTokenID    whereHelpernull_Int
 	TokenID           whereHelpernull_Int
+	AccessToken       whereHelpernull_String
+	AccessExpiresAt   whereHelpernull_Time
+	RefreshToken      whereHelpernull_String
+	RefreshExpiresAt  whereHelpernull_Time
 }{
 	Address:           whereHelper__byte{field: "\"tesla_oracle\".\"synthetic_devices\".\"address\""},
 	Vin:               whereHelperstring{field: "\"tesla_oracle\".\"synthetic_devices\".\"vin\""},
 	WalletChildNumber: whereHelperint{field: "\"tesla_oracle\".\"synthetic_devices\".\"wallet_child_number\""},
 	VehicleTokenID:    whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"vehicle_token_id\""},
 	TokenID:           whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"token_id\""},
+	AccessToken:       whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_token\""},
+	AccessExpiresAt:   whereHelpernull_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_expires_at\""},
+	RefreshToken:      whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_token\""},
+	RefreshExpiresAt:  whereHelpernull_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_expires_at\""},
 }
 
 // SyntheticDeviceRels is where relationship names are stored.
@@ -196,9 +193,9 @@ func (*syntheticDeviceR) NewStruct() *syntheticDeviceR {
 type syntheticDeviceL struct{}
 
 var (
-	syntheticDeviceAllColumns            = []string{"address", "vin", "wallet_child_number", "vehicle_token_id", "token_id"}
+	syntheticDeviceAllColumns            = []string{"address", "vin", "wallet_child_number", "vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at"}
 	syntheticDeviceColumnsWithoutDefault = []string{"address", "vin", "wallet_child_number"}
-	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "token_id"}
+	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at"}
 	syntheticDevicePrimaryKeyColumns     = []string{"address"}
 	syntheticDeviceGeneratedColumns      = []string{}
 )

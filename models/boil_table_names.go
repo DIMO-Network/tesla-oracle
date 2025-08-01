@@ -4,7 +4,19 @@
 package models
 
 var TableNames = struct {
+	RiverClient      string
+	RiverClientQueue string
+	RiverJob         string
+	RiverLeader      string
+	RiverMigration   string
+	RiverQueue       string
 	SyntheticDevices string
 }{
+	RiverClient:      "river_client",
+	RiverClientQueue: "river_client_queue",
+	RiverJob:         "river_job",
+	RiverLeader:      "river_leader",
+	RiverMigration:   "river_migration",
+	RiverQueue:       "river_queue",
 	SyntheticDevices: "synthetic_devices",
 }
