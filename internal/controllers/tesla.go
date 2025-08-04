@@ -184,7 +184,8 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	refreshExpiry := time.Now().AddDate(0, 3, 0)
 	err = t.UpdateCredsAndStatusToSuccess(c.Context(), device, teslaAuth.AccessToken, teslaAuth.RefreshToken, teslaAuth.Expiry, refreshExpiry)
 	if err != nil {
-		return err
+		logger.Err(err).Msg("Failed to update telemetry credentials.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry credentials.")
 	}
 
 	logger.Info().Msg("Successfully subscribed to telemetry.")
@@ -240,7 +241,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	// Validate access token
 	if partnersTokenResp.AccessToken == "" {
-		return fmt.Errorf("partners token access token is empty")
+		return fiber.NewError(fiber.StatusInternalServerError, "Partners token response did not contain an access token.")
 	}
 
 	// get VIN using the synthetic device address
