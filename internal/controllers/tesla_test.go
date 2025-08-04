@@ -155,6 +155,15 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
 
+	// Query the database to verify subscription status
+	device, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(789, true))).One(s.ctx, s.pdb.DBS().Reader)
+	require.NoError(s.T(), err)
+
+	// Assert that the subscription status is set and not empty
+	assert.True(s.T(), device.SubscriptionStatus.Valid)
+	assert.Equal(s.T(), "active", device.SubscriptionStatus.String)
+
 	mockCredStore.AssertExpectations(s.T())
 	mockTeslaService.AssertExpectations(s.T())
 }
@@ -232,6 +241,15 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// verify
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+
+	// Query the database to verify subscription status
+	device, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(789, true))).One(s.ctx, s.pdb.DBS().Reader)
+	require.NoError(s.T(), err)
+
+	// Assert that the subscription status is set and not empty
+	assert.True(s.T(), device.SubscriptionStatus.Valid)
+	assert.Equal(s.T(), "inactive", device.SubscriptionStatus.String)
 
 	// Verify mock expectations
 	mockCredStore.AssertExpectations(s.T())

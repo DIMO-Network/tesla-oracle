@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"slices"
 	"strconv"
@@ -159,13 +160,6 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
 	}
 
-	// We know refresh token ttl is 3 months, so we set it to 3 months from now.
-	refreshExpiry := time.Now().AddDate(0, 3, 0)
-	err = t.SaveAccessAndRefreshToken(c.Context(), device, teslaAuth.AccessToken, teslaAuth.RefreshToken, teslaAuth.Expiry, refreshExpiry)
-	if err != nil {
-		return err
-	}
-
 	// Call SubscribeForTelemetryData
 	if err := t.fleetAPISvc.SubscribeForTelemetryData(c.Context(), teslaAuth.AccessToken, device.Vin); err != nil {
 		logger.Err(err).Msg("Error registering for telemetry")
@@ -181,6 +175,13 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 			}
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
+	}
+
+	// We know refresh token ttl is 3 months, so we set it to 3 months from now.
+	refreshExpiry := time.Now().AddDate(0, 3, 0)
+	err = t.UpdateCredsAndStatus(c.Context(), device, teslaAuth.AccessToken, teslaAuth.RefreshToken, teslaAuth.Expiry, refreshExpiry)
+	if err != nil {
+		return err
 	}
 
 	logger.Info().Msg("Successfully subscribed to telemetry.")
@@ -252,6 +253,14 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	if err != nil {
 		logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data")
+	}
+
+	device.SubscriptionStatus = null.String{String: "inactive", Valid: true}
+	// update synthetic device status
+	_, err = device.Update(c.Context(), t.Dbc().Writer, boil.Infer())
+	if err != nil {
+		logger.Err(err).Msg("Failed to update synthetic device status.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update synthetic device status.")
 	}
 
 	logger.Info().Msg("Successfully unsubscribed from telemetry.")
@@ -435,10 +444,10 @@ func (t *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string
 	return nil, errors.New("device definition not found")
 }
 
-// SaveAccessAndRefreshToken stores the given credential for the given synthDevice.
+// UpdateCredsAndStatus stores the given credential for the given synthDevice.
 // This function encrypts the access and refresh tokens before saving them to the database.
 // TODO implement encryption using KMS
-func (t *TeslaController) SaveAccessAndRefreshToken(c context.Context, synthDevice *mod.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
+func (t *TeslaController) UpdateCredsAndStatus(c context.Context, synthDevice *mod.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
 	cipher := new(cipher.ROT13Cipher)
 
 	encAccess, err := cipher.Encrypt(accessToken)
@@ -455,11 +464,13 @@ func (t *TeslaController) SaveAccessAndRefreshToken(c context.Context, synthDevi
 	synthDevice.RefreshToken = encRefresh
 	synthDevice.RefreshExpiresAt = refreshExpiry
 
+	// update status
+	synthDevice.SubscriptionStatus = null.String{String: "active", Valid: true}
+
 	// Save the changes to the database
 	// todo add transaction handling
 	_, err = synthDevice.Update(c, t.Dbc().Writer, boil.Infer())
 	if err != nil {
-		// Handle error
 		return err
 	}
 
