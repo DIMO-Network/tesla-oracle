@@ -117,7 +117,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, s.pdb.DBS)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, s.pdb.DBS)
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -209,7 +209,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// Initialize the controller
 	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, s.pdb.DBS)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, s.pdb.DBS)
 
 	// Set up the Fiber app
 	app := fiber.New()

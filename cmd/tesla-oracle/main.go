@@ -87,9 +87,6 @@ func main() {
 
 	group, gCtx := errgroup.WithContext(ctx)
 
-	pdb := db.NewDbConnectionFromSettings(ctx, &settings.DB, true)
-	pdb.WaitForDB(logger)
-
 	riverClient, _, dbPool, err := createRiverClientWithWorkersAndPool(gCtx, logger, &settings, identityService, deviceDefinitionsService, &pdb, transactionsClient, walletService)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to create river client, workers and db pool")

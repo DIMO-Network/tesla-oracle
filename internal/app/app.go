@@ -32,8 +32,7 @@ func App(
 	onboardingSvc *service.Vehicle,
 	riverClient *river.Client[pgx.Tx],
 	ws service.SDWalletsAPI,
-	tr *transactions.Client,  dbs func() *db.ReaderWriter
-) *fiber.App {
+	tr *transactions.Client, dbs func() *db.ReaderWriter) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return ErrorHandler(c, err, logger)

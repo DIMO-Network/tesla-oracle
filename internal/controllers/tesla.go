@@ -3,15 +3,13 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/DIMO-Network/shared/pkg/cipher"
-	"github.com/DIMO-Network/shared/pkg/db"
-	"github.com/volatiletech/null/v8"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DIMO-Network/shared/pkg/cipher"
+	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
@@ -27,6 +25,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 )
 
 type CredStore interface {
@@ -156,8 +155,8 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	// get VIN using the synthetic device address
 	// TODO implement transactions handling here
-	device, err := mod.SyntheticDevices(
-		mod.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
+	device, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
 	).One(c.Context(), t.Dbc().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
@@ -245,8 +244,8 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	}
 
 	// get VIN using the synthetic device address
-	device, err := mod.SyntheticDevices(
-		mod.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.Dbc().Reader)
+	device, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.Dbc().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
@@ -471,7 +470,7 @@ func (t *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string
 // UpdateCredsAndStatusToSuccess stores the given credential for the given synthDevice.
 // This function encrypts the access and refresh tokens before saving them to the database.
 // TODO implement encryption using KMS
-func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *mod.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
+func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *dbmodels.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
 	cipher := new(cipher.ROT13Cipher)
 
 	encAccess, err := cipher.Encrypt(accessToken)
