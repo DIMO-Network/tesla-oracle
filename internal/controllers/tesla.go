@@ -179,7 +179,7 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	// We know refresh token ttl is 3 months, so we set it to 3 months from now.
 	refreshExpiry := time.Now().AddDate(0, 3, 0)
-	err = t.UpdateCredsAndStatus(c.Context(), device, teslaAuth.AccessToken, teslaAuth.RefreshToken, teslaAuth.Expiry, refreshExpiry)
+	err = t.UpdateCredsAndStatusToSuccess(c.Context(), device, teslaAuth.AccessToken, teslaAuth.RefreshToken, teslaAuth.Expiry, refreshExpiry)
 	if err != nil {
 		return err
 	}
@@ -444,10 +444,10 @@ func (t *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string
 	return nil, errors.New("device definition not found")
 }
 
-// UpdateCredsAndStatus stores the given credential for the given synthDevice.
+// UpdateCredsAndStatusToSuccess stores the given credential for the given synthDevice.
 // This function encrypts the access and refresh tokens before saving them to the database.
 // TODO implement encryption using KMS
-func (t *TeslaController) UpdateCredsAndStatus(c context.Context, synthDevice *mod.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
+func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *mod.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
 	cipher := new(cipher.ROT13Cipher)
 
 	encAccess, err := cipher.Encrypt(accessToken)
