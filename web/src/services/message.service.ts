@@ -40,7 +40,7 @@ export class MessageService {
             // @ts-ignore
             window.ReactNativeWebView.postMessage(JSON.stringify(message));
         } else if (window.top) {
-            window.top.postMessage(message, 'https://localdev.dimo.org:3008');
+            window.top.postMessage(JSON.stringify(message), 'https://localdev.dimo.org:3008');
         }
     }
 
