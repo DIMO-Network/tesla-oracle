@@ -462,36 +462,3 @@ func (t *TeslaController) SaveAccessAndRefreshToken(c context.Context, synthDevi
 
 	return nil
 }
-
-//func (t *TeslaController) Retrieve(_ context.Context, user common.Address) (*Credential, error) {
-//	cacheKey := prefix + user.Hex()
-//	cachedCred, ok := s.Cache.Get(cacheKey)
-//	if !ok {
-//		return nil, ErrNotFound
-//	}
-//
-//	encCred := cachedCred.(string)
-//
-//	// Don't want a second call to pick this up. Use it or lose it.
-//	s.Cache.Delete(cacheKey)
-//
-//	if len(encCred) == 0 {
-//		return nil, fmt.Errorf("no credential found")
-//	}
-//
-//	credJSON, err := s.Cipher.Decrypt(encCred)
-//	if err != nil {
-//		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
-//	}
-//
-//	var cred Credential
-//	if err := json.Unmarshal([]byte(credJSON), &cred); err != nil {
-//		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
-//	}
-//
-//	if cred.AccessToken == "" || cred.RefreshToken == "" || cred.Expiry.IsZero() {
-//		return nil, errors.New("credential was missing a required field")
-//	}
-//
-//	return &cred, nil
-//}
