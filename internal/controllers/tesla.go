@@ -265,6 +265,9 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	logger := helpers.GetLogger(c, t.logger)
 
 	teslaAuth, err := t.getAccessToken(c)
+	if err != nil {
+		return err
+	}
 
 	var claims partialTeslaClaims
 	_, _, err = jwt.NewParser().ParseUnverified(teslaAuth.AccessToken, &claims)
