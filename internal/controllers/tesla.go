@@ -3,7 +3,9 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 	"slices"
 	"strconv"
 	"strings"
@@ -101,11 +103,12 @@ var teslaCodeFailureCount = promauto.NewCounterVec(
 
 // TelemetrySubscribe godoc
 // @Summary     Subscribe vehicle for Tesla Telemetry Data
-// @Description Subscribes a vehicle for telemetry data using the provided vehicle token ID.
+// @Description Subscribes a vehicle for telemetry data using the provided vehicle token ID and authorization details in the request body.
 // @Tags        tesla,subscribe
 // @Accept      json
 // @Produce     json
 // @Param       vehicleTokenId path string true "Vehicle Token ID"
+// @Param       body CompleteOAuthExchangeRequest  "Authorization details"
 // @Security    BearerAuth
 // @Success     200 {object} map[string]string "Successfully subscribed to vehicle telemetry."
 // @Failure     400 {object} fiber.Error "Bad Request"
@@ -133,27 +136,21 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
 	}
 
-	// Retrieve Tesla OAuth credentials from the store
+	// Call identity to retrieve SyntheticDevice Address
 	vehicle, err := t.fetchVehicle(vehicleTokenId)
 	if err != nil {
 		return err
 	}
-	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(vehicle.Owner))
-	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			logger.Warn().Msg("Tesla credentials not found in store.")
-			return fiber.NewError(fiber.StatusUnauthorized, "Tesla credentials not found. Please authenticate.")
-		}
-		logger.Err(err).Msg("Failed to retrieve Tesla credentials from store.")
-		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error while retrieving Tesla credentials.")
-	}
 
-	// Validate access token
-	if cred.AccessToken == "" {
-		return fiber.NewError(fiber.StatusUnauthorized, "Access token is missing. Please authenticate.")
+	// finish getting the access token
+	teslaAuth, err := t.getAccessToken(c)
+	if err != nil {
+		logger.Err(err).Msg("Failed to get access token.")
+		return err
 	}
 
 	// get VIN using the synthetic device address
+	// TODO implement transactions handling here
 	device, err := mod.SyntheticDevices(
 		mod.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
 	).One(c.Context(), t.Dbc().Reader)
@@ -162,8 +159,15 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
 	}
 
+	// We know refresh token ttl is 3 months, so we set it to 3 months from now.
+	refreshExpiry := time.Now().AddDate(0, 3, 0)
+	err = t.SaveAccessAndRefreshToken(c.Context(), device, teslaAuth.AccessToken, teslaAuth.RefreshToken, teslaAuth.Expiry, refreshExpiry)
+	if err != nil {
+		return err
+	}
+
 	// Call SubscribeForTelemetryData
-	if err := t.fleetAPISvc.SubscribeForTelemetryData(c.Context(), cred.AccessToken, device.Vin); err != nil {
+	if err := t.fleetAPISvc.SubscribeForTelemetryData(c.Context(), teslaAuth.AccessToken, device.Vin); err != nil {
 		logger.Err(err).Msg("Error registering for telemetry")
 		var subErr *service.TeslaSubscriptionError
 		if errors.As(err, &subErr) {
@@ -222,19 +226,17 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	cred, err := t.store.Retrieve(c.Context(), common.HexToAddress(vehicle.Owner))
+
+	// Get partners token
+	partnersTokenResp, err := t.fleetAPISvc.GetPartnersToken(c.Context())
 	if err != nil {
-		if errors.Is(err, service.ErrNotFound) {
-			logger.Warn().Msg("Tesla credentials not found in store.")
-			return fiber.NewError(fiber.StatusUnauthorized, "Tesla credentials not found. Please authenticate.")
-		}
-		logger.Err(err).Msg("Failed to retrieve Tesla credentials from store.")
-		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error while retrieving Tesla credentials.")
+		logger.Err(err).Msg("Failed to get partners token.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get partners token.")
 	}
 
 	// Validate access token
-	if cred.AccessToken == "" {
-		return fiber.NewError(fiber.StatusUnauthorized, "Access token is missing. Please authenticate.")
+	if partnersTokenResp.AccessToken == "" {
+		return fmt.Errorf("partners token access token is empty")
 	}
 
 	// get VIN using the synthetic device address
@@ -246,7 +248,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	}
 
 	// Call the UnSubscribeFromTelemetryData function
-	err = t.fleetAPISvc.UnSubscribeFromTelemetryData(c.Context(), cred.AccessToken, device.Vin)
+	err = t.fleetAPISvc.UnSubscribeFromTelemetryData(c.Context(), partnersTokenResp.AccessToken, device.Vin)
 	if err != nil {
 		logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data")
@@ -262,30 +264,7 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
 	logger := helpers.GetLogger(c, t.logger)
 
-	var reqBody CompleteOAuthExchangeRequest
-	if err := c.BodyParser(&reqBody); err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Couldn't parse JSON request body.")
-	}
-
-	if reqBody.AuthorizationCode == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "No authorization code provided.")
-	}
-	if reqBody.RedirectURI == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "No redirect URI provided.")
-	}
-
-	teslaAuth, err := t.fleetAPISvc.CompleteTeslaAuthCodeExchange(c.Context(), reqBody.AuthorizationCode, reqBody.RedirectURI)
-	if err != nil {
-		if errors.Is(err, service.ErrInvalidAuthCode) {
-			teslaCodeFailureCount.WithLabelValues("auth_code").Inc()
-			return fiber.NewError(fiber.StatusBadRequest, "Authorization code invalid, expired, or revoked. Retry login.")
-		}
-		return fiber.NewError(fiber.StatusInternalServerError, "failed to get tesla authCode:"+err.Error())
-	}
-
-	if teslaAuth.RefreshToken == "" {
-		return fiber.NewError(fiber.StatusBadRequest, "Code exchange did not return a refresh token. Make sure you've granted offline_access.")
-	}
+	teslaAuth, err := t.getAccessToken(c)
 
 	var claims partialTeslaClaims
 	_, _, err = jwt.NewParser().ParseUnverified(teslaAuth.AccessToken, &claims)
@@ -353,6 +332,35 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	return c.JSON(vehicleResp)
 }
 
+func (t *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeResponse, error) {
+	var reqBody CompleteOAuthExchangeRequest
+	if err := c.BodyParser(&reqBody); err != nil {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Couldn't parse JSON request body.")
+	}
+
+	if reqBody.AuthorizationCode == "" {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "No authorization code provided.")
+	}
+	if reqBody.RedirectURI == "" {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "No redirect URI provided.")
+	}
+
+	teslaAuth, err := t.fleetAPISvc.CompleteTeslaAuthCodeExchange(c.Context(), reqBody.AuthorizationCode, reqBody.RedirectURI)
+	if err != nil {
+		if errors.Is(err, service.ErrInvalidAuthCode) {
+			teslaCodeFailureCount.WithLabelValues("auth_code").Inc()
+			return nil, fiber.NewError(fiber.StatusBadRequest, "Authorization code invalid, expired, or revoked. Retry login.")
+		}
+		return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to get tesla authCode:"+err.Error())
+	}
+
+	if teslaAuth.RefreshToken == "" {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Code exchange did not return a refresh token. Make sure you've granted offline_access.")
+	}
+	return teslaAuth, nil
+}
+
+// fetchVehicle retrieves a vehicle from identity-api by its token ID.
 func (tc *TeslaController) fetchVehicle(vehicleTokenId string) (*models.Vehicle, error) {
 	tokenID, convErr := helpers.StringToInt64(vehicleTokenId)
 	if convErr != nil {
@@ -423,3 +431,67 @@ func (t *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string
 
 	return nil, errors.New("device definition not found")
 }
+
+// SaveAccessAndRefreshToken stores the given credential for the given synthDevice.
+// This function encrypts the access and refresh tokens before saving them to the database.
+// TODO implement encryption using KMS
+func (t *TeslaController) SaveAccessAndRefreshToken(c context.Context, synthDevice *mod.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
+	cipher := new(cipher.ROT13Cipher)
+
+	encAccess, err := cipher.Encrypt(accessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+	synthDevice.AccessToken = encAccess
+	synthDevice.AccessExpiresAt = accessExpiry
+
+	encRefresh, err := cipher.Encrypt(refreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+	synthDevice.RefreshToken = encRefresh
+	synthDevice.RefreshExpiresAt = refreshExpiry
+
+	// Save the changes to the database
+	// todo add transaction handling
+	_, err = synthDevice.Update(c, t.Dbc().Writer, boil.Infer())
+	if err != nil {
+		// Handle error
+		return err
+	}
+
+	return nil
+}
+
+//func (t *TeslaController) Retrieve(_ context.Context, user common.Address) (*Credential, error) {
+//	cacheKey := prefix + user.Hex()
+//	cachedCred, ok := s.Cache.Get(cacheKey)
+//	if !ok {
+//		return nil, ErrNotFound
+//	}
+//
+//	encCred := cachedCred.(string)
+//
+//	// Don't want a second call to pick this up. Use it or lose it.
+//	s.Cache.Delete(cacheKey)
+//
+//	if len(encCred) == 0 {
+//		return nil, fmt.Errorf("no credential found")
+//	}
+//
+//	credJSON, err := s.Cipher.Decrypt(encCred)
+//	if err != nil {
+//		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
+//	}
+//
+//	var cred Credential
+//	if err := json.Unmarshal([]byte(credJSON), &cred); err != nil {
+//		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
+//	}
+//
+//	if cred.AccessToken == "" || cred.RefreshToken == "" || cred.Expiry.IsZero() {
+//		return nil, errors.New("credential was missing a required field")
+//	}
+//
+//	return &cred, nil
+//}

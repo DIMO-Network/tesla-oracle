@@ -87,8 +87,15 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
-	cred := &service.Credential{
-		AccessToken: "valid-access-token",
+	// Define the expected input and output
+	authCode := "testAuthCode"
+	redirectURI := "https://example.com/callback"
+	expectedResponse := &service.TeslaAuthCodeResponse{
+		AccessToken:  "mockAccessToken",
+		RefreshToken: "mockRefreshToken",
+		Expiry:       time.Now().Add(time.Hour),
+		TokenType:    "Bearer",
+		Region:       "NA",
 	}
 
 	// when
@@ -104,8 +111,9 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockCredStore := new(MockCredStore)
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
-	mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
-	mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, cred.AccessToken, vin).Return(nil)
+	//mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
+	mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, expectedResponse.AccessToken, vin).Return(nil)
+	mockTeslaService.On("CompleteTeslaAuthCodeExchange", mock.Anything, authCode, redirectURI).Return(expectedResponse, nil)
 
 	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -122,11 +130,19 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	})
 	app.Use(helpers.NewWalletMiddleware())
 	app.Post("/v1/tesla/telemetry/subscribe/:vehicleTokenId", controller.TelemetrySubscribe)
+
+	// Create the request body
+	requestBody := `{
+		"authorizationCode": "testAuthCode",
+		"redirectUri": "https://example.com/callback"
+	}`
+
 	req, _ := http.NewRequest(
 		"POST",
 		"/v1/tesla/telemetry/subscribe/789",
-		strings.NewReader(""),
+		strings.NewReader(requestBody),
 	)
+	req.Header.Set("Content-Type", "application/json")
 
 	// token
 	err := generateJWT(req)
@@ -161,11 +177,6 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 	// when
-	cred := &service.Credential{
-		AccessToken: "valid-access-token",
-	}
-
-	// Set up mocks
 	mockIdentitySvc := new(MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
 		Owner: ownerAdd,
@@ -177,8 +188,14 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockCredStore := new(MockCredStore)
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
-	mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
-	mockTeslaService.On("UnSubscribeFromTelemetryData", mock.Anything, cred.AccessToken, vin).Return(nil)
+	mockTeslaService.On("GetPartnersToken", mock.Anything).Return(&service.PartnersAccessTokenResponse{
+		AccessToken: "someToken",
+		ExpiresIn:   22222,
+		TokenType:   "Bearer",
+	},
+		nil,
+	)
+	mockTeslaService.On("UnSubscribeFromTelemetryData", mock.Anything, "someToken", vin).Return(nil)
 
 	// Initialize the controller
 	settings := config.Settings{MobileAppDevLicense: walletAddress}
@@ -266,9 +283,20 @@ type MockTeslaFleetAPIService struct {
 	mock.Mock
 }
 
+func (m *MockTeslaFleetAPIService) GetPartnersToken(ctx context.Context) (*service.PartnersAccessTokenResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.PartnersAccessTokenResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *MockTeslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*service.TeslaAuthCodeResponse, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, authCode, redirectURI)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.TeslaAuthCodeResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *MockTeslaFleetAPIService) GetVehicles(ctx context.Context, token string) ([]service.TeslaVehicle, error) {

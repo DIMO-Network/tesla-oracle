@@ -42,6 +42,7 @@ type TeslaFleetAPIService interface {
 	SubscribeForTelemetryData(ctx context.Context, token, vin string) error
 	UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error
 	GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*VehicleTelemetryStatus, error)
+	GetPartnersToken(ctx context.Context) (*PartnersAccessTokenResponse, error)
 }
 
 var teslaScopes = []string{"openid", "offline_access", "user_data", "vehicle_device_data", "vehicle_cmds", "vehicle_charging_cmds"}
@@ -68,6 +69,12 @@ type TeslaAuthCodeResponse struct {
 	Expiry       time.Time `json:"expiry"`
 	TokenType    string    `json:"token_type"`
 	Region       string    `json:"region"`
+}
+
+type PartnersAccessTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	ExpiresIn   int    `json:"expires_in"`
+	TokenType   string `json:"token_type"`
 }
 
 type fleetStatusResponse struct {
@@ -211,6 +218,41 @@ func (t *teslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context
 		Expiry:       tok.Expiry,
 		TokenType:    tok.TokenType,
 	}, nil
+}
+
+// GetPartnersToken retrieves a partner's access token from the Tesla Fleet API.
+func (t *teslaFleetAPIService) GetPartnersToken(ctx context.Context) (*PartnersAccessTokenResponse, error) {
+	data := url.Values{}
+	data.Set("grant_type", "client_credentials")
+	data.Set("client_id", t.Settings.TeslaClientID)
+	data.Set("client_secret", t.Settings.TeslaClientSecret)
+	data.Set("audience", t.Settings.PartnersTeslaFleetURL)
+	data.Set("scope", strings.Join(teslaScopes, " "))
+
+	teslaUrl := t.Settings.TeslaFleetURL
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, teslaUrl, strings.NewReader(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+
+	resp, err := t.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	var tokenResponse PartnersAccessTokenResponse
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", err)
+	}
+
+	return &tokenResponse, nil
 }
 
 // GetVehicles calls Tesla Fleet API to get a list of vehicles using authorization token
