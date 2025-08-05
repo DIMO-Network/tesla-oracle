@@ -2,10 +2,11 @@ package app
 
 import (
 	"errors"
-	"github.com/DIMO-Network/shared/pkg/db"
 	"os"
 	"strconv"
 	"time"
+
+	"github.com/DIMO-Network/shared/pkg/db"
 
 	"github.com/DIMO-Network/go-transactions"
 	"github.com/DIMO-Network/shared/pkg/cipher"
@@ -106,6 +107,8 @@ func App(
 	vehicleGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)
 	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
+	// FIXME: temporary, remove when finished
+	vehicleGroup.Post("/clear", onboardCtrl.ClearOnboardingData)
 
 	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
 	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
