@@ -478,15 +478,15 @@ func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synth
 	if err != nil {
 		return fmt.Errorf("failed to encrypt access token: %w", err)
 	}
-	synthDevice.AccessToken = encAccess
-	synthDevice.AccessExpiresAt = accessExpiry
+	synthDevice.AccessToken = null.String{String: encAccess, Valid: true}
+	synthDevice.AccessExpiresAt = null.TimeFrom(accessExpiry)
 
 	encRefresh, err := cipher.Encrypt(refreshToken)
 	if err != nil {
 		return fmt.Errorf("failed to encrypt access token: %w", err)
 	}
-	synthDevice.RefreshToken = encRefresh
-	synthDevice.RefreshExpiresAt = refreshExpiry
+	synthDevice.RefreshToken = null.String{String: encRefresh, Valid: true}
+	synthDevice.RefreshExpiresAt = null.TimeFrom(refreshExpiry)
 
 	// update status
 	synthDevice.SubscriptionStatus = null.String{String: "active", Valid: true}
