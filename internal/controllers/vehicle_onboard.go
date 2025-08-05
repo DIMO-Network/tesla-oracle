@@ -239,6 +239,7 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 
 	localLog := v.logger.With().Str(logfields.FunctionName, "SubmitMintDataForVins").Logger()
 	localLog.Debug().Msg("Submitting VINs to mint")
+	localLog.Debug().Interface("params", params).Msg("Got params")
 
 	validVins := make([]string, 0, len(params.VinMintingData))
 	validVinsMintingData := make([]VinTransactionData, 0, len(params.VinMintingData))
@@ -380,6 +381,7 @@ func (v *VehicleController) getValidatedMintingData(data *VinTransactionData, _ 
 	result.Vin = strippedVin
 	result.TypedData = data.TypedData
 	result.Signature = data.Signature
+	result.Sacd = data.Sacd
 	return result, nil
 }
 
