@@ -101,7 +101,7 @@ export class AppElement extends LitElement {
                     </div>
                     <div>
                         ${repeat(this.signatures, (_, i) => i, (item) => html`
-                             <div class="font-mono">${item}</div>`)}
+                             <div class="font-mono">${JSON.stringify(item)}</div>`)}
                     </div>
                 </div>
             </div>
