@@ -19,7 +19,7 @@ interface VinsOnboardingResult {
 interface VinMintData {
     vin: string;
     typedData: any;
-    signature?: string;
+    signature?: `0x${string}`;
     sacd?: any;
 }
 
