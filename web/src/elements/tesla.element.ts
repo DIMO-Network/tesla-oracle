@@ -11,7 +11,7 @@ import {TeslaSettingsContext, teslaSettingsContext} from "@context/tesla-setting
 import {TeslaAuthContext, teslaAuthContext} from "@context/tesla-auth.context.ts";
 import qs from "qs";
 import {repeat} from "lit/directives/repeat.js";
-import {BaseOnboardingElement, SacdInput} from "@elements/base-onboarding-element.ts";
+import {BaseOnboardingElement} from "@elements/base-onboarding-element.ts";
 
 interface DeviceDefinition {
     id: string;
@@ -58,12 +58,12 @@ export class TeslaElement extends BaseOnboardingElement {
     });
 
     private onboardVehicleTask = new Task(this, {
-        task: async ([vin, sacd]: [string, sacd: SacdInput | null], {}) => {
+        task: async ([vin]: [string], {}) => {
             if (!vin) {
                 return [];
             }
 
-            return await this.onboardVINs([vin], sacd);
+            return await this.onboardVINs([vin]);
         },
         autoRun: false
     });
@@ -133,6 +133,6 @@ export class TeslaElement extends BaseOnboardingElement {
     }
 
     handleOnboardClick(vin: string) {
-        this.onboardVehicleTask.run([vin, null]);
+        this.onboardVehicleTask.run([vin]);
     }
 }
