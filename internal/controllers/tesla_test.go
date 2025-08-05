@@ -168,6 +168,142 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockTeslaService.AssertExpectations(s.T())
 }
 
+func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
+	// given
+	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
+	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
+	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
+	walletAddress := common.HexToAddress(ownerAdd)
+
+	dbVin := models.SyntheticDevice{
+		Address:           synthDeviceAddress.Bytes(),
+		Vin:               vin,
+		TokenID:           null.NewInt(456, true),
+		VehicleTokenID:    null.NewInt(789, true),
+		WalletChildNumber: 111,
+	}
+
+	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+	// when
+	mockTeslaService := new(MockTeslaFleetAPIService)
+
+	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, s.pdb.DBS)
+
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		// Simulate JWT middleware setting the user in Locals
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"ethereum_address": ownerAdd,
+		})
+		c.Locals("user", token)
+		return c.Next()
+	})
+	app.Use(helpers.NewWalletMiddleware())
+	app.Post("/v1/tesla/telemetry/subscribe/:vehicleTokenId", controller.TelemetrySubscribe)
+
+	// Create the request body
+	emptyBody := ""
+
+	req, _ := http.NewRequest(
+		"POST",
+		"/v1/tesla/telemetry/subscribe/789",
+		strings.NewReader(emptyBody),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	// token
+	err := generateJWT(req)
+	assert.NoError(s.T(), err)
+
+	// then
+	resp, err := app.Test(req)
+
+	// verify
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fiber.StatusBadRequest, resp.StatusCode)
+
+	// Query the database to verify subscription status
+	device, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(789, true))).One(s.ctx, s.pdb.DBS().Reader)
+	require.NoError(s.T(), err)
+
+	// Assert that the subscription status is set and not empty
+	assert.True(s.T(), device.SubscriptionStatus.Valid)
+	assert.Equal(s.T(), "pending", device.SubscriptionStatus.String)
+}
+
+func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
+	// given
+	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
+	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
+	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
+	walletAddress := common.HexToAddress(ownerAdd)
+
+	dbVin := models.SyntheticDevice{
+		Address:           synthDeviceAddress.Bytes(),
+		Vin:               vin,
+		TokenID:           null.NewInt(456, true),
+		VehicleTokenID:    null.NewInt(789, true),
+		WalletChildNumber: 111,
+	}
+
+	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+	// when
+	mockTeslaService := new(MockTeslaFleetAPIService)
+
+	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, s.pdb.DBS)
+
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		// Simulate JWT middleware setting the user in Locals
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"ethereum_address": ownerAdd,
+		})
+		c.Locals("user", token)
+		return c.Next()
+	})
+	app.Use(helpers.NewWalletMiddleware())
+	app.Post("/v1/tesla/telemetry/subscribe/:vehicleTokenId", controller.TelemetrySubscribe)
+
+	// Create the request body
+	noAuthCodeBody := `{
+		"redirectUri": "https://example.com/callback"
+	}`
+
+	req, _ := http.NewRequest(
+		"POST",
+		"/v1/tesla/telemetry/subscribe/789",
+		strings.NewReader(noAuthCodeBody),
+	)
+	req.Header.Set("Content-Type", "application/json")
+
+	// token
+	err := generateJWT(req)
+	assert.NoError(s.T(), err)
+
+	// then
+	resp, err := app.Test(req)
+
+	// verify
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fiber.StatusBadRequest, resp.StatusCode)
+
+	// Query the database to verify subscription status
+	device, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(789, true))).One(s.ctx, s.pdb.DBS().Reader)
+	require.NoError(s.T(), err)
+
+	// Assert that the subscription status is set and not empty
+	assert.True(s.T(), device.SubscriptionStatus.Valid)
+	assert.Equal(s.T(), "pending", device.SubscriptionStatus.String)
+}
+
 func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// given
 	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"

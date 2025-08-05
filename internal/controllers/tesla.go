@@ -132,7 +132,7 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		Str("Name", "Telemetry/Subscribe").
 		Logger()
 
-	logger.Debug().Msg("Received telemetry subscribe request.")
+	logger.Debug().Msgf("Received telemetry subscribe request for %s.", vehicleTokenId)
 
 	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
@@ -140,16 +140,16 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
 	}
 
-	// Call identity to retrieve SyntheticDevice Address
-	vehicle, err := t.fetchVehicle(vehicleTokenId)
-	if err != nil {
-		return err
-	}
-
 	// finish getting the access token
 	teslaAuth, err := t.getAccessToken(c)
 	if err != nil {
 		logger.Err(err).Msg("Failed to get access token.")
+		return err
+	}
+
+	// Call identity to retrieve SyntheticDevice Address
+	vehicle, err := t.fetchVehicle(vehicleTokenId)
+	if err != nil {
 		return err
 	}
 
@@ -188,7 +188,7 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry credentials.")
 	}
 
-	logger.Info().Msg("Successfully subscribed to telemetry.")
+	logger.Info().Msgf("Successfully subscribed to telemetry vehicle: %s.", vehicleTokenId)
 	return c.JSON(fiber.Map{"message": "Successfully subscribed to vehicle telemetry."})
 }
 
@@ -218,18 +218,12 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 		Str("Name", "Telemetry/Unsubscribe").
 		Logger()
 
-	logger.Info().Msg("Received telemetry unsubscribe request.")
+	logger.Info().Msgf("Received telemetry unsubscribe request for %s.", vehicleTokenId)
 
 	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
 	if walletAddress != t.settings.MobileAppDevLicense {
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to unsubscribe from telemetry.", walletAddress.Hex()))
-	}
-
-	// Retrieve Tesla OAuth credentials from the store
-	vehicle, err := t.fetchVehicle(vehicleTokenId)
-	if err != nil {
-		return err
 	}
 
 	// Get partners token
@@ -242,6 +236,11 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	// Validate access token
 	if partnersTokenResp.AccessToken == "" {
 		return fiber.NewError(fiber.StatusInternalServerError, "Partners token response did not contain an access token.")
+	}
+
+	vehicle, err := t.fetchVehicle(vehicleTokenId)
+	if err != nil {
+		return err
 	}
 
 	// get VIN using the synthetic device address
@@ -267,7 +266,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update synthetic device status.")
 	}
 
-	logger.Info().Msg("Successfully unsubscribed from telemetry.")
+	logger.Info().Msgf(`Successfully unsubscribed vehicle %s from telemetry data.`, vehicleTokenId)
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Successfully unsubscribed from telemetry data",
 	})
@@ -371,7 +370,12 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 func (t *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeResponse, error) {
 	var reqBody CompleteOAuthExchangeRequest
 	if err := c.BodyParser(&reqBody); err != nil {
-		return nil, fiber.NewError(fiber.StatusBadRequest, "Couldn't parse JSON request body.")
+		t.logger.Err(err).Msg("Failed to parse request body OR it is empty.")
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Failed to parse request body OR it is empty.")
+	}
+
+	if reqBody.AuthorizationCode == "" && reqBody.RedirectURI == "" {
+		return nil, fiber.NewError(fiber.StatusBadRequest, "Both AuthorizationCode and RedirectURI are missing.")
 	}
 
 	if reqBody.AuthorizationCode == "" {
