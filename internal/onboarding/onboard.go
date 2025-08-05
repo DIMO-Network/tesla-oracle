@@ -76,10 +76,10 @@ func NewTransactionsClient(settings *config.Settings) (*transactions.Client, err
 }
 
 type OnboardingSacd struct {
-	Grantee     common.Address
-	Permissions *big.Int
-	Expiration  *big.Int
-	Source      string
+	Grantee     common.Address `json:"grantee"`
+	Permissions *big.Int       `json:"permissions"`
+	Expiration  *big.Int       `json:"expiration"`
+	Source      string         `json:"source"`
 }
 
 type OnboardingArgs struct {

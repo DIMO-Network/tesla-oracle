@@ -200,10 +200,10 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 }
 
 type SacdInput struct {
-	Grantee     common.Address
-	Permissions int64
-	Expiration  int64
-	Source      string
+	Grantee     common.Address `json:"grantee"`
+	Permissions int64          `json:"permissions"`
+	Expiration  int64          `json:"expiration"`
+	Source      string         `json:"source"`
 }
 type VinTransactionData struct {
 	Vin       string            `json:"vin"`
