@@ -20,6 +20,7 @@ interface VinMintData {
     vin: string;
     typedData: any;
     signature?: string;
+    sacd?: any;
 }
 
 interface VinsMintDataResult {
@@ -163,15 +164,16 @@ export class BaseOnboardingElement extends LitElement {
         const result: VinMintData[] = [];
         for (const d of mintingData) {
             if (d.typedData) {
-                const signature = await this.signingService.signTypedData(d.typedData);
+                const signatureData = await this.signingService.signMintTypedData(d.typedData);
 
-                if (!signature) {
+                if (!signatureData) {
                     continue
                 }
 
                 result.push({
                     ...d,
-                    signature
+                    signature: signatureData.signature,
+                    sacd: signatureData.sacd,
                 })
             } else {
                 result.push(d)
@@ -181,13 +183,9 @@ export class BaseOnboardingElement extends LitElement {
         return result;
     }
 
-    async submitMintingData(mintingData: VinMintData[], sacd: SacdInput | null) {
-        const payload: {vinMintingData: VinMintData[], sacd?: SacdInput} = {
+    async submitMintingData(mintingData: VinMintData[]) {
+        const payload: {vinMintingData: VinMintData[]} = {
             vinMintingData: mintingData,
-        }
-
-        if (sacd !== null) {
-            payload.sacd = sacd
         }
 
         const mintResponse = await this.api.callApi('POST', '/v1/vehicle/mint', payload, true);
@@ -226,7 +224,7 @@ export class BaseOnboardingElement extends LitElement {
         return success;
     }
 
-    async onboardVINs(vins: string[], sacd: SacdInput | null): Promise<boolean> {
+    async onboardVINs(vins: string[]): Promise<boolean> {
         let allVinsValid = true;
         for (const vin of vins) {
             const validVin = vin?.length === 17
@@ -250,7 +248,7 @@ export class BaseOnboardingElement extends LitElement {
         }
 
         const signedMintData = await this.signMintingData(mintData);
-        const minted = await this.submitMintingData(signedMintData, sacd);
+        const minted = await this.submitMintingData(signedMintData);
 
         if (!minted) {
             this.displayFailure("Failed to onboard at least one VIN");

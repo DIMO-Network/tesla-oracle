@@ -5,7 +5,7 @@ import {Message, MessageService} from "@services/message.service.ts";
 
 // @ts-ignore
 import styles from '@styles/main.css?inline'
-import {SigningService} from "@services/signing.service.ts";
+import {SignatureMessageData, SigningService} from "@services/signing.service.ts";
 
 
 @customElement('app-element')
@@ -16,7 +16,7 @@ export class AppElement extends LitElement {
     private signingService = SigningService.getInstance();
 
     @state() messages: Message[] = [];
-    @state() signatures: `0x${string}`[] = [];
+    @state() signatures: SignatureMessageData[] = [];
 
     connectedCallback() {
         super.connectedCallback();
@@ -70,8 +70,8 @@ export class AppElement extends LitElement {
         }
 
         try {
-            const signature = await this.signingService.signTypedData(data)
-            this.signatures = [...this.signatures, signature];
+            const signatureData = await this.signingService.signMintTypedData(data)
+            this.signatures = [...this.signatures, signatureData];
         } catch (e) {
             console.error(e);
         }
