@@ -299,3 +299,32 @@ func (ds *OnboardingService) GetVehiclesFromDB(ctx context.Context) (dbmodels.On
 
 	return vins, nil
 }
+
+// DeleteAll deletes all onboarding records.
+func (ds *OnboardingService) DeleteAll(ctx context.Context) error {
+	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		ds.logger.Error().Err(err).Msg("Failed to begin transaction")
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil && err == nil {
+				ds.logger.Error().Err(rbErr).Msg("Failed to rollback transaction")
+			}
+		}
+	}()
+
+	_, err = dbmodels.Onboardings().DeleteAll(ctx, tx)
+	if err != nil {
+		ds.logger.Error().Err(err).Msg("Failed to delete VINs")
+		return fmt.Errorf("failed to delete VINs: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		ds.logger.Error().Err(err).Msg("Failed to commit transaction")
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
