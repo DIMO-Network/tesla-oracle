@@ -282,6 +282,7 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 			Grantee:     args.Sacd.Grantee,
 			Permissions: args.Sacd.Permissions,
 			Expiration:  args.Sacd.Expiration,
+			Source:      args.Sacd.Source,
 		}
 
 		w.logger.Debug().Str(logfields.VIN, args.VIN).Str(logfields.FunctionName, "MintVehicleWithSDAndUpdate").
