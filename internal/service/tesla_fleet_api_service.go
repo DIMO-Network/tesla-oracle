@@ -229,7 +229,7 @@ func (t *teslaFleetAPIService) GetPartnersToken(ctx context.Context) (*PartnersA
 	data.Set("audience", t.Settings.PartnersTeslaFleetURL)
 	data.Set("scope", strings.Join(teslaScopes, " "))
 
-	teslaUrl := t.Settings.TeslaFleetURL
+	teslaUrl := t.Settings.TeslaTokenURL
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, teslaUrl, strings.NewReader(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create request: %w", err)
