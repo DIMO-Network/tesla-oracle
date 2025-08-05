@@ -30,24 +30,24 @@ import (
 var vinRegexp, _ = regexp.Compile("^[A-HJ-NPR-Z0-9]{17}$")
 
 type VehicleController struct {
-	settings    *config.Settings
-	logger      *zerolog.Logger
-	identity    service.IdentityAPIService
-	vs          *service.Vehicle
-	riverClient *river.Client[pgx.Tx]
-	ws          service.SDWalletsAPI
-	tr          *transactions.Client
+	settings      *config.Settings
+	logger        *zerolog.Logger
+	identitySvc   service.IdentityAPIService
+	onboardingSvc *service.OnboardingService
+	riverClient   *river.Client[pgx.Tx]
+	walletSvc     service.SDWalletsAPI
+	transactions  *transactions.Client
 }
 
-func NewVehicleOnboardController(settings *config.Settings, logger *zerolog.Logger, identity service.IdentityAPIService, vs *service.Vehicle, riverClient *river.Client[pgx.Tx], ws service.SDWalletsAPI, tr *transactions.Client) *VehicleController {
+func NewVehicleOnboardController(settings *config.Settings, logger *zerolog.Logger, identitySvc service.IdentityAPIService, onboardingSvc *service.OnboardingService, riverClient *river.Client[pgx.Tx], walletSvc service.SDWalletsAPI, transactions *transactions.Client) *VehicleController {
 	return &VehicleController{
-		settings:    settings,
-		logger:      logger,
-		identity:    identity,
-		vs:          vs,
-		riverClient: riverClient,
-		ws:          ws,
-		tr:          tr,
+		settings:      settings,
+		logger:        logger,
+		identitySvc:   identitySvc,
+		onboardingSvc: onboardingSvc,
+		riverClient:   riverClient,
+		walletSvc:     walletSvc,
+		transactions:  transactions,
 	}
 }
 
@@ -107,7 +107,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 	mintingData := make([]VinTransactionData, 0, len(validVins))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.vs.GetVehiclesByVinsAndOnboardingStatusRange(
+		dbVins, err := v.onboardingSvc.GetVehiclesByVinsAndOnboardingStatusRange(
 			c.Context(),
 			validVins,
 			onboarding.OnboardingStatusVendorValidationSuccess,
@@ -137,7 +137,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 
 		for _, dbVin := range dbVins {
 			localLog.Debug().Str(logfields.DefinitionID, dbVin.DeviceDefinitionID.String).Msgf("getting definition for vin")
-			definition, err := v.identity.GetDeviceDefinitionByID(dbVin.DeviceDefinitionID.String)
+			definition, err := v.identitySvc.GetDeviceDefinitionByID(dbVin.DeviceDefinitionID.String)
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 					"error": "Failed to load device definition",
@@ -147,7 +147,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 			var typedData *signer.TypedData
 
 			if dbVin.VehicleTokenID.IsZero() {
-				typedData = v.tr.GetMintVehicleWithDDTypedData(
+				typedData = v.transactions.GetMintVehicleWithDDTypedData(
 					new(big.Int).SetUint64(definition.Manufacturer.TokenID),
 					walletAddress,
 					definition.DeviceDefinitionID,
@@ -168,7 +168,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 				)
 			} else if dbVin.SyntheticTokenID.IsZero() {
 				integrationOrConnectionID, ok := new(big.Int).SetString(v.settings.ConnectionTokenID, 10)
-				typedData = v.tr.GetMintSDTypedDataV2(integrationOrConnectionID, big.NewInt(dbVin.VehicleTokenID.Int64))
+				typedData = v.transactions.GetMintSDTypedDataV2(integrationOrConnectionID, big.NewInt(dbVin.VehicleTokenID.Int64))
 
 				if !ok {
 					v.logger.Error().Err(err).Msg("Failed to set integration or connection token ID")
@@ -209,11 +209,11 @@ type VinTransactionData struct {
 	Vin       string            `json:"vin"`
 	TypedData *signer.TypedData `json:"typedData,omitempty"`
 	Signature hexutil.Bytes     `json:"signature,omitempty"`
+	Sacd      SacdInput         `json:"sacd,omitempty"`
 }
 
 type MintDataForVins struct {
 	VinMintingData []VinTransactionData `json:"vinMintingData"`
-	Sacd           SacdInput            `json:"sacd,omitempty"`
 }
 
 type VinUserOperationData struct {
@@ -272,7 +272,7 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 	statuses := make([]VinStatus, 0, len(params.VinMintingData))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.vs.GetVehiclesByVins(c.Context(), validVins)
+		dbVins, err := v.onboardingSvc.GetVehiclesByVins(c.Context(), validVins)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")
@@ -299,12 +299,12 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 
 			var sacd *onboarding.OnboardingSacd
 
-			if params.Sacd.Expiration != 0 && params.Sacd.Permissions != 0 {
+			if mint.Sacd.Expiration != 0 && mint.Sacd.Permissions != 0 {
 				sacd = &onboarding.OnboardingSacd{
-					Grantee:     params.Sacd.Grantee,
-					Expiration:  new(big.Int).SetInt64(params.Sacd.Expiration),
-					Permissions: new(big.Int).SetInt64(params.Sacd.Permissions),
-					Source:      params.Sacd.Source,
+					Grantee:     mint.Sacd.Grantee,
+					Expiration:  new(big.Int).SetInt64(mint.Sacd.Expiration),
+					Permissions: new(big.Int).SetInt64(mint.Sacd.Permissions),
+					Source:      mint.Sacd.Source,
 				}
 			}
 
@@ -342,7 +342,7 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 				})
 			}
 
-			err = v.vs.InsertOrUpdateVin(c.Context(), dbVin)
+			err = v.onboardingSvc.InsertOrUpdateVin(c.Context(), dbVin)
 
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -369,7 +369,7 @@ func (v *VehicleController) getValidatedMintingData(data *VinTransactionData, _ 
 
 	// Validate typed data with device definition (if applicable)
 	if data.TypedData != nil && data.TypedData.PrimaryType == "MintVehicleWithDeviceDefinitionSign" {
-		_, err := v.identity.GetDeviceDefinitionByID(data.TypedData.Message["deviceDefinitionId"].(string))
+		_, err := v.identitySvc.GetDeviceDefinitionByID(data.TypedData.Message["deviceDefinitionId"].(string))
 		if err != nil {
 			return nil, err
 		}
@@ -433,7 +433,7 @@ func (v *VehicleController) GetMintStatusForVins(c *fiber.Ctx) error {
 	statuses := make([]VinStatus, 0, len(validVins))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.vs.GetVehiclesByVins(c.Context(), validVins)
+		dbVins, err := v.onboardingSvc.GetVehiclesByVins(c.Context(), validVins)
 		if err != nil {
 			if errors.Is(err, service.ErrVehicleNotFound) {
 				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")

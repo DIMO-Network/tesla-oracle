@@ -39,7 +39,7 @@ func NewTransactionsClient(settings *config.Settings) (*transactions.Client, err
 		return nil, errors.New("invalid configuration: missing Registry address")
 	}
 	if len(settings.VehicleNftAddress.Bytes()) == 0 {
-		return nil, errors.New("invalid configuration: missing Vehicle NFT address")
+		return nil, errors.New("invalid configuration: missing OnboardingService NFT address")
 	}
 	if len(settings.SyntheticNftAddress.Bytes()) == 0 {
 		return nil, errors.New("invalid configuration: missing Synthetic NFT address")
@@ -153,9 +153,9 @@ func (w *OnboardingWorker) Work(ctx context.Context, job *river.Job[OnboardingAr
 		return err
 	}
 
-	// If there's no Vehicle Token ID, mint all
+	// If there's no OnboardingService Token ID, mint all
 	if !record.VehicleTokenID.Valid {
-		w.logger.Debug().Str(logfields.VIN, job.Args.VIN).Msg("No Vehicle Token ID, minting all")
+		w.logger.Debug().Str(logfields.VIN, job.Args.VIN).Msg("No OnboardingService Token ID, minting all")
 		record, err = w.MintVehicleWithSDAndUpdate(ctx, record, job.Args)
 		if err != nil {
 			return err
@@ -196,7 +196,7 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 		_ = w.update(ctx, record, args, boil.Whitelist(dbmodels.OnboardingColumns.OnboardingStatus, dbmodels.OnboardingColumns.VehicleTokenID, dbmodels.OnboardingColumns.SyntheticTokenID, dbmodels.OnboardingColumns.WalletIndex))
 	})()
 
-	w.logger.Debug().Str(logfields.VIN, args.VIN).Msg("Minting Vehicle with SD")
+	w.logger.Debug().Str(logfields.VIN, args.VIN).Msg("Minting OnboardingService with SD")
 
 	deviceDefinition, err := w.identity.FetchDeviceDefinitionByID(record.DeviceDefinitionID.String)
 	if err != nil {
@@ -260,7 +260,7 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 		},
 	}
 	w.logger.Debug().Str(logfields.VIN, args.VIN).Str(logfields.FunctionName, "MintVehicleWithSDAndUpdate").
-		Interface("mintInput", mintInput).Msg("Minting Vehicle with SD Input")
+		Interface("mintInput", mintInput).Msg("Minting OnboardingService with SD Input")
 
 	if args.Sacd == nil {
 		w.m.Lock()
@@ -304,7 +304,7 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 		record.OnboardingStatus = OnboardingStatusMintSuccess
 	}
 
-	w.logger.Debug().Str(logfields.VIN, args.VIN).Int64(logfields.VehicleTokenID, record.VehicleTokenID.Int64).Msg("Vehicle minted")
+	w.logger.Debug().Str(logfields.VIN, args.VIN).Int64(logfields.VehicleTokenID, record.VehicleTokenID.Int64).Msg("OnboardingService minted")
 	w.logger.Debug().Str(logfields.VIN, args.VIN).Int64("syntheticDeviceTokenId", record.SyntheticTokenID.Int64).Msg("SD minted")
 
 	return record, nil
