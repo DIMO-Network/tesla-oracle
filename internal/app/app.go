@@ -29,7 +29,7 @@ func App(
 	logger *zerolog.Logger,
 	identitySvc service.IdentityAPIService,
 	ddSvc service.DeviceDefinitionsAPIService,
-	onboardingSvc *service.Vehicle,
+	onboardingSvc *service.OnboardingService,
 	riverClient *river.Client[pgx.Tx],
 	ws service.SDWalletsAPI,
 	tr *transactions.Client, dbs func() *db.ReaderWriter) *fiber.App {

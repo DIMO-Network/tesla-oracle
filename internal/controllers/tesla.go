@@ -41,11 +41,11 @@ type TeslaController struct {
 	identitySvc    service.IdentityAPIService
 	requiredScopes []string
 	store          CredStore
-	onboarding     *service.Vehicle
+	onboarding     *service.OnboardingService
 	Dbc            func() *db.ReaderWriter
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.Vehicle, Dbc func() *db.ReaderWriter) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, Dbc func() *db.ReaderWriter) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -111,13 +111,13 @@ var teslaCodeFailureCount = promauto.NewCounterVec(
 // @Tags        tesla,subscribe
 // @Accept      json
 // @Produce     json
-// @Param       vehicleTokenId path string true "Vehicle Token ID"
+// @Param       vehicleTokenId path string true "OnboardingService Token ID"
 // @Param       body CompleteOAuthExchangeRequest  "Authorization details"
 // @Security    BearerAuth
 // @Success     200 {object} map[string]string "Successfully subscribed to vehicle telemetry."
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
-// @Failure     404 {object} fiber.Error "Vehicle not found or owner information is missing."
+// @Failure     404 {object} fiber.Error "OnboardingService not found or owner information is missing."
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/tesla/telemetry/subscribe/{vehicleTokenId} [post]
 func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
@@ -174,7 +174,7 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 			case service.UnsupportedVehicle:
 				return fiber.NewError(fiber.StatusBadRequest, "Pre-2021 Model S and X do not support telemetry.")
 			case service.UnsupportedFirmware:
-				return fiber.NewError(fiber.StatusBadRequest, "Vehicle firmware version is earlier than 2024.26.")
+				return fiber.NewError(fiber.StatusBadRequest, "OnboardingService firmware version is earlier than 2024.26.")
 			}
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
@@ -198,12 +198,12 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 // @Tags        tesla,unsubscribe
 // @Accept      json
 // @Produce     json
-// @Param       vehicleTokenId path string true "Vehicle Token ID"
+// @Param       vehicleTokenId path string true "OnboardingService Token ID"
 // @Security    BearerAuth
 // @Success     200 {object} map[string]string "Successfully unsubscribed from telemetry data."
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
-// @Failure     404 {object} fiber.Error "Vehicle not found or owner information is missing."
+// @Failure     404 {object} fiber.Error "OnboardingService not found or owner information is missing."
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/tesla/telemetry/unsubscribe/{vehicleTokenId} [post]
 func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
@@ -414,8 +414,8 @@ func (tc *TeslaController) fetchVehicle(vehicleTokenId string) (*models.Vehicle,
 	}
 
 	if vehicle == nil || vehicle.Owner == "" || vehicle.SyntheticDevice.Address == "" {
-		tc.logger.Warn().Msg("Vehicle not found or owner information or synthetic device address is missing.")
-		return nil, fiber.NewError(fiber.StatusNotFound, "Vehicle not found or owner information or synthetic device address is missing.")
+		tc.logger.Warn().Msg("OnboardingService not found or owner information or synthetic device address is missing.")
+		return nil, fiber.NewError(fiber.StatusNotFound, "OnboardingService not found or owner information or synthetic device address is missing.")
 	}
 	return vehicle, nil
 }

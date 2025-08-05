@@ -74,7 +74,7 @@ func main() {
 		logger.Fatal().Err(err).Msg("failed to create transactions client")
 	}
 
-	onboardingService := service.NewVehicleService(&pdb, &logger)
+	onboardingService := service.NewOnboardingService(&pdb, &logger)
 	identityService := service.NewIdentityAPIService(&logger, &settings)
 	deviceDefinitionsService := service.NewDeviceDefinitionsAPIService(&logger, &settings)
 

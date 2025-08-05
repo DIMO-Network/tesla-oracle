@@ -1,6 +1,11 @@
 import {Message, MessageService} from "@services/message.service.ts";
 
-type ResolveFn = (value: `0x${string}` | PromiseLike<`0x${string}`>) => void
+export interface SignatureMessageData {
+    signature: `0x${string}`,
+    sacd?: any,
+}
+
+type ResolveFn = (value: SignatureMessageData | PromiseLike<SignatureMessageData>) => void
 
 export class SigningService {
     private static instance: SigningService;
@@ -22,7 +27,7 @@ export class SigningService {
         this.messageService.registerHandler('signature', this.onMessage.bind(this));
     }
 
-    public async signTypedData(typedData: any) {
+    public async signMintTypedData(typedData: any) {
         if (!this.messageService) {
             console.error('No MessageService registered');
             return Promise.reject('No MessageService registered');
@@ -33,27 +38,26 @@ export class SigningService {
             return Promise.reject('Signature is already scheduled');
         }
 
-        this.messageService.sendMessage({type: 'sign', data: {typedData}});
-        return new Promise<`0x${string}`>((resolve, reject) => {
+        this.messageService.sendMessage({type: 'sign-mint', data: {typedData}});
+        return new Promise<SignatureMessageData>((resolve, reject) => {
             this.waitForSignatureTimeout = setTimeout(() => {
                 return reject('Signature timed out')
             }, 120_000);
 
-            this.waitForSignatureResolve = (value: `0x${string}` | PromiseLike<`0x${string}`>)=> {
+            this.waitForSignatureResolve = (value: SignatureMessageData | PromiseLike<SignatureMessageData>)=> {
                 clearTimeout(this.waitForSignatureTimeout);
                 this.waitForSignatureTimeout = undefined;
                 this.waitForSignatureResolve = undefined;
                 resolve(value);
             };
         })
-
     }
 
     private onMessage(message: Message) {
         console.debug('SigningService.onMessage', message)
 
         if (!!this.waitForSignatureResolve) {
-            this.waitForSignatureResolve(message.data as `0x${string}`);
+            this.waitForSignatureResolve(message.data as SignatureMessageData);
             this.waitForSignatureResolve = undefined;
         }
     }
