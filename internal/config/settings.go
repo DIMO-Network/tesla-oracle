@@ -51,4 +51,9 @@ type Settings struct {
 	TeslaTelemetryPort          int    `yaml:"TESLA_TELEMETRY_PORT"`
 	TeslaTelemetryCACertificate string `yaml:"TESLA_TELEMETRY_CA_CERTIFICATE"`
 	TeslaRequiredScopes         string `yaml:"TESLA_REQUIRED_SCOPES"`
+
+	// Settings for the partners token
+	PartnersTeslaFleetURL string `json:"PARTNERS_FLEET_URL"`
+
+	MobileAppDevLicense common.Address `yaml:"MOBILE_APP_DEV_LICENSE"`
 }

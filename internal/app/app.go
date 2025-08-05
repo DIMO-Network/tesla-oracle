@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"github.com/DIMO-Network/shared/pkg/db"
 	"os"
 	"strconv"
 	"time"
@@ -31,8 +32,7 @@ func App(
 	onboardingSvc *service.Vehicle,
 	riverClient *river.Client[pgx.Tx],
 	ws service.SDWalletsAPI,
-	tr *transactions.Client,
-) *fiber.App {
+	tr *transactions.Client, dbs func() *db.ReaderWriter) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return ErrorHandler(c, err, logger)
@@ -89,7 +89,7 @@ func App(
 		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
 	}
 
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore, onboardingSvc)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore, onboardingSvc, dbs)
 	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr)
 
 	jwtAuth := jwtware.New(jwtware.Config{
@@ -106,6 +106,10 @@ func App(
 	vehicleGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)
 	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
+
+	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
+	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
+	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
 
 	return app
 }

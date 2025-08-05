@@ -20,6 +20,7 @@ type SyntheticDevice struct {
 	ID       string `json:"id"`
 	TokenID  int64  `json:"tokenId"`
 	MintedAt string `json:"mintedAt"`
+	Address  string `json:"address"`
 }
 
 type Definition struct {

@@ -6,6 +6,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
+	"strconv"
 )
 
 const walletKey = "wallet"
@@ -68,4 +69,13 @@ func GetLogger(c *fiber.Ctx, d *zerolog.Logger) *zerolog.Logger {
 	}
 
 	return l
+}
+
+func StringToInt64(input string) (int64, error) {
+	// Convert string to int64
+	result, err := strconv.ParseInt(input, 10, 64)
+	if err != nil {
+		return 0, fmt.Errorf("failed to convert string to int64: %w", err)
+	}
+	return result, nil
 }
