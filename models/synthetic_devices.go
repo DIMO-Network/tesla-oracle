@@ -29,10 +29,10 @@ type SyntheticDevice struct {
 	WalletChildNumber  int         `boil:"wallet_child_number" json:"wallet_child_number" toml:"wallet_child_number" yaml:"wallet_child_number"`
 	VehicleTokenID     null.Int    `boil:"vehicle_token_id" json:"vehicle_token_id,omitempty" toml:"vehicle_token_id" yaml:"vehicle_token_id,omitempty"`
 	TokenID            null.Int    `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
-	AccessToken        string      `boil:"access_token" json:"access_token" toml:"access_token" yaml:"access_token"`
-	AccessExpiresAt    time.Time   `boil:"access_expires_at" json:"access_expires_at" toml:"access_expires_at" yaml:"access_expires_at"`
-	RefreshToken       string      `boil:"refresh_token" json:"refresh_token" toml:"refresh_token" yaml:"refresh_token"`
-	RefreshExpiresAt   time.Time   `boil:"refresh_expires_at" json:"refresh_expires_at" toml:"refresh_expires_at" yaml:"refresh_expires_at"`
+	AccessToken        null.String `boil:"access_token" json:"access_token,omitempty" toml:"access_token" yaml:"access_token,omitempty"`
+	AccessExpiresAt    null.Time   `boil:"access_expires_at" json:"access_expires_at,omitempty" toml:"access_expires_at" yaml:"access_expires_at,omitempty"`
+	RefreshToken       null.String `boil:"refresh_token" json:"refresh_token,omitempty" toml:"refresh_token" yaml:"refresh_token,omitempty"`
+	RefreshExpiresAt   null.Time   `boil:"refresh_expires_at" json:"refresh_expires_at,omitempty" toml:"refresh_expires_at" yaml:"refresh_expires_at,omitempty"`
 	SubscriptionStatus null.String `boil:"subscription_status" json:"subscription_status,omitempty" toml:"subscription_status" yaml:"subscription_status,omitempty"`
 
 	R *syntheticDeviceR `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -136,26 +136,29 @@ func (w whereHelpernull_Int) NIN(slice []int) qm.QueryMod {
 func (w whereHelpernull_Int) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
 func (w whereHelpernull_Int) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
 
-type whereHelpertime_Time struct{ field string }
+type whereHelpernull_Time struct{ field string }
 
-func (w whereHelpertime_Time) EQ(x time.Time) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.EQ, x)
+func (w whereHelpernull_Time) EQ(x null.Time) qm.QueryMod {
+	return qmhelper.WhereNullEQ(w.field, false, x)
 }
-func (w whereHelpertime_Time) NEQ(x time.Time) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.NEQ, x)
+func (w whereHelpernull_Time) NEQ(x null.Time) qm.QueryMod {
+	return qmhelper.WhereNullEQ(w.field, true, x)
 }
-func (w whereHelpertime_Time) LT(x time.Time) qm.QueryMod {
+func (w whereHelpernull_Time) LT(x null.Time) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.LT, x)
 }
-func (w whereHelpertime_Time) LTE(x time.Time) qm.QueryMod {
+func (w whereHelpernull_Time) LTE(x null.Time) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.LTE, x)
 }
-func (w whereHelpertime_Time) GT(x time.Time) qm.QueryMod {
+func (w whereHelpernull_Time) GT(x null.Time) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.GT, x)
 }
-func (w whereHelpertime_Time) GTE(x time.Time) qm.QueryMod {
+func (w whereHelpernull_Time) GTE(x null.Time) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.GTE, x)
 }
+
+func (w whereHelpernull_Time) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
+func (w whereHelpernull_Time) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
 
 var SyntheticDeviceWhere = struct {
 	Address            whereHelper__byte
@@ -163,10 +166,10 @@ var SyntheticDeviceWhere = struct {
 	WalletChildNumber  whereHelperint
 	VehicleTokenID     whereHelpernull_Int
 	TokenID            whereHelpernull_Int
-	AccessToken        whereHelperstring
-	AccessExpiresAt    whereHelpertime_Time
-	RefreshToken       whereHelperstring
-	RefreshExpiresAt   whereHelpertime_Time
+	AccessToken        whereHelpernull_String
+	AccessExpiresAt    whereHelpernull_Time
+	RefreshToken       whereHelpernull_String
+	RefreshExpiresAt   whereHelpernull_Time
 	SubscriptionStatus whereHelpernull_String
 }{
 	Address:            whereHelper__byte{field: "\"tesla_oracle\".\"synthetic_devices\".\"address\""},
@@ -174,10 +177,10 @@ var SyntheticDeviceWhere = struct {
 	WalletChildNumber:  whereHelperint{field: "\"tesla_oracle\".\"synthetic_devices\".\"wallet_child_number\""},
 	VehicleTokenID:     whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"vehicle_token_id\""},
 	TokenID:            whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"token_id\""},
-	AccessToken:        whereHelperstring{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_token\""},
-	AccessExpiresAt:    whereHelpertime_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_expires_at\""},
-	RefreshToken:       whereHelperstring{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_token\""},
-	RefreshExpiresAt:   whereHelpertime_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_expires_at\""},
+	AccessToken:        whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_token\""},
+	AccessExpiresAt:    whereHelpernull_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_expires_at\""},
+	RefreshToken:       whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_token\""},
+	RefreshExpiresAt:   whereHelpernull_Time{field: "\"tesla_oracle\".\"synthetic_devices\".\"refresh_expires_at\""},
 	SubscriptionStatus: whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"subscription_status\""},
 }
 
@@ -199,8 +202,8 @@ type syntheticDeviceL struct{}
 
 var (
 	syntheticDeviceAllColumns            = []string{"address", "vin", "wallet_child_number", "vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at", "subscription_status"}
-	syntheticDeviceColumnsWithoutDefault = []string{"address", "vin", "wallet_child_number", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at"}
-	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "token_id", "subscription_status"}
+	syntheticDeviceColumnsWithoutDefault = []string{"address", "vin", "wallet_child_number"}
+	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at", "subscription_status"}
 	syntheticDevicePrimaryKeyColumns     = []string{"address"}
 	syntheticDeviceGeneratedColumns      = []string{}
 )
