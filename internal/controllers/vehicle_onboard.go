@@ -33,13 +33,13 @@ type VehicleController struct {
 	settings    *config.Settings
 	logger      *zerolog.Logger
 	identity    service.IdentityAPIService
-	vs          *service.Vehicle
+	vs          *service.OnboardingService
 	riverClient *river.Client[pgx.Tx]
 	ws          service.SDWalletsAPI
 	tr          *transactions.Client
 }
 
-func NewVehicleOnboardController(settings *config.Settings, logger *zerolog.Logger, identity service.IdentityAPIService, vs *service.Vehicle, riverClient *river.Client[pgx.Tx], ws service.SDWalletsAPI, tr *transactions.Client) *VehicleController {
+func NewVehicleOnboardController(settings *config.Settings, logger *zerolog.Logger, identity service.IdentityAPIService, vs *service.OnboardingService, riverClient *river.Client[pgx.Tx], ws service.SDWalletsAPI, tr *transactions.Client) *VehicleController {
 	return &VehicleController{
 		settings:    settings,
 		logger:      logger,

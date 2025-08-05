@@ -14,23 +14,23 @@ import (
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 )
 
-type Vehicle struct {
+type OnboardingService struct {
 	pdb    *db.Store
 	logger *zerolog.Logger
 }
 
 var ErrVehicleNotFound = errors.New("vehicle not found")
 
-// NewVehicleService creates a new instance of Vehicle.
-func NewVehicleService(pdb *db.Store, logger *zerolog.Logger) *Vehicle {
-	return &Vehicle{
+// NewOnboardingService creates a new instance of OnboardingService.
+func NewOnboardingService(pdb *db.Store, logger *zerolog.Logger) *OnboardingService {
+	return &OnboardingService{
 		pdb:    pdb,
 		logger: logger,
 	}
 }
 
 // GetVehicleByVin retrieves a vehicle by its VIN.
-func (ds *Vehicle) GetVehicleByVin(ctx context.Context, vehicleID string) (*dbmodels.Onboarding, error) {
+func (ds *OnboardingService) GetVehicleByVin(ctx context.Context, vehicleID string) (*dbmodels.Onboarding, error) {
 	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		ds.logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %s", vehicleID)
@@ -61,7 +61,7 @@ func (ds *Vehicle) GetVehicleByVin(ctx context.Context, vehicleID string) (*dbmo
 }
 
 // GetVehiclesByVins retrieves vehicles by their VINs.
-func (ds *Vehicle) GetVehiclesByVins(ctx context.Context, vehicleIDs []string) (dbmodels.OnboardingSlice, error) {
+func (ds *OnboardingService) GetVehiclesByVins(ctx context.Context, vehicleIDs []string) (dbmodels.OnboardingSlice, error) {
 	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		ds.logger.Error().Err(err).Msg("GetVehiclesByVins: Failed to begin transaction for vehicles")
@@ -92,7 +92,7 @@ func (ds *Vehicle) GetVehiclesByVins(ctx context.Context, vehicleIDs []string) (
 }
 
 // GetMintableVehiclesByVins retrieves vehicles available for minting SD (or vehicle + SD) by their VINs.
-func (ds *Vehicle) GetVehiclesByVinsAndOnboardingStatus(ctx context.Context, vehicleIDs []string, status int) (dbmodels.OnboardingSlice, error) {
+func (ds *OnboardingService) GetVehiclesByVinsAndOnboardingStatus(ctx context.Context, vehicleIDs []string, status int) (dbmodels.OnboardingSlice, error) {
 	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		ds.logger.Error().Err(err).Msg("GetVehiclesByVins: Failed to begin transaction for vehicles")
@@ -125,7 +125,7 @@ func (ds *Vehicle) GetVehiclesByVinsAndOnboardingStatus(ctx context.Context, veh
 	return vins, nil
 }
 
-func (ds *Vehicle) GetVehiclesByVinsAndOnboardingStatusRange(ctx context.Context, vehicleIDs []string, minStatus, maxStatus int, additionalStatuses []int) (dbmodels.OnboardingSlice, error) {
+func (ds *OnboardingService) GetVehiclesByVinsAndOnboardingStatusRange(ctx context.Context, vehicleIDs []string, minStatus, maxStatus int, additionalStatuses []int) (dbmodels.OnboardingSlice, error) {
 	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		ds.logger.Error().Err(err).Msg("GetVehiclesByVins: Failed to begin transaction for vehicles")
@@ -173,7 +173,7 @@ func (ds *Vehicle) GetVehiclesByVinsAndOnboardingStatusRange(ctx context.Context
 }
 
 // GetVehicleByExternalID retrieves a vehicle by its external ID.
-func (ds *Vehicle) GetVehicleByExternalID(ctx context.Context, externalID string) (*dbmodels.Onboarding, error) {
+func (ds *OnboardingService) GetVehicleByExternalID(ctx context.Context, externalID string) (*dbmodels.Onboarding, error) {
 	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		ds.logger.Error().Err(err).Msgf("Failed to begin transaction for external ID %s", externalID)
@@ -206,7 +206,7 @@ func (ds *Vehicle) GetVehicleByExternalID(ctx context.Context, externalID string
 }
 
 // InsertVinToDB inserts a new VIN record into the database.
-func (ds *Vehicle) InsertVinToDB(ctx context.Context, vin *dbmodels.Onboarding) error {
+func (ds *OnboardingService) InsertVinToDB(ctx context.Context, vin *dbmodels.Onboarding) error {
 	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		ds.logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %s", vin.Vin)
@@ -234,7 +234,7 @@ func (ds *Vehicle) InsertVinToDB(ctx context.Context, vin *dbmodels.Onboarding) 
 }
 
 // InsertOrUpdateVin inserts a new VIN record into the database.
-func (ds *Vehicle) InsertOrUpdateVin(ctx context.Context, vin *dbmodels.Onboarding) error {
+func (ds *OnboardingService) InsertOrUpdateVin(ctx context.Context, vin *dbmodels.Onboarding) error {
 	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		ds.logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %s", vin.Vin)
@@ -262,7 +262,7 @@ func (ds *Vehicle) InsertOrUpdateVin(ctx context.Context, vin *dbmodels.Onboardi
 }
 
 // GetVinsByTokenIDs retrieves VINs where VehicleTokenID is in the provided token IDs.
-func (ds *Vehicle) GetVinsByTokenIDs(ctx context.Context, tokenIDsToCheck []int64) (dbmodels.OnboardingSlice, error) {
+func (ds *OnboardingService) GetVinsByTokenIDs(ctx context.Context, tokenIDsToCheck []int64) (dbmodels.OnboardingSlice, error) {
 	vins, err := dbmodels.Onboardings(dbmodels.OnboardingWhere.VehicleTokenID.IN(tokenIDsToCheck)).All(ctx, ds.pdb.DBS().Reader)
 	if err != nil {
 		ds.logger.Error().Err(err).Msg("Failed to get VINs by token IDs")
@@ -272,7 +272,7 @@ func (ds *Vehicle) GetVinsByTokenIDs(ctx context.Context, tokenIDsToCheck []int6
 }
 
 // GetVehiclesFromDB retrieves all VINs from the database.
-func (ds *Vehicle) GetVehiclesFromDB(ctx context.Context) (dbmodels.OnboardingSlice, error) {
+func (ds *OnboardingService) GetVehiclesFromDB(ctx context.Context) (dbmodels.OnboardingSlice, error) {
 	tx, err := ds.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		ds.logger.Error().Err(err).Msg("Failed to begin transaction")
