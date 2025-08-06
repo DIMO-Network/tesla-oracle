@@ -63,11 +63,12 @@ func (t *TeslaRPCService) GetSyntheticDevicesByVIN(ctx context.Context, req *grp
 		all = append(
 			all,
 			&grpc.SyntheticDevice{
-				Vin:            dev.Vin,
-				Address:        dev.Address,
-				WalletChildNum: uint64(dev.WalletChildNumber),
-				VehicleTokenId: uint64(dev.VehicleTokenID.Int),
-				TokenId:        uint64(dev.TokenID.Int),
+				Vin:                dev.Vin,
+				Address:            dev.Address,
+				WalletChildNum:     uint64(dev.WalletChildNumber),
+				VehicleTokenId:     uint64(dev.VehicleTokenID.Int),
+				TokenId:            uint64(dev.TokenID.Int),
+				SubscriptionStatus: dev.SubscriptionStatus.String,
 			},
 		)
 	}
