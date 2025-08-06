@@ -96,7 +96,7 @@ func main() {
 	runRiver(gCtx, logger, riverClient, group)
 
 	monApp := createMonitoringServer()
-	webApp := app.App(&settings, &logger, identityService, deviceDefinitionsService, onboardingService, riverClient, walletService, transactionsClient, pdb.DBS)
+	webApp := app.App(&settings, &logger, identityService, deviceDefinitionsService, onboardingService, riverClient, walletService, transactionsClient, &pdb)
 
 	useLocalTLS := settings.Environment == "local" && settings.UseLocalTLS
 

@@ -31,6 +31,7 @@ import (
 type CredStore interface {
 	Store(ctx context.Context, user common.Address, cred *service.Credential) error
 	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
+	RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*service.Credential, error)
 }
 
 type TeslaController struct {
@@ -42,10 +43,10 @@ type TeslaController struct {
 	requiredScopes []string
 	store          CredStore
 	onboarding     *service.OnboardingService
-	Dbc            func() *db.ReaderWriter
+	pdb            *db.Store
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, Dbc func() *db.ReaderWriter) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, pdb *db.Store) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -60,7 +61,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		requiredScopes: requiredScopes,
 		store:          store,
 		onboarding:     onboardingSvc,
-		Dbc:            Dbc,
+		pdb:            pdb,
 	}
 }
 
@@ -157,7 +158,7 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	// TODO implement transactions handling here
 	device, err := dbmodels.SyntheticDevices(
 		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
-	).One(c.Context(), t.Dbc().Reader)
+	).One(c.Context(), t.pdb.DBS().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
@@ -245,7 +246,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	// get VIN using the synthetic device address
 	device, err := dbmodels.SyntheticDevices(
-		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.Dbc().Reader)
+		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.pdb.DBS().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
@@ -260,7 +261,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	device.SubscriptionStatus = null.String{String: "inactive", Valid: true}
 	// update synthetic device status
-	_, err = device.Update(c.Context(), t.Dbc().Writer, boil.Infer())
+	_, err = device.Update(c.Context(), t.pdb.DBS().Writer, boil.Infer())
 	if err != nil {
 		logger.Err(err).Msg("Failed to update synthetic device status.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update synthetic device status.")
@@ -300,9 +301,10 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 
 	// Save tesla oauth credentials in cache
 	if err := t.store.Store(c.Context(), walletAddress, &service.Credential{
-		AccessToken:  teslaAuth.AccessToken,
-		RefreshToken: teslaAuth.RefreshToken,
-		Expiry:       teslaAuth.Expiry,
+		AccessToken:   teslaAuth.AccessToken,
+		RefreshToken:  teslaAuth.RefreshToken,
+		AccessExpiry:  teslaAuth.Expiry,
+		RefreshExpiry: time.Now().AddDate(0, 3, 0),
 	}); err != nil {
 		return fmt.Errorf("error persisting credentials: %w", err)
 	}
@@ -497,7 +499,7 @@ func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synth
 
 	// Save the changes to the database
 	// todo add transaction handling
-	_, err = synthDevice.Update(c, t.Dbc().Writer, boil.Infer())
+	_, err = synthDevice.Update(c, t.pdb.DBS().Writer, boil.Infer())
 	if err != nil {
 		return err
 	}

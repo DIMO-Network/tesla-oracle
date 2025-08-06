@@ -33,7 +33,9 @@ func App(
 	onboardingSvc *service.OnboardingService,
 	riverClient *river.Client[pgx.Tx],
 	ws service.SDWalletsAPI,
-	tr *transactions.Client, dbs func() *db.ReaderWriter) *fiber.App {
+	tr *transactions.Client,
+	pdb *db.Store,
+) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return ErrorHandler(c, err, logger)
@@ -90,8 +92,8 @@ func App(
 		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
 	}
 
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore, onboardingSvc, dbs)
-	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore, onboardingSvc, pdb)
+	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr, pdb, &credStore)
 
 	jwtAuth := jwtware.New(jwtware.Config{
 		JWKSetURLs: []string{settings.JwtKeySetURL},
