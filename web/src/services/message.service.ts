@@ -1,4 +1,4 @@
-export type MessageType = 'message' | 'sign' | 'sign-mint' | 'signature';
+export type MessageType = 'message' | 'sign' | 'sign-mint' | 'signature' | 'onboarded';
 
 export interface Message {
     type: MessageType;
@@ -15,6 +15,7 @@ export class MessageService {
         sign: [],
         'sign-mint': [],
         signature: [],
+        onboarded: [],
     };
 
     private constructor() {
@@ -60,7 +61,7 @@ export class MessageService {
         }
 
         const message = JSON.parse(event.data) as Message;
-        if (!message.type || !['message', 'sign', 'sign-mint', 'signature', 'signature-mint'].includes(message.type)) {
+        if (!message.type || !['message', 'signature', 'signature-mint'].includes(message.type)) {
             return;
         }
 

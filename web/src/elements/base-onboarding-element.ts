@@ -59,6 +59,16 @@ export interface VinsStatusResult {
     statuses: VinStatus[];
 }
 
+export interface OnboardedVehicle {
+    vin: string,
+    vehicleTokenId: number,
+    syntheticTokenId: number,
+}
+
+export interface FinalizeResponse {
+    vehicles: OnboardedVehicle[]
+}
+
 export class BaseOnboardingElement extends LitElement {
 
     @property({attribute: false})
@@ -224,7 +234,12 @@ export class BaseOnboardingElement extends LitElement {
         return success;
     }
 
-    async onboardVINs(vins: string[]): Promise<boolean> {
+    async finalize(vins: string[]) {
+        return await this.api.callApi<FinalizeResponse>('POST', '/v1/vehicle/finalize', {vins}, true);
+    }
+
+
+    async onboardVINs(vins: string[]): Promise<FinalizeResponse | null> {
         let allVinsValid = true;
         for (const vin of vins) {
             const validVin = vin?.length === 17
@@ -238,13 +253,13 @@ export class BaseOnboardingElement extends LitElement {
 
         if (!allVinsValid) {
             this.displayFailure("Some of the VINs are not valid");
-            return false;
+            return null;
         }
 
         const mintData = await this.getMintingData(vins);
         if (mintData.length === 0) {
             this.displayFailure("Failed to fetch minting data");
-            return false
+            return null
         }
 
         const signedMintData = await this.signMintingData(mintData);
@@ -252,9 +267,14 @@ export class BaseOnboardingElement extends LitElement {
 
         if (!minted) {
             this.displayFailure("Failed to onboard at least one VIN");
-            return false;
+            return null;
         }
 
-        return true
+        const finalized = await this.finalize(vins);
+        if (!finalized.success || !finalized.data) {
+            return null;
+        }
+
+        return finalized.data;
     }
 }

@@ -505,7 +505,7 @@ func (v *VehicleController) ClearOnboardingData(c *fiber.Ctx) error {
 type OnboardedVehicle struct {
 	Vin              string   `json:"vin"`
 	VehicleTokenID   *big.Int `json:"vehicleTokenId,omitempty"`
-	SyntheticTokenID *big.Int `json:"syntheticTokenID,omitempty"`
+	SyntheticTokenID *big.Int `json:"syntheticTokenId,omitempty"`
 }
 
 type FinalizeResponse struct {
@@ -570,9 +570,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 		for _, vin := range validVins {
 			dbVin, ok := indexedVins[vin]
 			if !ok {
-				vehicles = append(vehicles, OnboardedVehicle{
-					Vin: vin,
-				})
+				continue
 			} else {
 				address, err := v.walletSvc.GetAddress(uint32(dbVin.WalletIndex.Int64))
 				if err != nil {

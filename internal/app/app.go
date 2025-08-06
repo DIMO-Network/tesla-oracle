@@ -109,6 +109,7 @@ func App(
 	vehicleGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)
 	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
+	vehicleGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
 	// FIXME: temporary, remove when finished
 	vehicleGroup.Post("/clear", onboardCtrl.ClearOnboardingData)
 
