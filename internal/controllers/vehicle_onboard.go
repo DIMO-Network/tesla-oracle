@@ -516,7 +516,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 	walletAddress := c.Locals("wallet").(common.Address)
 
 	params := new(VinsGetParams)
-	if err := c.QueryParser(params); err != nil {
+	if err := c.BodyParser(params); err != nil {
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
 			"error": "Failed to parse VINs",
 		})
