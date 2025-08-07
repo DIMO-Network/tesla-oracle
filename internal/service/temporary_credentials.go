@@ -114,17 +114,29 @@ func (s *Store) RetrieveWithTokensEncrypted(_ context.Context, user common.Addre
 		return nil, errors.New("credential was missing a required field")
 	}
 
+	credsWithEncryptedTokens, err := s.EncryptTokens(&cred)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encrypt credentials: %w", err)
+	}
+
+	return credsWithEncryptedTokens, nil
+}
+
+func (s *Store) EncryptTokens(cred *Credential) (*Credential, error) {
 	encAccess, err := s.Cipher.Encrypt(cred.AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt access token: %w", err)
 	}
-	cred.AccessToken = encAccess
 
 	encRefresh, err := s.Cipher.Encrypt(cred.RefreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt refresh token: %w", err)
 	}
-	cred.RefreshToken = encRefresh
 
-	return &cred, nil
+	return &Credential{
+		AccessToken:   encAccess,
+		RefreshToken:  encRefresh,
+		AccessExpiry:  cred.AccessExpiry,
+		RefreshExpiry: cred.RefreshExpiry,
+	}, nil
 }

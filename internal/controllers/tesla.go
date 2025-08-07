@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -32,6 +31,7 @@ type CredStore interface {
 	Store(ctx context.Context, user common.Address, cred *service.Credential) error
 	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
 	RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*service.Credential, error)
+	EncryptTokens(cred *service.Credential) (*service.Credential, error)
 }
 
 type TeslaController struct {
@@ -183,7 +183,15 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	// We know refresh token ttl is 3 months, so we set it to 3 months from now.
 	refreshExpiry := time.Now().AddDate(0, 3, 0)
-	err = t.UpdateCredsAndStatusToSuccess(c.Context(), device, teslaAuth.AccessToken, teslaAuth.RefreshToken, teslaAuth.Expiry, refreshExpiry)
+
+	creds := service.Credential{
+		AccessToken:   teslaAuth.AccessToken,
+		RefreshToken:  teslaAuth.RefreshToken,
+		AccessExpiry:  teslaAuth.Expiry,
+		RefreshExpiry: refreshExpiry,
+	}
+
+	err = t.UpdateCredsAndStatusToSuccess(c.Context(), device, &creds)
 	if err != nil {
 		logger.Err(err).Msg("Failed to update telemetry credentials.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry credentials.")
@@ -477,22 +485,17 @@ func (t *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string
 // UpdateCredsAndStatusToSuccess stores the given credential for the given synthDevice.
 // This function encrypts the access and refresh tokens before saving them to the database.
 // TODO implement encryption using KMS
-func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *dbmodels.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
-	cipher := new(cipher.ROT13Cipher)
-
-	encAccess, err := cipher.Encrypt(accessToken)
+func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *dbmodels.SyntheticDevice, creds *service.Credential) error {
+	encCreds, err := t.store.EncryptTokens(creds)
 	if err != nil {
-		return fmt.Errorf("failed to encrypt access token: %w", err)
+		return err
 	}
-	synthDevice.AccessToken = null.String{String: encAccess, Valid: true}
-	synthDevice.AccessExpiresAt = null.TimeFrom(accessExpiry)
 
-	encRefresh, err := cipher.Encrypt(refreshToken)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt access token: %w", err)
-	}
-	synthDevice.RefreshToken = null.String{String: encRefresh, Valid: true}
-	synthDevice.RefreshExpiresAt = null.TimeFrom(refreshExpiry)
+	// store encrypted credentials
+	synthDevice.AccessToken = null.String{String: encCreds.AccessToken, Valid: true}
+	synthDevice.AccessExpiresAt = null.TimeFrom(encCreds.AccessExpiry)
+	synthDevice.RefreshToken = null.String{String: encCreds.RefreshToken, Valid: true}
+	synthDevice.RefreshExpiresAt = null.TimeFrom(encCreds.RefreshExpiry)
 
 	// update status
 	synthDevice.SubscriptionStatus = null.String{String: "active", Valid: true}

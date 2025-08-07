@@ -109,6 +109,14 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
 
 	mockCredStore := new(MockCredStore)
+	expectedCredentials := &service.Credential{
+		AccessToken:   "mockAccessToken",
+		RefreshToken:  "mockRefreshToken",
+		AccessExpiry:  time.Now().Add(time.Hour),
+		RefreshExpiry: time.Now().AddDate(0, 3, 0),
+	}
+	mockCredStore.On("EncryptTokens", mock.Anything, mock.Anything).Return(expectedCredentials, nil)
+
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
 	//mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
@@ -424,6 +432,11 @@ type MockCredStore struct {
 
 func (m *MockCredStore) Retrieve(ctx context.Context, user common.Address) (*service.Credential, error) {
 	args := m.Called(ctx, user)
+	return args.Get(0).(*service.Credential), args.Error(1)
+}
+
+func (m *MockCredStore) EncryptTokens(credential *service.Credential) (*service.Credential, error) {
+	args := m.Called(credential)
 	return args.Get(0).(*service.Credential), args.Error(1)
 }
 
