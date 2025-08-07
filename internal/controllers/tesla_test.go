@@ -3,18 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/DIMO-Network/tesla-oracle/internal/config"
-	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
-	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
-	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
-	"github.com/DIMO-Network/tesla-oracle/models"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/rs/zerolog"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"github.com/stretchr/testify/suite"
-	"github.com/volatiletech/null/v8"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 	"net/http"
 	"os"
 	"strings"
@@ -22,12 +10,24 @@ import (
 	"time"
 
 	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
+	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
+	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 	_ "github.com/lib/pq"
+	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 )
 
 const vin = "1HGCM82633A123456"
@@ -109,6 +109,14 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
 
 	mockCredStore := new(MockCredStore)
+	expectedCredentials := &service.Credential{
+		AccessToken:   "mockAccessToken",
+		RefreshToken:  "mockRefreshToken",
+		AccessExpiry:  time.Now().Add(time.Hour),
+		RefreshExpiry: time.Now().AddDate(0, 3, 0),
+	}
+	mockCredStore.On("EncryptTokens", mock.Anything, mock.Anything).Return(expectedCredentials, nil)
+
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
 	//mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
@@ -117,7 +125,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, s.pdb.DBS)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, &s.pdb)
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -190,7 +198,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 
 	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, s.pdb.DBS)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, &s.pdb)
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -257,7 +265,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 
 	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, s.pdb.DBS)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, &s.pdb)
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -345,7 +353,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// Initialize the controller
 	settings := config.Settings{MobileAppDevLicense: walletAddress}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, s.pdb.DBS)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, &s.pdb)
 
 	// Set up the Fiber app
 	app := fiber.New()
@@ -423,6 +431,16 @@ type MockCredStore struct {
 }
 
 func (m *MockCredStore) Retrieve(ctx context.Context, user common.Address) (*service.Credential, error) {
+	args := m.Called(ctx, user)
+	return args.Get(0).(*service.Credential), args.Error(1)
+}
+
+func (m *MockCredStore) EncryptTokens(credential *service.Credential) (*service.Credential, error) {
+	args := m.Called(credential)
+	return args.Get(0).(*service.Credential), args.Error(1)
+}
+
+func (m *MockCredStore) RetrieveWithTokensEncrypted(ctx context.Context, user common.Address) (*service.Credential, error) {
 	args := m.Called(ctx, user)
 	return args.Get(0).(*service.Credential), args.Error(1)
 }

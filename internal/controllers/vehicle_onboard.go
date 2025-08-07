@@ -12,6 +12,7 @@ import (
 	"github.com/DIMO-Network/go-transactions"
 	registry "github.com/DIMO-Network/go-transactions/contracts"
 	"github.com/DIMO-Network/go-zerodev"
+	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
@@ -25,6 +26,8 @@ import (
 	"github.com/pkg/errors"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
+	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 )
 
 var vinRegexp, _ = regexp.Compile("^[A-HJ-NPR-Z0-9]{17}$")
@@ -37,9 +40,21 @@ type VehicleController struct {
 	riverClient   *river.Client[pgx.Tx]
 	walletSvc     service.SDWalletsAPI
 	transactions  *transactions.Client
+	pdb           *db.Store
+	credentials   CredStore
 }
 
-func NewVehicleOnboardController(settings *config.Settings, logger *zerolog.Logger, identitySvc service.IdentityAPIService, onboardingSvc *service.OnboardingService, riverClient *river.Client[pgx.Tx], walletSvc service.SDWalletsAPI, transactions *transactions.Client) *VehicleController {
+func NewVehicleOnboardController(
+	settings *config.Settings,
+	logger *zerolog.Logger,
+	identitySvc service.IdentityAPIService,
+	onboardingSvc *service.OnboardingService,
+	riverClient *river.Client[pgx.Tx],
+	walletSvc service.SDWalletsAPI,
+	transactions *transactions.Client,
+	pdb *db.Store,
+	credentials CredStore,
+) *VehicleController {
 	return &VehicleController{
 		settings:      settings,
 		logger:        logger,
@@ -48,6 +63,8 @@ func NewVehicleOnboardController(settings *config.Settings, logger *zerolog.Logg
 		riverClient:   riverClient,
 		walletSvc:     walletSvc,
 		transactions:  transactions,
+		pdb:           pdb,
+		credentials:   credentials,
 	}
 }
 
@@ -483,4 +500,126 @@ func (v *VehicleController) ClearOnboardingData(c *fiber.Ctx) error {
 	}
 
 	return nil
+}
+
+type OnboardedVehicle struct {
+	Vin              string   `json:"vin"`
+	VehicleTokenID   *big.Int `json:"vehicleTokenId,omitempty"`
+	SyntheticTokenID *big.Int `json:"syntheticTokenId,omitempty"`
+}
+
+type FinalizeResponse struct {
+	Vehicles []OnboardedVehicle `json:"vehicles"`
+}
+
+func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
+	walletAddress := c.Locals("wallet").(common.Address)
+
+	params := new(VinsGetParams)
+	if err := c.QueryParser(params); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to parse VINs",
+		})
+	}
+
+	localLog := v.logger.With().Str(logfields.FunctionName, "FinalizeOnboarding").Interface("validVins", params.Vins).Logger()
+	localLog.Debug().Interface("vins", params.Vins).Msg("Checking Verification Status for Vins")
+
+	validVins := make([]string, 0, len(params.Vins))
+	for _, vin := range params.Vins {
+		strippedVin := strings.TrimSpace(vin)
+		if v.isValidVin(strippedVin) {
+			validVins = append(validVins, strippedVin)
+		}
+	}
+
+	if len(validVins) != len(params.Vins) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid VINs provided",
+		})
+	}
+
+	compactedVins := slices.Compact(validVins)
+	if len(validVins) != len(compactedVins) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Duplicated VINs",
+		})
+	}
+
+	localLog.Debug().Interface("validVins", validVins).Msgf("Got %d valid VINs", len(validVins))
+
+	vehicles := make([]OnboardedVehicle, 0, len(validVins))
+
+	if len(validVins) > 0 {
+		dbVins, err := v.onboardingSvc.GetVehiclesByVins(c.Context(), validVins)
+		if err != nil {
+			if errors.Is(err, service.ErrVehicleNotFound) {
+				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")
+			}
+
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to load vehicles from Database",
+			})
+		}
+
+		indexedVins := make(map[string]*dbmodels.Onboarding)
+		for _, vin := range dbVins {
+			indexedVins[vin.Vin] = vin
+		}
+
+		for _, vin := range validVins {
+			dbVin, ok := indexedVins[vin]
+			if !ok {
+				continue
+			} else {
+				address, err := v.walletSvc.GetAddress(uint32(dbVin.WalletIndex.Int64))
+				if err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": "Failed to get SD address by child index",
+					})
+				}
+
+				creds, err := v.credentials.RetrieveWithTokensEncrypted(c.Context(), walletAddress)
+				if err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": "Failed to retrieve credentials",
+					})
+				}
+
+				sdRecord := &dbmodels.SyntheticDevice{
+					Address:           address.Bytes(),
+					Vin:               vin,
+					TokenID:           null.Int{Int: int(dbVin.SyntheticTokenID.Int64), Valid: true},
+					VehicleTokenID:    null.Int{Int: int(dbVin.VehicleTokenID.Int64), Valid: true},
+					WalletChildNumber: int(dbVin.WalletIndex.Int64),
+					AccessToken:       null.StringFrom(creds.AccessToken),
+					AccessExpiresAt:   null.TimeFrom(creds.AccessExpiry),
+					RefreshToken:      null.StringFrom(creds.RefreshToken),
+					RefreshExpiresAt:  null.TimeFrom(creds.RefreshExpiry),
+				}
+
+				err = sdRecord.Insert(c.Context(), v.pdb.DBS().Writer, boil.Infer())
+				if err != nil {
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": "Failed to insert Synthetic Device",
+					})
+				}
+
+				err = v.onboardingSvc.DeleteOnboarding(c.Context(), dbVin)
+				if err != nil {
+					localLog.Error().Err(err).Msg("Failed to delete onboarding data from Database")
+				}
+
+				vehicles = append(vehicles, OnboardedVehicle{
+					Vin:              vin,
+					VehicleTokenID:   big.NewInt(dbVin.VehicleTokenID.Int64),
+					SyntheticTokenID: big.NewInt(dbVin.SyntheticTokenID.Int64),
+				})
+			}
+		}
+	}
+
+	return c.JSON(FinalizeResponse{
+		Vehicles: vehicles,
+	})
 }

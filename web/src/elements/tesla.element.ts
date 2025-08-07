@@ -12,6 +12,7 @@ import {TeslaAuthContext, teslaAuthContext} from "@context/tesla-auth.context.ts
 import qs from "qs";
 import {repeat} from "lit/directives/repeat.js";
 import {BaseOnboardingElement} from "@elements/base-onboarding-element.ts";
+import {MessageService} from "@services/message.service.ts";
 
 interface DeviceDefinition {
     id: string;
@@ -42,6 +43,8 @@ export class TeslaElement extends BaseOnboardingElement {
     @property({attribute: false})
     private teslaAuth?: TeslaAuthContext;
 
+    protected messageService: MessageService = MessageService.getInstance();
+
     private loadVehiclesTask = new Task(this, {
         task: async ([authorizationCode, redirectUri], {}) => {
             if (!authorizationCode || !redirectUri) {
@@ -60,10 +63,16 @@ export class TeslaElement extends BaseOnboardingElement {
     private onboardVehicleTask = new Task(this, {
         task: async ([vin]: [string], {}) => {
             if (!vin) {
-                return [];
+                return;
             }
 
-            return await this.onboardVINs([vin]);
+            const finalized = await this.onboardVINs([vin]);
+
+            if (!finalized || !(finalized?.vehicles.length > 0)) {
+                return;
+            }
+
+            this.messageService.sendMessage({type: 'onboarded', data: finalized.vehicles})
         },
         autoRun: false
     });

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -31,6 +30,8 @@ import (
 type CredStore interface {
 	Store(ctx context.Context, user common.Address, cred *service.Credential) error
 	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
+	RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*service.Credential, error)
+	EncryptTokens(cred *service.Credential) (*service.Credential, error)
 }
 
 type TeslaController struct {
@@ -42,10 +43,10 @@ type TeslaController struct {
 	requiredScopes []string
 	store          CredStore
 	onboarding     *service.OnboardingService
-	Dbc            func() *db.ReaderWriter
+	pdb            *db.Store
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, Dbc func() *db.ReaderWriter) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, pdb *db.Store) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -60,7 +61,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		requiredScopes: requiredScopes,
 		store:          store,
 		onboarding:     onboardingSvc,
-		Dbc:            Dbc,
+		pdb:            pdb,
 	}
 }
 
@@ -157,7 +158,7 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	// TODO implement transactions handling here
 	device, err := dbmodels.SyntheticDevices(
 		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
-	).One(c.Context(), t.Dbc().Reader)
+	).One(c.Context(), t.pdb.DBS().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
@@ -182,7 +183,15 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	// We know refresh token ttl is 3 months, so we set it to 3 months from now.
 	refreshExpiry := time.Now().AddDate(0, 3, 0)
-	err = t.UpdateCredsAndStatusToSuccess(c.Context(), device, teslaAuth.AccessToken, teslaAuth.RefreshToken, teslaAuth.Expiry, refreshExpiry)
+
+	creds := service.Credential{
+		AccessToken:   teslaAuth.AccessToken,
+		RefreshToken:  teslaAuth.RefreshToken,
+		AccessExpiry:  teslaAuth.Expiry,
+		RefreshExpiry: refreshExpiry,
+	}
+
+	err = t.UpdateCredsAndStatusToSuccess(c.Context(), device, &creds)
 	if err != nil {
 		logger.Err(err).Msg("Failed to update telemetry credentials.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry credentials.")
@@ -245,7 +254,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	// get VIN using the synthetic device address
 	device, err := dbmodels.SyntheticDevices(
-		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.Dbc().Reader)
+		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.pdb.DBS().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
@@ -260,7 +269,7 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	device.SubscriptionStatus = null.String{String: "inactive", Valid: true}
 	// update synthetic device status
-	_, err = device.Update(c.Context(), t.Dbc().Writer, boil.Infer())
+	_, err = device.Update(c.Context(), t.pdb.DBS().Writer, boil.Infer())
 	if err != nil {
 		logger.Err(err).Msg("Failed to update synthetic device status.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update synthetic device status.")
@@ -300,9 +309,10 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 
 	// Save tesla oauth credentials in cache
 	if err := t.store.Store(c.Context(), walletAddress, &service.Credential{
-		AccessToken:  teslaAuth.AccessToken,
-		RefreshToken: teslaAuth.RefreshToken,
-		Expiry:       teslaAuth.Expiry,
+		AccessToken:   teslaAuth.AccessToken,
+		RefreshToken:  teslaAuth.RefreshToken,
+		AccessExpiry:  teslaAuth.Expiry,
+		RefreshExpiry: time.Now().AddDate(0, 3, 0),
 	}); err != nil {
 		return fmt.Errorf("error persisting credentials: %w", err)
 	}
@@ -475,29 +485,24 @@ func (t *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string
 // UpdateCredsAndStatusToSuccess stores the given credential for the given synthDevice.
 // This function encrypts the access and refresh tokens before saving them to the database.
 // TODO implement encryption using KMS
-func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *dbmodels.SyntheticDevice, accessToken string, refreshToken string, accessExpiry, refreshExpiry time.Time) error {
-	cipher := new(cipher.ROT13Cipher)
-
-	encAccess, err := cipher.Encrypt(accessToken)
+func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *dbmodels.SyntheticDevice, creds *service.Credential) error {
+	encCreds, err := t.store.EncryptTokens(creds)
 	if err != nil {
-		return fmt.Errorf("failed to encrypt access token: %w", err)
+		return err
 	}
-	synthDevice.AccessToken = null.String{String: encAccess, Valid: true}
-	synthDevice.AccessExpiresAt = null.TimeFrom(accessExpiry)
 
-	encRefresh, err := cipher.Encrypt(refreshToken)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt access token: %w", err)
-	}
-	synthDevice.RefreshToken = null.String{String: encRefresh, Valid: true}
-	synthDevice.RefreshExpiresAt = null.TimeFrom(refreshExpiry)
+	// store encrypted credentials
+	synthDevice.AccessToken = null.String{String: encCreds.AccessToken, Valid: true}
+	synthDevice.AccessExpiresAt = null.TimeFrom(encCreds.AccessExpiry)
+	synthDevice.RefreshToken = null.String{String: encCreds.RefreshToken, Valid: true}
+	synthDevice.RefreshExpiresAt = null.TimeFrom(encCreds.RefreshExpiry)
 
 	// update status
 	synthDevice.SubscriptionStatus = null.String{String: "active", Valid: true}
 
 	// Save the changes to the database
 	// todo add transaction handling
-	_, err = synthDevice.Update(c, t.Dbc().Writer, boil.Infer())
+	_, err = synthDevice.Update(c, t.pdb.DBS().Writer, boil.Infer())
 	if err != nil {
 		return err
 	}
