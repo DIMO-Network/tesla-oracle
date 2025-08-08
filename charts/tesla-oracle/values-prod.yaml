@@ -8,6 +8,7 @@ env:
   ENVIRONMENT: prod
   CHAIN_ID: 137
   KAFKA_BROKERS: kafka-prod-dimo-kafka-kafka-brokers:9092
+  DEVICES_GRPC_ADDR: devices-api-prod:8086
   TESLA_TELEMETRY_CA_CERTIFICATE: |
     -----BEGIN CERTIFICATE-----
     MIIBozCCAUmgAwIBAgIQemJG85HjfJ5FSzPIn+LDWjAKBggqhkjOPQQDAjAXMRUw

@@ -41,6 +41,7 @@ type TeslaControllerTestSuite struct {
 }
 
 const migrationsDirRelPath = "../../migrations"
+const vehicleTokenID = 789
 
 // SetupSuite starts container db
 func (s *TeslaControllerTestSuite) SetupSuite() {
@@ -81,7 +82,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 		Address:           synthDeviceAddress.Bytes(),
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
-		VehicleTokenID:    null.NewInt(789, true),
+		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
 		WalletChildNumber: 111,
 	}
 
@@ -106,7 +107,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			Address: synthDeviceAddressStr,
 		},
 	}
-	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
+	mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
 
 	mockCredStore := new(MockCredStore)
 	expectedCredentials := &service.Credential{
@@ -123,7 +124,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, expectedResponse.AccessToken, vin).Return(nil)
 	mockTeslaService.On("CompleteTeslaAuthCodeExchange", mock.Anything, authCode, redirectURI).Return(expectedResponse, nil)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, &s.pdb)
 
@@ -165,7 +166,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 	// Query the database to verify subscription status
 	device, err := models.SyntheticDevices(
-		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(789, true))).One(s.ctx, s.pdb.DBS().Reader)
+		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(vehicleTokenID, true))).One(s.ctx, s.pdb.DBS().Reader)
 	require.NoError(s.T(), err)
 
 	// Assert that the subscription status is set and not empty
@@ -187,7 +188,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 		Address:           synthDeviceAddress.Bytes(),
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
-		VehicleTokenID:    null.NewInt(789, true),
+		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
 		WalletChildNumber: 111,
 	}
 
@@ -196,7 +197,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 	// when
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, &s.pdb)
 
@@ -235,7 +236,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 
 	// Query the database to verify subscription status
 	device, err := models.SyntheticDevices(
-		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(789, true))).One(s.ctx, s.pdb.DBS().Reader)
+		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(vehicleTokenID, true))).One(s.ctx, s.pdb.DBS().Reader)
 	require.NoError(s.T(), err)
 
 	// Assert that the subscription status is set and not empty
@@ -254,7 +255,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 		Address:           synthDeviceAddress.Bytes(),
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
-		VehicleTokenID:    null.NewInt(789, true),
+		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
 		WalletChildNumber: 111,
 	}
 
@@ -263,7 +264,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 	// when
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, &s.pdb)
 
@@ -304,7 +305,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 
 	// Query the database to verify subscription status
 	device, err := models.SyntheticDevices(
-		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(789, true))).One(s.ctx, s.pdb.DBS().Reader)
+		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(vehicleTokenID, true))).One(s.ctx, s.pdb.DBS().Reader)
 	require.NoError(s.T(), err)
 
 	// Assert that the subscription status is set and not empty
@@ -324,7 +325,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 		Address:           synthDeviceAddress.Bytes(),
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
-		VehicleTokenID:    null.NewInt(789, true),
+		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
 		WalletChildNumber: 111,
 	}
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
@@ -332,12 +333,13 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// when
 	mockIdentitySvc := new(MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
-		Owner: ownerAdd,
+		Owner:   ownerAdd,
+		TokenID: vehicleTokenID,
 		SyntheticDevice: mods.SyntheticDevice{
 			Address: synthDeviceAddressStr,
 		},
 	}
-	mockIdentitySvc.On("FetchVehicleByTokenID", int64(789)).Return(mockVehicle, nil)
+	mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
 	mockCredStore := new(MockCredStore)
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
@@ -350,10 +352,15 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	)
 	mockTeslaService.On("UnSubscribeFromTelemetryData", mock.Anything, "someToken", vin).Return(nil)
 
+	// Mock the DevicesGRPCService
+	mockDevicesService := new(MockDevicesGRPCService)
+	mockDevicesService.On("StopTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
+
 	// Initialize the controller
-	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, &s.pdb)
+	controller.devicesService = mockDevicesService
 
 	// Set up the Fiber app
 	app := fiber.New()
@@ -388,7 +395,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 
 	// Query the database to verify subscription status
 	device, err := models.SyntheticDevices(
-		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(789, true))).One(s.ctx, s.pdb.DBS().Reader)
+		models.SyntheticDeviceWhere.VehicleTokenID.EQ(null.NewInt(vehicleTokenID, true))).One(s.ctx, s.pdb.DBS().Reader)
 	require.NoError(s.T(), err)
 
 	// Assert that the subscription status is set and not empty
@@ -545,4 +552,19 @@ func (m *MockIdentityAPIService) FetchDeviceDefinitionByID(deviceDefinitionID st
 		return args.Get(0).(*mods.DeviceDefinition), args.Error(1)
 	}
 	return nil, args.Error(1)
+}
+
+// MockDevicesGRPCService is a mock implementation of the DevicesGRPCService interface.
+type MockDevicesGRPCService struct {
+	mock.Mock
+}
+
+func (m *MockDevicesGRPCService) StopTeslaTask(ctx context.Context, tokenID int64) error {
+	args := m.Called(ctx, tokenID)
+	return args.Error(0)
+}
+
+func (m *MockDevicesGRPCService) Close() error {
+	args := m.Called()
+	return args.Error(0)
 }

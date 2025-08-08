@@ -44,12 +44,17 @@ type TeslaController struct {
 	store          CredStore
 	onboarding     *service.OnboardingService
 	pdb            *db.Store
+	devicesService service.DevicesGRPCService
 }
 
 func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, pdb *db.Store) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
+	}
+	devicesService, err := service.NewDevicesGRPCService(settings, logger)
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Failed to initialize DevicesGRPCService")
 	}
 
 	return &TeslaController{
@@ -62,6 +67,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		store:          store,
 		onboarding:     onboardingSvc,
 		pdb:            pdb,
+		devicesService: devicesService,
 	}
 }
 
@@ -265,6 +271,11 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	if err != nil {
 		logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data")
+	}
+
+	stopErr := t.devicesService.StopTeslaTask(c.Context(), vehicle.TokenID)
+	if stopErr != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to stop Tesla task for synthetic device.")
 	}
 
 	device.SubscriptionStatus = null.String{String: "inactive", Valid: true}

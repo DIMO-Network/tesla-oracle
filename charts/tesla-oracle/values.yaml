@@ -40,6 +40,7 @@ env:
   USE_LOCAL_TLS: false
   DEVICE_DEFINITIONS_API_ENDPOINT: https://device-definitions-api.dev.dimo.zone
   IDENTITY_API_ENDPOINT: https://identity-api.dev.dimo.zone/query
+  DEVICES_GRPC_ADDR: devices-api-dev:8086
   DIMO_AUTH_URL: https://auth.dev.dimo.zone
   DIMO_AUTH_CLIENT_ID: '0x4328433252fD5a7dF7C4Fc3f5F8680a49bb7b401'
   DIMO_AUTH_DOMAIN: https://tesla-oracle.dev.dimo.zone/index.html

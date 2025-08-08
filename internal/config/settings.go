@@ -25,6 +25,7 @@ type Settings struct {
 
 	IdentityAPIEndpoint          url.URL `yaml:"IDENTITY_API_ENDPOINT"`
 	DeviceDefinitionsAPIEndpoint url.URL `yaml:"DEVICE_DEFINITIONS_API_ENDPOINT"`
+	DevicesGRPCEndpoint          string  `yaml:"DEVICES_GRPC_ADDR"`
 
 	DimoAuthURL        url.URL        `yaml:"DIMO_AUTH_URL"`
 	DimoAuthClientID   common.Address `yaml:"DIMO_AUTH_CLIENT_ID"`
