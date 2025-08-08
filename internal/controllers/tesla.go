@@ -275,7 +275,6 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 
 	stopErr := t.devicesService.StopTeslaTask(c.Context(), vehicle.TokenID)
 	if stopErr != nil {
-		logger.Err(stopErr).Msgf("Failed to stop Tesla task for synthetic device, tokenID: %s.", vehicleTokenId)
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to stop Tesla task for synthetic device.")
 	}
 
