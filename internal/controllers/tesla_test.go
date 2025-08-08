@@ -124,7 +124,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, expectedResponse.AccessToken, vin).Return(nil)
 	mockTeslaService.On("CompleteTeslaAuthCodeExchange", mock.Anything, authCode, redirectURI).Return(expectedResponse, nil)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, &s.pdb)
 
@@ -197,7 +197,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 	// when
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, &s.pdb)
 
@@ -264,7 +264,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 	// when
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress}
+	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, &s.pdb)
 
