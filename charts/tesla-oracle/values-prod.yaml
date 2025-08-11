@@ -9,6 +9,15 @@ env:
   CHAIN_ID: 137
   KAFKA_BROKERS: kafka-prod-dimo-kafka-kafka-brokers:9092
   DEVICES_GRPC_ADDR: devices-api-prod:8086
+  DEVICE_DEFINITIONS_API_ENDPOINT: https://device-definitions-api.dimo.zone
+  DIMO_AUTH_URL: https://auth.dimo.zone
+  IDENTITY_API_ENDPOINT: https://identity-api.dimo.zone/query
+  JWT_KEY_SET_URL: https://auth.dimo.zone/keys
+  TESLA_FLEET_URL: http://tesla-command-api-prod.prod.svc.cluster.local:8080
+  TESLA_TELEMETRY_HOST_NAME: ingest-tesla.drivedimo.com
+  REGISTRY_ADDRESS: '0xFA8beC73cebB9D88FF88a2f75E7D7312f2Fd39EC'
+  VEHICLE_NFT_ADDRESS: '0xba5738a18d83d41847dffbdc6101d37c69c9b0cf'
+  SYNTHETIC_NFT_ADDRESS: '0x78513c8CB4D6B6079f813850376bc9c7fc8aE67f'
   TESLA_TELEMETRY_CA_CERTIFICATE: |
     -----BEGIN CERTIFICATE-----
     MIIBozCCAUmgAwIBAgIQemJG85HjfJ5FSzPIn+LDWjAKBggqhkjOPQQDAjAXMRUw
