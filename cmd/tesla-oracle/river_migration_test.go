@@ -56,7 +56,11 @@ func TestRiverMigrations(t *testing.T) {
 	// Connect to database
 	dbConn, err := sql.Open("postgres", settings.DB.BuildConnectionString(true))
 	require.NoError(t, err)
-	defer dbConn.Close()
+	defer func() {
+		if err := dbConn.Close(); err != nil {
+			t.Logf("failed to close rows: %s", err)
+		}
+	}()
 
 	// Verify all River tables and structures are created
 	t.Run("Verify River Enum Types", func(t *testing.T) {
@@ -94,7 +98,11 @@ func verifyRiverEnumTypes(t *testing.T, db *sql.DB) {
 		ORDER BY unnest(enum_range(NULL::river_job_state))::text
 	`)
 	require.NoError(t, err)
-	defer rows.Close()
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Logf("failed to close rows: %s", err)
+		}
+	}()
 
 	for rows.Next() {
 		var value string

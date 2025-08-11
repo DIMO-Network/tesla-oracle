@@ -102,16 +102,6 @@ type partialTeslaClaims struct {
 	OUCode string `json:"ou_code"`
 }
 
-var teslaCodeFailureCount = promauto.NewCounterVec(
-	prometheus.CounterOpts{
-		Namespace: "tesla_oracle",
-		Subsystem: "tesla",
-		Name:      "code_exchange_failures_total",
-		Help:      "Known strains of failure during Tesla authorization code exchange and ensuing vehicle display.",
-	},
-	[]string{"type"},
-)
-
 // TelemetrySubscribe godoc
 // @Summary     Subscribe vehicle for Tesla Telemetry Data
 // @Description Subscribes a vehicle for telemetry data using the provided vehicle token ID and authorization details in the request body.
@@ -131,65 +121,51 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	vehicleTokenId := c.Params("vehicleTokenId")
 	if vehicleTokenId == "" {
 		t.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
+		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusBadRequest, "VehicleTokenId is required in the request path.")
 	}
 
-	// Logger setup
 	logger := helpers.GetLogger(c, t.logger).With().
 		Str("Name", "Telemetry/Subscribe").
 		Logger()
 
 	logger.Debug().Msgf("Received telemetry subscribe request for %s.", vehicleTokenId)
 
-	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
 	if walletAddress != t.settings.MobileAppDevLicense {
+		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
 	}
 
-	// finish getting the access token
 	teslaAuth, err := t.getAccessToken(c)
 	if err != nil {
 		logger.Err(err).Msg("Failed to get access token.")
+		subscribeTelemetryFailureCount.Inc()
 		return err
 	}
 
-	// Call identity to retrieve SyntheticDevice Address
 	vehicle, err := t.fetchVehicle(vehicleTokenId)
 	if err != nil {
+		subscribeTelemetryFailureCount.Inc()
 		return err
 	}
 
-	// get VIN using the synthetic device address
-	// TODO implement transactions handling here
 	device, err := dbmodels.SyntheticDevices(
 		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
 	).One(c.Context(), t.pdb.DBS().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
+		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
 	}
 
-	// Call SubscribeForTelemetryData
 	if err := t.fleetAPISvc.SubscribeForTelemetryData(c.Context(), teslaAuth.AccessToken, device.Vin); err != nil {
 		logger.Err(err).Msg("Error registering for telemetry")
-		var subErr *service.TeslaSubscriptionError
-		if errors.As(err, &subErr) {
-			switch subErr.Type {
-			case service.KeyUnpaired:
-				return fiber.NewError(fiber.StatusBadRequest, "Virtual key not paired with vehicle.")
-			case service.UnsupportedVehicle:
-				return fiber.NewError(fiber.StatusBadRequest, "Pre-2021 Model S and X do not support telemetry.")
-			case service.UnsupportedFirmware:
-				return fiber.NewError(fiber.StatusBadRequest, "OnboardingService firmware version is earlier than 2024.26.")
-			}
-		}
+		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
 	}
 
-	// We know refresh token ttl is 3 months, so we set it to 3 months from now.
 	refreshExpiry := time.Now().AddDate(0, 3, 0)
-
 	creds := service.Credential{
 		AccessToken:   teslaAuth.AccessToken,
 		RefreshToken:  teslaAuth.RefreshToken,
@@ -200,10 +176,12 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	err = t.UpdateCredsAndStatusToSuccess(c.Context(), device, &creds)
 	if err != nil {
 		logger.Err(err).Msg("Failed to update telemetry credentials.")
+		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry credentials.")
 	}
 
 	logger.Info().Msgf("Successfully subscribed to telemetry vehicle: %s.", vehicleTokenId)
+	subscribeTelemetrySuccessCount.Inc()
 	return c.JSON(fiber.Map{"message": "Successfully subscribed to vehicle telemetry."})
 }
 
@@ -225,68 +203,70 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	vehicleTokenId := c.Params("vehicleTokenId")
 	if vehicleTokenId == "" {
 		t.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
+		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusBadRequest, "VehicleTokenId is required in the request path.")
 	}
 
-	// Logger setup
 	logger := helpers.GetLogger(c, t.logger).With().
 		Str("Name", "Telemetry/Unsubscribe").
 		Logger()
 
 	logger.Info().Msgf("Received telemetry unsubscribe request for %s.", vehicleTokenId)
 
-	// Fetch wallet address
 	walletAddress := helpers.GetWallet(c)
 	if walletAddress != t.settings.MobileAppDevLicense {
+		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to unsubscribe from telemetry.", walletAddress.Hex()))
 	}
 
-	// Get partners token
 	partnersTokenResp, err := t.fleetAPISvc.GetPartnersToken(c.Context())
 	if err != nil {
 		logger.Err(err).Msg("Failed to get partners token.")
+		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get partners token.")
 	}
 
-	// Validate access token
 	if partnersTokenResp.AccessToken == "" {
+		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Partners token response did not contain an access token.")
 	}
 
 	vehicle, err := t.fetchVehicle(vehicleTokenId)
 	if err != nil {
+		unsubscribeTelemetryFailureCount.Inc()
 		return err
 	}
 
-	// get VIN using the synthetic device address
 	device, err := dbmodels.SyntheticDevices(
 		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.pdb.DBS().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
+		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
 	}
 
-	// Call the UnSubscribeFromTelemetryData function
 	err = t.fleetAPISvc.UnSubscribeFromTelemetryData(c.Context(), partnersTokenResp.AccessToken, device.Vin)
 	if err != nil {
 		logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
+		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data")
 	}
 
 	stopErr := t.devicesService.StopTeslaTask(c.Context(), vehicle.TokenID)
 	if stopErr != nil {
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to stop Tesla task for synthetic device.")
+		logger.Warn().Err(stopErr).Msg("Failed to stop Tesla task for synthetic device.")
 	}
 
 	device.SubscriptionStatus = null.String{String: "inactive", Valid: true}
-	// update synthetic device status
 	_, err = device.Update(c.Context(), t.pdb.DBS().Writer, boil.Infer())
 	if err != nil {
 		logger.Err(err).Msg("Failed to update synthetic device status.")
+		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update synthetic device status.")
 	}
 
 	logger.Info().Msgf(`Successfully unsubscribed vehicle %s from telemetry data.`, vehicleTokenId)
+	unsubscribeTelemetrySuccessCount.Inc()
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Successfully unsubscribed from telemetry data",
 	})
@@ -520,3 +500,49 @@ func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synth
 
 	return nil
 }
+
+var teslaCodeFailureCount = promauto.NewCounterVec(
+	prometheus.CounterOpts{
+		Namespace: "tesla_oracle",
+		Subsystem: "tesla",
+		Name:      "code_exchange_failures_total",
+		Help:      "Known strains of failure during Tesla authorization code exchange and ensuing vehicle display.",
+	},
+	[]string{"type"},
+)
+
+var unsubscribeTelemetrySuccessCount = promauto.NewCounter(
+	prometheus.CounterOpts{
+		Namespace: "tesla_oracle",
+		Subsystem: "tesla",
+		Name:      "unsubscribe_telemetry_success_total",
+		Help:      "Total number of successful telemetry unsubscriptions.",
+	},
+)
+
+var unsubscribeTelemetryFailureCount = promauto.NewCounter(
+	prometheus.CounterOpts{
+		Namespace: "tesla_oracle",
+		Subsystem: "tesla",
+		Name:      "unsubscribe_telemetry_failure_total",
+		Help:      "Total number of failed telemetry unsubscriptions.",
+	},
+)
+
+var subscribeTelemetrySuccessCount = promauto.NewCounter(
+	prometheus.CounterOpts{
+		Namespace: "tesla_oracle",
+		Subsystem: "tesla",
+		Name:      "subscribe_telemetry_success_total",
+		Help:      "Total number of successful telemetry subscriptions.",
+	},
+)
+
+var subscribeTelemetryFailureCount = promauto.NewCounter(
+	prometheus.CounterOpts{
+		Namespace: "tesla_oracle",
+		Subsystem: "tesla",
+		Name:      "subscribe_telemetry_failure_total",
+		Help:      "Total number of failed telemetry subscriptions.",
+	},
+)

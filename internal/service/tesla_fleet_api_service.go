@@ -240,7 +240,11 @@ func (t *teslaFleetAPIService) GetPartnersToken(ctx context.Context) (*PartnersA
 	if err != nil {
 		return nil, fmt.Errorf("failed to perform request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.log.Warn().Err(err).Msg("Failed to close response body")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -586,7 +590,11 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
 
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			t.log.Warn().Err(err).Msg("Failed to close response body")
+		}
+	}()
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusMisdirectedRequest {
