@@ -10,6 +10,7 @@ export class AuthProvider extends LitElement {
     @property({attribute: false})
     private _auth: AuthContext = {
         token: '',
+        vehicleTokenId: '',
     };
 
     connectedCallback() {
@@ -39,9 +40,9 @@ export class AuthProvider extends LitElement {
     logout() {
         console.debug('LOGOUT');
 
-        this._auth = { ...this._auth, token: '', };
+        this._auth = { ...this._auth, token: '', vehicleTokenId: ''};
 
-        const keysToRemove = ['token'];
+        const keysToRemove = ['token', 'vehicleTokenId'];
         keysToRemove.forEach(key => {
             localStorage.removeItem(key);
         });
@@ -53,7 +54,7 @@ export class AuthProvider extends LitElement {
         console.debug('QS Params:');
         params.forEach((value, key) => {
             console.debug(`${key}: ${value}`);
-            if (['token'].includes(key)) {
+            if (['token', 'vehicleTokenId'].includes(key)) {
                 localStorage.setItem(key, value);
                 hadParams = true;
             }

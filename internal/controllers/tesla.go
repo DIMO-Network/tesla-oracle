@@ -338,6 +338,37 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Couldn't fetch vehicles from Tesla.")
 	}
 
+	var reqBody ListVehiclesRequest
+	if err := c.BodyParser(&reqBody); err != nil {
+		t.logger.Err(err).Msg("Failed to parse request body OR it is empty.")
+		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse request body OR it is empty.")
+	}
+
+	var identityVehicle *models.Vehicle
+	if len(reqBody.VehicleTokenID) > 0 {
+		vehicleTokenID, err := strconv.ParseInt(reqBody.VehicleTokenID, 10, 64)
+		if err != nil {
+			return fiber.NewError(fiber.StatusBadRequest, "Failed to parse vehicle token ID.")
+		}
+
+		identityVehicle, err = t.identitySvc.FetchVehicleByTokenID(vehicleTokenID)
+		if err == nil {
+			if identityVehicle.Owner != walletAddress.String() {
+				// If the provided vehicle token ID is owned by someone else, we need to mint a new one
+				identityVehicle = nil
+				t.logger.Warn().Msgf(`Vehicle %d is not owned by the wallet %s.`, vehicleTokenID, walletAddress.String())
+			} else if identityVehicle.SyntheticDevice.TokenID != 0 {
+				// If the provided vehicle is already fully minted (has SD), we need to  mint a new one
+				identityVehicle = nil
+				t.logger.Warn().Msgf(`Vehicle %d is already connected.`, vehicleTokenID)
+			} else if identityVehicle.Definition.Make != "Tesla" {
+				// If provided vehicle is not a Tesla, we need to mint a new one
+				identityVehicle = nil
+				t.logger.Warn().Msgf(`Vehicle %d is not a Tesla.`, vehicleTokenID)
+			}
+		}
+	}
+
 	decodeStart := time.Now()
 	response := make([]TeslaVehicle, 0, len(vehicles))
 	for _, v := range vehicles {
@@ -355,13 +386,20 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 			}
 		}
 
+		onboardingRecord := dbmodels.Onboarding{
+			Vin:                v.VIN,
+			DeviceDefinitionID: null.String{String: ddRes.DeviceDefinitionID, Valid: true},
+			OnboardingStatus:   onboarding.OnboardingStatusVendorValidationSuccess,
+			ExternalID:         null.String{String: strconv.Itoa(v.ID), Valid: true},
+		}
+
+		if identityVehicle != nil {
+			// Populate Vehicle token ID, so the onboarding will only mint synthetic device
+			onboardingRecord.VehicleTokenID = null.Int64From(identityVehicle.TokenID)
+		}
+
 		if record == nil {
-			err = t.onboarding.InsertVinToDB(c.Context(), &dbmodels.Onboarding{
-				Vin:                v.VIN,
-				DeviceDefinitionID: null.String{String: ddRes.DeviceDefinitionID, Valid: true},
-				OnboardingStatus:   onboarding.OnboardingStatusVendorValidationSuccess,
-				ExternalID:         null.String{String: strconv.Itoa(v.ID), Valid: true},
-			})
+			err = t.onboarding.InsertVinToDB(c.Context(), &onboardingRecord)
 
 			if err != nil {
 				return fiber.NewError(fiber.StatusInternalServerError, "Failed to create onboarding record.")
@@ -445,6 +483,12 @@ func (tc *TeslaController) fetchVehicle(vehicleTokenId string) (*models.Vehicle,
 type CompleteOAuthExchangeRequest struct {
 	AuthorizationCode string `json:"authorizationCode"`
 	RedirectURI       string `json:"redirectUri"`
+}
+
+type ListVehiclesRequest struct {
+	AuthorizationCode string `json:"authorizationCode"`
+	RedirectURI       string `json:"redirectUri"`
+	VehicleTokenID    string `json:"vehicleTokenId"`
 }
 
 type CompleteOAuthExchangeResponseWrapper struct {
