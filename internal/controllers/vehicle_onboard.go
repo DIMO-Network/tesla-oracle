@@ -100,14 +100,12 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 	localLog := v.logger.With().Interface("vins", params.Vins).Str(logfields.FunctionName, "VerifyVins").Logger()
 	localLog.Debug().Msg("Verification for Vins")
 
-	validVehicles := make([]VinWithTokenID, 0, len(params.Vins))
 	indexedVehicles := make(map[string]VinWithTokenID)
 	validVins := make([]string, 0, len(params.Vins))
 	for _, vehicle := range params.Vins {
 		strippedVin := strings.TrimSpace(vehicle.Vin)
 		if v.isValidVin(strippedVin) {
 			validVins = append(validVins, strippedVin)
-			validVehicles = append(validVehicles, VinWithTokenID{Vin: strippedVin, VehicleTokenID: vehicle.VehicleTokenID})
 			indexedVehicles[vehicle.Vin] = vehicle
 		}
 	}
@@ -162,6 +160,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 		for _, dbVin := range dbVins {
 			vehicle, ok := indexedVehicles[dbVin.Vin]
 			if !ok {
+				statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Unknown", Details: "Unknown"})
 			}
 
 			if vehicle.VehicleTokenID != 0 {

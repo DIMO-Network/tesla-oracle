@@ -41,7 +41,7 @@ type TeslaControllerTestSuite struct {
 }
 
 const migrationsDirRelPath = "../../migrations"
-const vehicleTokenID = 123
+const vehicleTokenID = 789
 
 // SetupSuite starts container db
 func (s *TeslaControllerTestSuite) SetupSuite() {
