@@ -13,6 +13,7 @@ import qs from "qs";
 import {repeat} from "lit/directives/repeat.js";
 import {BaseOnboardingElement} from "@elements/base-onboarding-element.ts";
 import {MessageService} from "@services/message.service.ts";
+import {AuthContext, authContext} from "@context/auth.context.ts";
 
 interface DeviceDefinition {
     id: string;
@@ -43,6 +44,10 @@ export class TeslaElement extends BaseOnboardingElement {
     @property({attribute: false})
     private teslaAuth?: TeslaAuthContext;
 
+    @consume({context: authContext, subscribe: true})
+    @property({attribute: false})
+    private auth?: AuthContext;
+
     protected messageService: MessageService = MessageService.getInstance();
 
     private loadVehiclesTask = new Task(this, {
@@ -53,7 +58,7 @@ export class TeslaElement extends BaseOnboardingElement {
 
             const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
                 authorizationCode,
-                redirectUri
+                redirectUri,
             }, true);
             return response.data?.vehicles || [];
         },
@@ -61,12 +66,12 @@ export class TeslaElement extends BaseOnboardingElement {
     });
 
     private onboardVehicleTask = new Task(this, {
-        task: async ([vin]: [string], {}) => {
+        task: async ([vin, vehicleTokenId]: [string, number?], {}) => {
             if (!vin) {
                 return;
             }
 
-            const finalized = await this.onboardVINs([vin]);
+            const finalized = await this.onboardVINs([{vin, vehicleTokenId}]);
 
             if (!finalized || !(finalized?.vehicles.length > 0)) {
                 return;
@@ -142,6 +147,14 @@ export class TeslaElement extends BaseOnboardingElement {
     }
 
     handleOnboardClick(vin: string) {
-        this.onboardVehicleTask.run([vin]);
+        let vehicleTokenId = undefined
+        if (this.auth?.vehicleTokenId) {
+            const tid = Number(this.auth.vehicleTokenId)
+            if (!Number.isNaN(tid)) {
+                vehicleTokenId = tid
+            }
+        }
+
+        this.onboardVehicleTask.run([vin, vehicleTokenId]);
     }
 }

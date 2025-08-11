@@ -15,6 +15,7 @@ import (
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
@@ -68,12 +69,13 @@ func NewVehicleOnboardController(
 	}
 }
 
-type VinsGetParams struct {
-	Vins []string `json:"vins" query:"vins"`
+type VinWithTokenID struct {
+	Vin            string `json:"vin"`
+	VehicleTokenID int64  `json:"vehicleTokenId,omitempty"`
 }
 
-func (v *VehicleController) isValidVin(vin string) bool {
-	return vinRegexp.MatchString(vin)
+type VinsVerifyParams struct {
+	Vins []VinWithTokenID `json:"vins" query:"vins"`
 }
 
 type VinStatus struct {
@@ -84,6 +86,134 @@ type VinStatus struct {
 
 type StatusForVinsResponse struct {
 	Statuses []VinStatus `json:"statuses"`
+}
+
+func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
+	walletAddress := c.Locals("wallet").(common.Address)
+
+	params := new(VinsVerifyParams)
+	if err := c.BodyParser(params); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Failed to parse VINs",
+		})
+	}
+	localLog := v.logger.With().Interface("vins", params.Vins).Str(logfields.FunctionName, "VerifyVins").Logger()
+	localLog.Debug().Msg("Verification for Vins")
+
+	indexedVehicles := make(map[string]VinWithTokenID)
+	validVins := make([]string, 0, len(params.Vins))
+	for _, vehicle := range params.Vins {
+		strippedVin := strings.TrimSpace(vehicle.Vin)
+		if v.isValidVin(strippedVin) {
+			validVins = append(validVins, strippedVin)
+			indexedVehicles[vehicle.Vin] = vehicle
+		}
+	}
+
+	if len(validVins) != len(params.Vins) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Invalid VINs provided",
+		})
+	}
+
+	compactedVins := slices.Compact(validVins)
+	if len(validVins) != len(compactedVins) {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Duplicated VINs",
+		})
+	}
+
+	localLog.Debug().Interface("validVins", validVins).Msgf("Got %d valid VINs for get mint", len(validVins))
+
+	statuses := make([]VinStatus, 0, len(validVins))
+
+	if len(validVins) > 0 {
+		dbVins, err := v.onboardingSvc.GetVehiclesByVinsAndOnboardingStatusRange(
+			c.Context(),
+			validVins,
+			onboarding.OnboardingStatusVendorValidationSuccess,
+			onboarding.OnboardingStatusMintFailure,
+			nil,
+		)
+		if err != nil {
+			if errors.Is(err, service.ErrVehicleNotFound) {
+				return fiber.NewError(fiber.StatusBadRequest, "Could not find Vehicles")
+			}
+
+			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+				"error": "Failed to load vehicles from Database",
+			})
+		}
+
+		if len(dbVins) != len(validVins) {
+			return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+				"error": "Some of the VINs are not verified or already onboarded",
+			})
+		}
+
+		indexedVins := make(map[string]*dbmodels.Onboarding)
+		for _, vin := range dbVins {
+			indexedVins[vin.Vin] = vin
+		}
+
+		// we need to do extra checks for provided vehicle token ids
+		for _, dbVin := range dbVins {
+			vehicle, ok := indexedVehicles[dbVin.Vin]
+			if !ok {
+				statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Unknown", Details: "Unknown"})
+			}
+
+			if vehicle.VehicleTokenID != 0 {
+				var identityVehicle *models.Vehicle
+				identityVehicle, err = v.identitySvc.FetchVehicleByTokenID(vehicle.VehicleTokenID)
+				if err == nil && identityVehicle != nil {
+					if identityVehicle.Owner != walletAddress.String() {
+						// If the provided vehicle token ID is owned by someone else, we need to mint a new one
+						identityVehicle = nil
+						v.logger.Warn().Msgf(`Vehicle %d is not owned by the wallet %s.`, vehicle.VehicleTokenID, walletAddress.String())
+					} else if identityVehicle.SyntheticDevice.TokenID != 0 {
+						// If the provided vehicle is already fully minted (has SD), we need to  mint a new one
+						identityVehicle = nil
+						v.logger.Warn().Msgf(`Vehicle %d is already connected.`, vehicle.VehicleTokenID)
+					} else if identityVehicle.Definition.ID != dbVin.DeviceDefinitionID.String {
+						// If provided vehicle is not the same MMY, we need to mint a new one
+						identityVehicle = nil
+						v.logger.Warn().Msgf(`Vehicle has incorrect definition: %d`, vehicle.VehicleTokenID)
+					} else {
+						// Looks legit, let's update onboarding record with the provided vehicle token id
+						dbVin.VehicleTokenID = null.Int64From(vehicle.VehicleTokenID)
+						err = v.onboardingSvc.InsertOrUpdateVin(c.Context(), dbVin)
+						if err != nil {
+							v.logger.Error().Msgf(`Failed to set vehicle token ID %d for VIN %s`, vehicle.VehicleTokenID, vehicle.Vin)
+							return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+								"error": "Failed to set vehicle token ID",
+							})
+						}
+					}
+				}
+
+				if identityVehicle != nil {
+					statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: "Ready to mint Synthetic Device"})
+				} else {
+					statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: "Ready to mint Vehicle and Synthetic Device"})
+				}
+			} else {
+				statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: "Ready to mint Vehicle and Synthetic Device"})
+			}
+		}
+	}
+
+	return c.JSON(StatusForVinsResponse{
+		Statuses: statuses,
+	})
+}
+
+type VinsGetParams struct {
+	Vins []string `json:"vins" query:"vins"`
+}
+
+func (v *VehicleController) isValidVin(vin string) bool {
+	return vinRegexp.MatchString(vin)
 }
 
 func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {

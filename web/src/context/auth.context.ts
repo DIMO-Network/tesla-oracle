@@ -2,7 +2,7 @@ import {createContext} from '@lit/context';
 
 export interface AuthContext {
     token: string;
-
+    vehicleTokenId: string;
 }
 
 export enum AuthEventType {

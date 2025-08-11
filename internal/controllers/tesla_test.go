@@ -100,7 +100,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	}
 
 	// when
-	mockIdentitySvc := new(MockIdentityAPIService)
+	mockIdentitySvc := new(test.MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
 		Owner: ownerAdd,
 		SyntheticDevice: mods.SyntheticDevice{
@@ -109,7 +109,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	}
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
 
-	mockCredStore := new(MockCredStore)
+	mockCredStore := new(test.MockCredStore)
 	expectedCredentials := &service.Credential{
 		AccessToken:   "mockAccessToken",
 		RefreshToken:  "mockRefreshToken",
@@ -154,7 +154,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	req.Header.Set("Content-Type", "application/json")
 
 	// token
-	err := generateJWT(req)
+	err := test.GenerateJWT(req)
 	assert.NoError(s.T(), err)
 
 	// then
@@ -224,7 +224,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 	req.Header.Set("Content-Type", "application/json")
 
 	// token
-	err := generateJWT(req)
+	err := test.GenerateJWT(req)
 	assert.NoError(s.T(), err)
 
 	// then
@@ -293,7 +293,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 	req.Header.Set("Content-Type", "application/json")
 
 	// token
-	err := generateJWT(req)
+	err := test.GenerateJWT(req)
 	assert.NoError(s.T(), err)
 
 	// then
@@ -331,7 +331,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 	// when
-	mockIdentitySvc := new(MockIdentityAPIService)
+	mockIdentitySvc := new(test.MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
 		Owner:   ownerAdd,
 		TokenID: vehicleTokenID,
@@ -340,7 +340,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 		},
 	}
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
-	mockCredStore := new(MockCredStore)
+	mockCredStore := new(test.MockCredStore)
 	mockTeslaService := new(MockTeslaFleetAPIService)
 
 	mockTeslaService.On("GetPartnersToken", mock.Anything).Return(&service.PartnersAccessTokenResponse{
@@ -383,7 +383,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	)
 
 	// Generate a valid JWT token
-	err := generateJWT(req)
+	err := test.GenerateJWT(req)
 	assert.NoError(s.T(), err)
 
 	// then
@@ -405,56 +405,6 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// Verify mock expectations
 	mockCredStore.AssertExpectations(s.T())
 	mockTeslaService.AssertExpectations(s.T())
-}
-
-func generateJWT(req *http.Request) error {
-	// Define the secret key for signing the token
-	secretKey := []byte("your-secret-key")
-
-	// Create claims with the required `ethereum_address`
-	claims := jwt.MapClaims{
-		"ethereum_address": "0x1234567890abcdef1234567890abcdef12345678", // Valid Ethereum address
-		"exp":              time.Now().Add(time.Hour).Unix(),             // Token expiration time
-	}
-
-	// Create a new token with the claims
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-
-	// Sign the token with the secret key
-	signedToken, err := token.SignedString(secretKey)
-	if err != nil {
-		fmt.Println("Error signing token:", err)
-		return err
-	}
-
-	fmt.Println("Valid Token:", signedToken)
-	req.Header.Set("Authorization", "Bearer "+signedToken)
-	return nil
-}
-
-// MockCredStore is a mock implementation of the CredStore interface.
-type MockCredStore struct {
-	mock.Mock
-}
-
-func (m *MockCredStore) Retrieve(ctx context.Context, user common.Address) (*service.Credential, error) {
-	args := m.Called(ctx, user)
-	return args.Get(0).(*service.Credential), args.Error(1)
-}
-
-func (m *MockCredStore) EncryptTokens(credential *service.Credential) (*service.Credential, error) {
-	args := m.Called(credential)
-	return args.Get(0).(*service.Credential), args.Error(1)
-}
-
-func (m *MockCredStore) RetrieveWithTokensEncrypted(ctx context.Context, user common.Address) (*service.Credential, error) {
-	args := m.Called(ctx, user)
-	return args.Get(0).(*service.Credential), args.Error(1)
-}
-
-func (m *MockCredStore) Store(ctx context.Context, user common.Address, cred *service.Credential) error {
-	args := m.Called(ctx, user, cred)
-	return args.Error(0)
 }
 
 // MockTeslaFleetAPIService is a mock implementation of the TeslaFleetAPIService interface.
@@ -511,47 +461,6 @@ func (m *MockTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Co
 func (m *MockTeslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context, accessToken, vin string) error {
 	args := m.Called(ctx, accessToken, vin)
 	return args.Error(0)
-}
-
-// MockIdentityAPIService is a mock implementation of the IdentityAPIService interface.
-type MockIdentityAPIService struct {
-	mock.Mock
-}
-
-func (m *MockIdentityAPIService) GetCachedVehicleByTokenID(tokenID int64) (*mods.Vehicle, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockIdentityAPIService) FetchVehiclesByWalletAddress(address string) ([]mods.Vehicle, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockIdentityAPIService) GetDeviceDefinitionByID(id string) (*mods.DeviceDefinition, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockIdentityAPIService) GetCachedDeviceDefinitionByID(id string) (*mods.DeviceDefinition, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockIdentityAPIService) FetchVehicleByTokenID(tokenID int64) (*mods.Vehicle, error) {
-	args := m.Called(tokenID)
-	if args.Get(0) != nil {
-		return args.Get(0).(*mods.Vehicle), args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-
-func (m *MockIdentityAPIService) FetchDeviceDefinitionByID(deviceDefinitionID string) (*mods.DeviceDefinition, error) {
-	args := m.Called(deviceDefinitionID)
-	if args.Get(0) != nil {
-		return args.Get(0).(*mods.DeviceDefinition), args.Error(1)
-	}
-	return nil, args.Error(1)
 }
 
 // MockDevicesGRPCService is a mock implementation of the DevicesGRPCService interface.

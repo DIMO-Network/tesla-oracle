@@ -4,14 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/DIMO-Network/tesla-oracle/internal/config"
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/gofiber/fiber/v2"
+	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/docker/go-connections/nat"
@@ -160,4 +161,29 @@ func BuildRequest(method, url, body string) *http.Request {
 	req.Header.Set("Content-Type", "application/json")
 
 	return req
+}
+
+func GenerateJWT(req *http.Request) error {
+	// Define the secret key for signing the token
+	secretKey := []byte("your-secret-key")
+
+	// Create claims with the required `ethereum_address`
+	claims := jwt.MapClaims{
+		"ethereum_address": "0x1234567890abcdef1234567890abcdef12345678", // Valid Ethereum address
+		"exp":              time.Now().Add(time.Hour).Unix(),             // Token expiration time
+	}
+
+	// Create a new token with the claims
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Sign the token with the secret key
+	signedToken, err := token.SignedString(secretKey)
+	if err != nil {
+		fmt.Println("Error signing token:", err)
+		return err
+	}
+
+	fmt.Println("Valid Token:", signedToken)
+	req.Header.Set("Authorization", "Bearer "+signedToken)
+	return nil
 }
