@@ -51,7 +51,7 @@ export class TeslaElement extends BaseOnboardingElement {
     protected messageService: MessageService = MessageService.getInstance();
 
     private loadVehiclesTask = new Task(this, {
-        task: async ([authorizationCode, redirectUri, vehicleTokenId], {}) => {
+        task: async ([authorizationCode, redirectUri], {}) => {
             if (!authorizationCode || !redirectUri) {
                 return [];
             }
@@ -59,20 +59,19 @@ export class TeslaElement extends BaseOnboardingElement {
             const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
                 authorizationCode,
                 redirectUri,
-                vehicleTokenId,
             }, true);
             return response.data?.vehicles || [];
         },
-        args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri, this.auth?.vehicleTokenId]
+        args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri]
     });
 
     private onboardVehicleTask = new Task(this, {
-        task: async ([vin]: [string], {}) => {
+        task: async ([vin, vehicleTokenId]: [string, number?], {}) => {
             if (!vin) {
                 return;
             }
 
-            const finalized = await this.onboardVINs([vin]);
+            const finalized = await this.onboardVINs([{vin, vehicleTokenId}]);
 
             if (!finalized || !(finalized?.vehicles.length > 0)) {
                 return;
@@ -148,6 +147,14 @@ export class TeslaElement extends BaseOnboardingElement {
     }
 
     handleOnboardClick(vin: string) {
-        this.onboardVehicleTask.run([vin]);
+        let vehicleTokenId = undefined
+        if (this.auth?.vehicleTokenId) {
+            const tid = Number(this.auth.vehicleTokenId)
+            if (!Number.isNaN(tid)) {
+                vehicleTokenId = tid
+            }
+        }
+
+        this.onboardVehicleTask.run([vin, vehicleTokenId]);
     }
 }

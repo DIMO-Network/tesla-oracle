@@ -6,6 +6,11 @@ import qs from 'qs';
 import {range} from "lodash";
 import {delay} from "@utils/utils";
 
+interface VehicleOnboardingData {
+    vin: string;
+    vehicleTokenId?: number;
+}
+
 interface VinOnboardingStatus {
     vin: string;
     status: string;
@@ -119,45 +124,23 @@ export class BaseOnboardingElement extends LitElement {
         this.onboardResult = newResult
     }
 
-    async verifyVehicles(vins: string[]) {
+    async verifyVehicles(vehicles: VehicleOnboardingData[]) {
         const payload = {
-            vins: vins.map(v => ({vin: v, countryCode: 'USA'}))
+            vins: vehicles
         }
 
-        const submitStatus = await this.api.callApi('POST', '/v1/vehicle/verify', payload, true);
-        if (!submitStatus.success) {
+        const verificationStatus = await this.api.callApi<VinsOnboardingResult>('POST', '/v1/vehicle/verify', payload, true);
+        if (!verificationStatus.success || !verificationStatus.data) {
             return false;
         }
 
-        let success = true
-        for (const attempt of range(10)) {
-            success = true
-            const query = qs.stringify({vins: vins.join(',')}, {arrayFormat: 'comma'});
-            const status = await this.api.callApi<VinsOnboardingResult>('GET', `/v1/vehicle/verify?${query}`, null, true);
-
-            if (!status.success || !status.data) {
+        for (const vinStatus of verificationStatus.data.statuses) {
+            if (vinStatus.status != "Success") {
                 return false;
-            }
-
-            for (const s of status.data.statuses) {
-                if (s.status !== 'Success') {
-                    success = false;
-                    break;
-                }
-            }
-
-            this.updateResult(status.data)
-
-            if (success) {
-                break;
-            }
-
-            if (attempt < 9) {
-                await delay(5000);
             }
         }
 
-        return success;
+        return true;
     }
 
     async getMintingData(vins: string[]) {
@@ -238,14 +221,13 @@ export class BaseOnboardingElement extends LitElement {
         return await this.api.callApi<FinalizeResponse>('POST', '/v1/vehicle/finalize', {vins}, true);
     }
 
-
-    async onboardVINs(vins: string[]): Promise<FinalizeResponse | null> {
+    async onboardVINs(vehicles: VehicleOnboardingData[]): Promise<FinalizeResponse | null> {
         let allVinsValid = true;
-        for (const vin of vins) {
-            const validVin = vin?.length === 17
+        for (const vehicle of vehicles) {
+            const validVin = vehicle.vin.length === 17
             allVinsValid = allVinsValid && validVin
             this.onboardResult.push({
-                vin: vin,
+                vin: vehicle.vin,
                 status: "Unknown",
                 details: validVin ? "Valid VIN" : "Invalid VIN"
             })
@@ -256,6 +238,13 @@ export class BaseOnboardingElement extends LitElement {
             return null;
         }
 
+        const verified = await this.verifyVehicles(vehicles);
+        if (!verified) {
+            this.displayFailure("Failed to verify vehicles");
+            return null;
+        }
+
+        const vins = vehicles.map((v) => v.vin);
         const mintData = await this.getMintingData(vins);
         if (mintData.length === 0) {
             this.displayFailure("Failed to fetch minting data");
