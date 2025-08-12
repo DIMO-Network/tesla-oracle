@@ -2,13 +2,17 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"github.com/DIMO-Network/shared/pkg/redis"
+	"io"
 	"net/http"
 	"os"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
@@ -28,6 +32,9 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
+
+	rd "github.com/go-redis/redis/v8"
+	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const vin = "1HGCM82633A123456"
@@ -407,6 +414,263 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockTeslaService.AssertExpectations(s.T())
 }
 
+func (s *TeslaControllerTestSuite) TestListVehicles() {
+	// given
+	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
+	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
+	dbVin := models.SyntheticDevice{
+		Address:           synthDeviceAddress.Bytes(),
+		Vin:               vin,
+		TokenID:           null.NewInt(456, true),
+		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
+		WalletChildNumber: 111,
+	}
+
+	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+	onboardings := models.Onboarding{
+		Vin:              vin,
+		SyntheticTokenID: null.NewInt64(456, true),
+		VehicleTokenID:   null.NewInt64(vehicleTokenID, true),
+	}
+	require.NoError(s.T(), onboardings.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+	// Spin up a local Redis container
+	redisContainer, err := testcontainers.GenericContainer(s.ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "redis:latest",
+			ExposedPorts: []string{"6379/tcp"},
+			WaitingFor:   wait.ForListeningPort("6379/tcp"),
+		},
+		Started: true,
+	})
+	require.NoError(s.T(), err)
+	defer redisContainer.Terminate(s.ctx)
+
+	// Get the Redis container's host and port
+	redisHost, err := redisContainer.Host(s.ctx)
+	require.NoError(s.T(), err)
+	redisPort, err := redisContainer.MappedPort(s.ctx, "6379")
+	require.NoError(s.T(), err)
+
+	// Connect to Redis
+	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
+	redisClient := rd.NewClient(&rd.Options{
+		Addr: redisAddr,
+	})
+	defer redisClient.Close()
+
+	// Create cacheService
+	cacheService := redis.NewRedisCacheService(false, redis.Settings{
+		URL:       redisAddr,
+		Password:  "",
+		TLS:       false,
+		KeyPrefix: "tesla-oracle",
+	})
+
+	// Create TempCredsStore using cacheService
+	credStore := service.TempCredsStore{
+		Cache:  cacheService,
+		Cipher: new(cipher.ROT13Cipher), // Example cipher
+	}
+
+	// Mock other dependencies
+	signedToken, done := generateTokenWithClaims(err)
+	if done {
+		return
+	}
+
+	mockIdentitySvc := new(test.MockIdentityAPIService)
+	mockTeslaService := new(MockTeslaFleetAPIService)
+	authCode := "testAuthCode"
+	redirectURI := "https://example.com/callback"
+	expectedResponse := &service.TeslaAuthCodeResponse{
+		AccessToken:  signedToken,
+		RefreshToken: "mockRefreshToken",
+		Expiry:       time.Now().Add(time.Hour),
+		TokenType:    "Bearer",
+		Region:       "NA",
+	}
+
+	// Define expected vehicles
+	expectedVehicles := []TeslaVehicle{
+		{
+			VIN:        vin,
+			ExternalID: "1",
+			Definition: DeviceDefinition{Make: "", Model: "Model 3", Year: 2019, DeviceDefinitionID: "12345"},
+		},
+	}
+
+	teslaVehicles := []service.TeslaVehicle{
+		{
+			VIN:       vin,
+			ID:        1,
+			VehicleID: vehicleTokenID,
+		},
+	}
+
+	mockDDService := new(MockDeviceDefinitionsAPIService)
+
+	// Define the mock behavior
+	mockDDService.On("DecodeVin", "1HGCM82633A123456", "USA").Return(&service.DecodeVinResponse{
+		DeviceDefinitionID: "12345",
+		NewTransactionHash: "0xabc123",
+	}, nil)
+
+	mockTeslaService.On("CompleteTeslaAuthCodeExchange", mock.Anything, authCode, redirectURI).Return(expectedResponse, nil)
+	mockTeslaService.On("GetVehicles", mock.Anything, signedToken).Return(teslaVehicles, nil)
+	expectedDeviceDefinition := &mods.DeviceDefinition{
+		DeviceDefinitionID: "12345",
+		Model:              "Model 3",
+		Year:               2019,
+	}
+	mockIdentitySvc.On("FetchDeviceDefinitionByID", "12345").Return(expectedDeviceDefinition, nil)
+
+	// Initialize the controller
+	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+	ons := service.NewOnboardingService(&s.pdb, &logger)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, mockDDService, mockIdentitySvc, &credStore, ons, &s.pdb)
+
+	// Set up the Fiber app
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		// Simulate JWT middleware setting the user in Locals
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"ethereum_address": "0x1234567890abcdef1234567890abcdef12345678",
+			"iss":              "tesla-oracle",
+			"sub":              "user123",
+			"aud":              "tesla-api",
+			"exp":              time.Now().Add(time.Hour).Unix(),
+			"iat":              time.Now().Unix(),
+			"scp":              []string{"read:vehicles", "write:telemetry"},
+			"ou_code":          "OU12345",
+		})
+		c.Locals("user", token)
+		return c.Next()
+	})
+	app.Use(helpers.NewWalletMiddleware())
+	app.Post("/v1/tesla/vehicles", controller.ListVehicles)
+
+	// Create the request body
+	requestBody := `{
+		"authorizationCode": "testAuthCode",
+		"redirectUri": "https://example.com/callback"
+	}`
+	// Create a test HTTP request
+	req, _ := http.NewRequest("POST", "/v1/tesla/vehicles", strings.NewReader(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+
+	// Generate a valid JWT token
+	err = generateJWT(req)
+	assert.NoError(s.T(), err)
+
+	// Execute the request
+	resp, err := app.Test(req)
+
+	// Verify the response
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		fmt.Println("Error reading response body:", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	var responseWrapper CompleteOAuthExchangeResponseWrapper
+	err = json.Unmarshal(bodyBytes, &responseWrapper)
+	assert.NoError(s.T(), err)
+
+	// Assert the response matches the expected vehicles
+	assert.Equal(s.T(), expectedVehicles, responseWrapper.Vehicles)
+
+	cachedVehicles, err := cacheService.Get(s.ctx, "credentials_0x1234567890AbcdEF1234567890aBcdef12345678").Result()
+	assert.NoError(s.T(), err)
+	assert.NotEmpty(s.T(), cachedVehicles)
+
+	// Verify mock expectations
+	mockIdentitySvc.AssertExpectations(s.T())
+	mockTeslaService.AssertExpectations(s.T())
+}
+
+func generateTokenWithClaims(err error) (string, bool) {
+	secretKey := []byte("your-secret-key")
+
+	// Define the claims for the token
+	claims := jwt.MapClaims{
+		"ethereum_address": "0x1234567890AbcdEF1234567890aBcdef12345678",
+		"iss":              "tesla-oracle",
+		"sub":              "user123",
+		"aud":              "tesla-api",
+		"exp":              time.Now().Add(time.Hour).Unix(),
+		"iat":              time.Now().Unix(),
+		"scp":              []string{"read:vehicles", "write:telemetry"},
+		"ou_code":          "OU12345",
+	}
+
+	// Create a new token with the claims
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Sign the token with the secret key
+	signedToken, err := token.SignedString(secretKey)
+	if err != nil {
+		fmt.Println("Error signing token:", err)
+		return "", true
+	}
+	return signedToken, false
+}
+
+func generateJWT(req *http.Request) error {
+	// Define the secret key for signing the token
+	secretKey := []byte("your-secret-key")
+
+	// Create claims with the required `ethereum_address`
+	claims := jwt.MapClaims{
+		"ethereum_address": "0x1234567890abcdef1234567890abcdef12345678", // Valid Ethereum address
+		"exp":              time.Now().Add(time.Hour).Unix(),             // Token expiration time
+	}
+
+	// Create a new token with the claims
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+
+	// Sign the token with the secret key
+	signedToken, err := token.SignedString(secretKey)
+	if err != nil {
+		fmt.Println("Error signing token:", err)
+		return err
+	}
+
+	fmt.Println("Valid Token:", signedToken)
+	req.Header.Set("Authorization", "Bearer "+signedToken)
+	return nil
+}
+
+// MockCredStore is a mock implementation of the CredStore interface.
+type MockCredStore struct {
+	mock.Mock
+}
+
+func (m *MockCredStore) Retrieve(ctx context.Context, user common.Address) (*service.Credential, error) {
+	args := m.Called(ctx, user)
+	return args.Get(0).(*service.Credential), args.Error(1)
+}
+
+func (m *MockCredStore) EncryptTokens(credential *service.Credential) (*service.Credential, error) {
+	args := m.Called(credential)
+	return args.Get(0).(*service.Credential), args.Error(1)
+}
+
+func (m *MockCredStore) RetrieveWithTokensEncrypted(ctx context.Context, user common.Address) (*service.Credential, error) {
+	args := m.Called(ctx, user)
+	return args.Get(0).(*service.Credential), args.Error(1)
+}
+
+func (m *MockCredStore) Store(ctx context.Context, user common.Address, cred *service.Credential) error {
+	args := m.Called(ctx, user, cred)
+	return args.Error(0)
+}
+
 // MockTeslaFleetAPIService is a mock implementation of the TeslaFleetAPIService interface.
 type MockTeslaFleetAPIService struct {
 	mock.Mock
@@ -429,8 +693,11 @@ func (m *MockTeslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Con
 }
 
 func (m *MockTeslaFleetAPIService) GetVehicles(ctx context.Context, token string) ([]service.TeslaVehicle, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, token)
+	if args.Get(0) != nil {
+		return args.Get(0).([]service.TeslaVehicle), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *MockTeslaFleetAPIService) GetVehicle(ctx context.Context, token string, vehicleID int) (*service.TeslaVehicle, error) {
@@ -476,4 +743,16 @@ func (m *MockDevicesGRPCService) StopTeslaTask(ctx context.Context, tokenID int6
 func (m *MockDevicesGRPCService) Close() error {
 	args := m.Called()
 	return args.Error(0)
+}
+
+type MockDeviceDefinitionsAPIService struct {
+	mock.Mock
+}
+
+func (m *MockDeviceDefinitionsAPIService) DecodeVin(vin, countryCode string) (*service.DecodeVinResponse, error) {
+	args := m.Called(vin, countryCode)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.DecodeVinResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
 }

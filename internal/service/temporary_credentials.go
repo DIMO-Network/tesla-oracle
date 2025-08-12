@@ -8,8 +8,9 @@ import (
 	"time"
 
 	"github.com/DIMO-Network/shared/pkg/cipher"
+	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/patrickmn/go-cache"
+	rd "github.com/go-redis/redis/v8"
 )
 
 const (
@@ -21,8 +22,8 @@ var (
 	ErrNotFound = errors.New("no credentials found for user")
 )
 
-type Store struct {
-	Cache  *cache.Cache
+type TempCredsStore struct {
+	Cache  redis.CacheService
 	Cipher cipher.Cipher
 }
 
@@ -34,7 +35,7 @@ type Credential struct {
 }
 
 // Store stores the given credential for the given user.
-func (s *Store) Store(_ context.Context, user common.Address, cred *Credential) error {
+func (s *TempCredsStore) Store(ctx context.Context, user common.Address, cred *Credential) error {
 	credJSON, err := json.Marshal(cred)
 	if err != nil {
 		return fmt.Errorf("failed to marshal credentials: %w", err)
@@ -45,23 +46,28 @@ func (s *Store) Store(_ context.Context, user common.Address, cred *Credential) 
 		return fmt.Errorf("failed to encrypt credentials: %w", err)
 	}
 
+	// TODO define is key is in redis convention
 	cacheKey := prefix + user.Hex()
-	s.Cache.Set(cacheKey, encCred, duration)
+	s.Cache.Set(ctx, cacheKey, encCred, duration)
 
 	return nil
 }
 
-func (s *Store) Retrieve(_ context.Context, user common.Address) (*Credential, error) {
+// Retrieve retrieves the credential for the given user from the cache, decrypts it, delete it and returns it.
+func (s *TempCredsStore) Retrieve(ctx context.Context, user common.Address) (*Credential, error) {
 	cacheKey := prefix + user.Hex()
-	cachedCred, ok := s.Cache.Get(cacheKey)
-	if !ok {
-		return nil, ErrNotFound
+	cachedCred := s.Cache.Get(ctx, cacheKey)
+
+	encCred, err := cachedCred.Result()
+	if err != nil {
+		if errors.Is(err, rd.Nil) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("failed to retrieve cached credentials: %w", err)
 	}
 
-	encCred := cachedCred.(string)
-
 	// Don't want a second call to pick this up. Use it or lose it.
-	s.Cache.Delete(cacheKey)
+	s.Cache.Del(ctx, cacheKey)
 
 	if len(encCred) == 0 {
 		return nil, fmt.Errorf("no credential found")
@@ -84,17 +90,19 @@ func (s *Store) Retrieve(_ context.Context, user common.Address) (*Credential, e
 	return &cred, nil
 }
 
-func (s *Store) RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*Credential, error) {
+func (s *TempCredsStore) RetrieveWithTokensEncrypted(ctx context.Context, user common.Address) (*Credential, error) {
 	cacheKey := prefix + user.Hex()
-	cachedCred, ok := s.Cache.Get(cacheKey)
-	if !ok {
+	cachedCred := s.Cache.Get(ctx, cacheKey)
+
+	encCred, err := cachedCred.Result()
+	if errors.Is(err, rd.Nil) {
 		return nil, ErrNotFound
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to retrieve cached credentials: %w", err)
 	}
 
-	encCred := cachedCred.(string)
-
 	// Don't want a second call to pick this up. Use it or lose it.
-	s.Cache.Delete(cacheKey)
+	s.Cache.Del(ctx, cacheKey)
 
 	if len(encCred) == 0 {
 		return nil, fmt.Errorf("no credential found")
@@ -122,7 +130,7 @@ func (s *Store) RetrieveWithTokensEncrypted(_ context.Context, user common.Addre
 	return credsWithEncryptedTokens, nil
 }
 
-func (s *Store) EncryptTokens(cred *Credential) (*Credential, error) {
+func (s *TempCredsStore) EncryptTokens(cred *Credential) (*Credential, error) {
 	encAccess, err := s.Cipher.Encrypt(cred.AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt access token: %w", err)
