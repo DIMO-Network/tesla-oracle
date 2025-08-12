@@ -80,7 +80,6 @@ func TestTeslaControllerTestSuite(t *testing.T) {
 
 func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	// given
-	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
 	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	walletAddress := common.HexToAddress(ownerAdd)
@@ -125,7 +124,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	}
 	mockCredStore.On("EncryptTokens", mock.Anything, mock.Anything).Return(expectedCredentials, nil)
 
-	mockTeslaService := new(MockTeslaFleetAPIService)
+	mockTeslaService := new(test.MockTeslaFleetAPIService)
 
 	//mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
 	mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, expectedResponse.AccessToken, vin).Return(nil)
@@ -186,7 +185,6 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 	// given
-	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
 	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	walletAddress := common.HexToAddress(ownerAdd)
@@ -202,7 +200,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 	// when
-	mockTeslaService := new(MockTeslaFleetAPIService)
+	mockTeslaService := new(test.MockTeslaFleetAPIService)
 
 	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -253,7 +251,6 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 
 func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 	// given
-	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
 	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	walletAddress := common.HexToAddress(ownerAdd)
@@ -269,7 +266,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 	// when
-	mockTeslaService := new(MockTeslaFleetAPIService)
+	mockTeslaService := new(test.MockTeslaFleetAPIService)
 
 	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
@@ -322,7 +319,6 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 
 func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// given
-	ownerAdd := "0x1234567890abcdef1234567890abcdef12345678"
 	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	walletAddress := common.HexToAddress(ownerAdd)
@@ -348,7 +344,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	}
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
 	mockCredStore := new(test.MockCredStore)
-	mockTeslaService := new(MockTeslaFleetAPIService)
+	mockTeslaService := new(test.MockTeslaFleetAPIService)
 
 	mockTeslaService.On("GetPartnersToken", mock.Anything).Return(&service.PartnersAccessTokenResponse{
 		AccessToken: "someToken",
@@ -360,7 +356,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockTeslaService.On("UnSubscribeFromTelemetryData", mock.Anything, "someToken", vin).Return(nil)
 
 	// Mock the DevicesGRPCService
-	mockDevicesService := new(MockDevicesGRPCService)
+	mockDevicesService := new(test.MockDevicesGRPCService)
 	mockDevicesService.On("StopTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
 
 	// Initialize the controller
@@ -415,19 +411,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 }
 
 func (s *TeslaControllerTestSuite) TestListVehicles() {
-	// given
-	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
-	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
-	dbVin := models.SyntheticDevice{
-		Address:           synthDeviceAddress.Bytes(),
-		Vin:               vin,
-		TokenID:           null.NewInt(456, true),
-		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
-		WalletChildNumber: 111,
-	}
-
-	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
-
+	// prepare
 	onboardings := models.Onboarding{
 		Vin:              vin,
 		SyntheticTokenID: null.NewInt64(456, true),
@@ -468,31 +452,12 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 		KeyPrefix: "tesla-oracle",
 	})
 
-	// Create TempCredsStore using cacheService
+	// given
 	credStore := service.TempCredsStore{
 		Cache:  cacheService,
 		Cipher: new(cipher.ROT13Cipher), // Example cipher
 	}
 
-	// Mock other dependencies
-	signedToken, done := generateTokenWithClaims(err)
-	if done {
-		return
-	}
-
-	mockIdentitySvc := new(test.MockIdentityAPIService)
-	mockTeslaService := new(MockTeslaFleetAPIService)
-	authCode := "testAuthCode"
-	redirectURI := "https://example.com/callback"
-	expectedResponse := &service.TeslaAuthCodeResponse{
-		AccessToken:  signedToken,
-		RefreshToken: "mockRefreshToken",
-		Expiry:       time.Now().Add(time.Hour),
-		TokenType:    "Bearer",
-		Region:       "NA",
-	}
-
-	// Define expected vehicles
 	expectedVehicles := []TeslaVehicle{
 		{
 			VIN:        vin,
@@ -509,24 +474,37 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 		},
 	}
 
-	mockDDService := new(MockDeviceDefinitionsAPIService)
+	signedToken := generateTokenWithClaims()
+	expectedResponse := &service.TeslaAuthCodeResponse{
+		AccessToken:  signedToken,
+		RefreshToken: "mockRefreshToken",
+		Expiry:       time.Now().Add(time.Hour),
+		TokenType:    "Bearer",
+		Region:       "NA",
+	}
+	authCode := "testAuthCode"
+	redirectURI := "https://example.com/callback"
 
-	// Define the mock behavior
-	mockDDService.On("DecodeVin", "1HGCM82633A123456", "USA").Return(&service.DecodeVinResponse{
-		DeviceDefinitionID: "12345",
-		NewTransactionHash: "0xabc123",
-	}, nil)
-
-	mockTeslaService.On("CompleteTeslaAuthCodeExchange", mock.Anything, authCode, redirectURI).Return(expectedResponse, nil)
-	mockTeslaService.On("GetVehicles", mock.Anything, signedToken).Return(teslaVehicles, nil)
 	expectedDeviceDefinition := &mods.DeviceDefinition{
 		DeviceDefinitionID: "12345",
 		Model:              "Model 3",
 		Year:               2019,
 	}
+
+	// when
+	mockIdentitySvc := new(test.MockIdentityAPIService)
+	mockTeslaService := new(test.MockTeslaFleetAPIService)
+	mockDDService := new(test.MockDeviceDefinitionsAPIService)
+
+	mockDDService.On("DecodeVin", "1HGCM82633A123456", "USA").Return(&service.DecodeVinResponse{
+		DeviceDefinitionID: "12345",
+		NewTransactionHash: "0xabc123",
+	}, nil)
+	mockTeslaService.On("CompleteTeslaAuthCodeExchange", mock.Anything, authCode, redirectURI).Return(expectedResponse, nil)
+	mockTeslaService.On("GetVehicles", mock.Anything, signedToken).Return(teslaVehicles, nil)
 	mockIdentitySvc.On("FetchDeviceDefinitionByID", "12345").Return(expectedDeviceDefinition, nil)
 
-	// Initialize the controller
+	// then
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	ons := service.NewOnboardingService(&s.pdb, &logger)
@@ -552,23 +530,18 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	app.Use(helpers.NewWalletMiddleware())
 	app.Post("/v1/tesla/vehicles", controller.ListVehicles)
 
-	// Create the request body
 	requestBody := `{
 		"authorizationCode": "testAuthCode",
 		"redirectUri": "https://example.com/callback"
 	}`
-	// Create a test HTTP request
 	req, _ := http.NewRequest("POST", "/v1/tesla/vehicles", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 
-	// Generate a valid JWT token
 	err = generateJWT(req)
 	assert.NoError(s.T(), err)
-
-	// Execute the request
 	resp, err := app.Test(req)
 
-	// Verify the response
+	// verify
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
 	bodyBytes, err := io.ReadAll(resp.Body)
@@ -581,11 +554,10 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	var responseWrapper CompleteOAuthExchangeResponseWrapper
 	err = json.Unmarshal(bodyBytes, &responseWrapper)
 	assert.NoError(s.T(), err)
-
-	// Assert the response matches the expected vehicles
 	assert.Equal(s.T(), expectedVehicles, responseWrapper.Vehicles)
 
-	cachedVehicles, err := cacheService.Get(s.ctx, "credentials_0x1234567890AbcdEF1234567890aBcdef12345678").Result()
+	// Check if the vehicle was cached
+	cachedVehicles, err := cacheService.Get(s.ctx, "credentials:0x1234567890AbcdEF1234567890aBcdef12345678").Result()
 	assert.NoError(s.T(), err)
 	assert.NotEmpty(s.T(), cachedVehicles)
 
@@ -594,7 +566,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	mockTeslaService.AssertExpectations(s.T())
 }
 
-func generateTokenWithClaims(err error) (string, bool) {
+func generateTokenWithClaims() string {
 	secretKey := []byte("your-secret-key")
 
 	// Define the claims for the token
@@ -616,9 +588,9 @@ func generateTokenWithClaims(err error) (string, bool) {
 	signedToken, err := token.SignedString(secretKey)
 	if err != nil {
 		fmt.Println("Error signing token:", err)
-		return "", true
+		return ""
 	}
-	return signedToken, false
+	return signedToken
 }
 
 func generateJWT(req *http.Request) error {
@@ -641,118 +613,6 @@ func generateJWT(req *http.Request) error {
 		return err
 	}
 
-	fmt.Println("Valid Token:", signedToken)
 	req.Header.Set("Authorization", "Bearer "+signedToken)
 	return nil
-}
-
-// MockCredStore is a mock implementation of the CredStore interface.
-type MockCredStore struct {
-	mock.Mock
-}
-
-func (m *MockCredStore) Retrieve(ctx context.Context, user common.Address) (*service.Credential, error) {
-	args := m.Called(ctx, user)
-	return args.Get(0).(*service.Credential), args.Error(1)
-}
-
-func (m *MockCredStore) EncryptTokens(credential *service.Credential) (*service.Credential, error) {
-	args := m.Called(credential)
-	return args.Get(0).(*service.Credential), args.Error(1)
-}
-
-func (m *MockCredStore) RetrieveWithTokensEncrypted(ctx context.Context, user common.Address) (*service.Credential, error) {
-	args := m.Called(ctx, user)
-	return args.Get(0).(*service.Credential), args.Error(1)
-}
-
-func (m *MockCredStore) Store(ctx context.Context, user common.Address, cred *service.Credential) error {
-	args := m.Called(ctx, user, cred)
-	return args.Error(0)
-}
-
-// MockTeslaFleetAPIService is a mock implementation of the TeslaFleetAPIService interface.
-type MockTeslaFleetAPIService struct {
-	mock.Mock
-}
-
-func (m *MockTeslaFleetAPIService) GetPartnersToken(ctx context.Context) (*service.PartnersAccessTokenResponse, error) {
-	args := m.Called(ctx)
-	if args.Get(0) != nil {
-		return args.Get(0).(*service.PartnersAccessTokenResponse), args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-
-func (m *MockTeslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*service.TeslaAuthCodeResponse, error) {
-	args := m.Called(ctx, authCode, redirectURI)
-	if args.Get(0) != nil {
-		return args.Get(0).(*service.TeslaAuthCodeResponse), args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-
-func (m *MockTeslaFleetAPIService) GetVehicles(ctx context.Context, token string) ([]service.TeslaVehicle, error) {
-	args := m.Called(ctx, token)
-	if args.Get(0) != nil {
-		return args.Get(0).([]service.TeslaVehicle), args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-
-func (m *MockTeslaFleetAPIService) GetVehicle(ctx context.Context, token string, vehicleID int) (*service.TeslaVehicle, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockTeslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vehicleID int) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockTeslaFleetAPIService) VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*service.VehicleFleetStatus, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockTeslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error {
-	args := m.Called(ctx, token, vin)
-	return args.Error(0)
-}
-
-func (m *MockTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*service.VehicleTelemetryStatus, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockTeslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context, accessToken, vin string) error {
-	args := m.Called(ctx, accessToken, vin)
-	return args.Error(0)
-}
-
-// MockDevicesGRPCService is a mock implementation of the DevicesGRPCService interface.
-type MockDevicesGRPCService struct {
-	mock.Mock
-}
-
-func (m *MockDevicesGRPCService) StopTeslaTask(ctx context.Context, tokenID int64) error {
-	args := m.Called(ctx, tokenID)
-	return args.Error(0)
-}
-
-func (m *MockDevicesGRPCService) Close() error {
-	args := m.Called()
-	return args.Error(0)
-}
-
-type MockDeviceDefinitionsAPIService struct {
-	mock.Mock
-}
-
-func (m *MockDeviceDefinitionsAPIService) DecodeVin(vin, countryCode string) (*service.DecodeVinResponse, error) {
-	args := m.Called(vin, countryCode)
-	if args.Get(0) != nil {
-		return args.Get(0).(*service.DecodeVinResponse), args.Error(1)
-	}
-	return nil, args.Error(1)
 }

@@ -14,7 +14,8 @@ import (
 )
 
 const (
-	prefix   = "credentials_"
+	// We want to be closer to follow Redis key naming conventions
+	prefix   = "credentials:"
 	duration = 5 * time.Minute
 )
 
