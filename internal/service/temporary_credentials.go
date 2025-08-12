@@ -47,7 +47,6 @@ func (s *TempCredsStore) Store(ctx context.Context, user common.Address, cred *C
 		return fmt.Errorf("failed to encrypt credentials: %w", err)
 	}
 
-	// TODO define is key is in redis convention
 	cacheKey := prefix + user.Hex()
 	s.Cache.Set(ctx, cacheKey, encCred, duration)
 
@@ -68,7 +67,9 @@ func (s *TempCredsStore) Retrieve(ctx context.Context, user common.Address) (*Cr
 	}
 
 	// Don't want a second call to pick this up. Use it or lose it.
-	s.Cache.Del(ctx, cacheKey)
+	if _, err := s.Cache.Del(ctx, cacheKey).Result(); err != nil {
+		return nil, fmt.Errorf("failed to delete cached credentials: %w", err)
+	}
 
 	if len(encCred) == 0 {
 		return nil, fmt.Errorf("no credential found")
