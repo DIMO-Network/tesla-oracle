@@ -3,6 +3,8 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"github.com/DIMO-Network/shared/pkg/cipher"
+	"github.com/patrickmn/go-cache"
 	"slices"
 	"strconv"
 	"strings"
@@ -48,6 +50,19 @@ type TeslaController struct {
 }
 
 func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, pdb *db.Store) *TeslaController {
+	var credStore CredStore
+	if settings.EnableLocalCache {
+		credStore = &service.Store{
+			Cache: cache.New(5*time.Minute, 10*time.Minute),
+			// TODO: for development only, use KMS
+			Cipher: new(cipher.ROT13Cipher),
+		}
+		logger.Info().Msg("Using LocalCache for CredStore.")
+	} else {
+		credStore = store
+		logger.Info().Msg("Using redis CredStore implementation.")
+	}
+
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -64,7 +79,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		ddSvc:          ddSvc,
 		identitySvc:    identitySvc,
 		requiredScopes: requiredScopes,
-		store:          store,
+		store:          credStore,
 		onboarding:     onboardingSvc,
 		pdb:            pdb,
 		devicesService: devicesService,

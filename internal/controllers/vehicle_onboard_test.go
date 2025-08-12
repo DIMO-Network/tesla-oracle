@@ -623,7 +623,7 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		assert.Equal(t, string(body), expectedBody)
 
 		// Verify that the cache no longer contains the credentials
-		retrievedCreds, err := controller.credentials.Retrieve(s.ctx, user)
+		retrievedCreds, _ := controller.credentials.Retrieve(s.ctx, user)
 		require.Nil(t, retrievedCreds)
 	})
 }

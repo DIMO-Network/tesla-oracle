@@ -557,9 +557,11 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 		fmt.Println("Error reading response body:", err)
 		return
 	}
-	if resp != nil && resp.Body != nil {
-		defer resp.Body.Close()
-	}
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("failed to close response body: %v\n", err)
+		}
+	}()
 
 	var responseWrapper CompleteOAuthExchangeResponseWrapper
 	err = json.Unmarshal(bodyBytes, &responseWrapper)
