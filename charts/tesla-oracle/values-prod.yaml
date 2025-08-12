@@ -7,12 +7,16 @@ env:
   LOG_LEVEL: info
   ENVIRONMENT: prod
   CHAIN_ID: 137
+  USE_LOCAL_TLS: false
   KAFKA_BROKERS: kafka-prod-dimo-kafka-kafka-brokers:9092
   DEVICES_GRPC_ADDR: devices-api-prod:8086
   DEVICE_DEFINITIONS_API_ENDPOINT: https://device-definitions-api.dimo.zone
   DIMO_AUTH_URL: https://auth.dimo.zone
+  DIMO_AUTH_CLIENT_ID: '0x95dbFbF3Bd6B6e7439f478b43E6e4b5370B0a93a'
+  DIMO_AUTH_DOMAIN: https://tesla-oracle.dimo.zone/index.html
   IDENTITY_API_ENDPOINT: https://identity-api.dimo.zone/query
   JWT_KEY_SET_URL: https://auth.dimo.zone/keys
+  TESLA_REDIRECT_URL: https://tesla-oracle.dimo.zone/index.html
   TESLA_FLEET_URL: http://tesla-command-api-prod.prod.svc.cluster.local:8080
   TESLA_TELEMETRY_HOST_NAME: ingest-tesla.drivedimo.com
   REGISTRY_ADDRESS: '0xFA8beC73cebB9D88FF88a2f75E7D7312f2Fd39EC'
