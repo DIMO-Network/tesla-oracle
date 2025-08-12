@@ -7,8 +7,11 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
@@ -16,6 +19,8 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/ethereum/go-ethereum/common"
+	rd "github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
@@ -24,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
+	"github.com/testcontainers/testcontainers-go/wait"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"gotest.tools/v3/assert"
@@ -31,6 +37,7 @@ import (
 
 const ownerAdd = "0x1234567890AbcdEF1234567890aBcdef12345678"
 const owner2Add = "0x1234567890AbcdEF1234567890aBcdef12345679"
+const sdWalletsSeed = "cabaabd8c7c7d27347349e48fb11319bc6656cb6cc1bdc717e94dae8db7e6bc2"
 
 type VehicleControllerTestSuite struct {
 	suite.Suite
@@ -40,14 +47,17 @@ type VehicleControllerTestSuite struct {
 	river         *river.Client[pgx.Tx]
 	settings      config.Settings
 	onboardingSvc *service.OnboardingService
-	logger        *zerolog.Logger
+	ws            *service.SDWalletsService
+	logger        zerolog.Logger
 }
 
 // SetupSuite starts container db
 func (s *VehicleControllerTestSuite) SetupSuite() {
 	s.ctx = context.Background()
+	s.logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	s.pdb, s.container, s.settings = test.StartContainerDatabase(context.Background(), s.T(), migrationsDirRelPath)
-	s.onboardingSvc = service.NewOnboardingService(&s.pdb, s.logger)
+	s.ws = service.NewSDWalletsService(s.ctx, s.logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
+	s.onboardingSvc = service.NewOnboardingService(&s.pdb, &s.logger)
 
 	fmt.Println("Suite setup completed.")
 }
@@ -466,4 +476,144 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		assert.NilError(t, err)
 	})
 
+}
+
+func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
+	t := s.T()
+	mockDeps := createMockDependencies(t)
+
+	// Spin up a local Redis container
+	redisContainer, err := testcontainers.GenericContainer(s.ctx, testcontainers.GenericContainerRequest{
+		ContainerRequest: testcontainers.ContainerRequest{
+			Image:        "redis:latest",
+			ExposedPorts: []string{"6379/tcp"},
+			WaitingFor:   wait.ForListeningPort("6379/tcp"),
+		},
+		Started: true,
+	})
+	require.NoError(s.T(), err)
+	defer redisContainer.Terminate(s.ctx)
+
+	// Get the Redis container's host and port
+	redisHost, err := redisContainer.Host(s.ctx)
+	require.NoError(s.T(), err)
+	redisPort, err := redisContainer.MappedPort(s.ctx, "6379")
+	require.NoError(s.T(), err)
+
+	// Connect to Redis
+	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
+	redisClient := rd.NewClient(&rd.Options{
+		Addr: redisAddr,
+	})
+	defer redisClient.Close()
+
+	// Create cacheService
+	cacheService := redis.NewRedisCacheService(false, redis.Settings{
+		URL:       redisAddr,
+		Password:  "",
+		TLS:       false,
+		KeyPrefix: "tesla-oracle",
+	})
+
+	credStore := service.TempCredsStore{
+		Cache:  cacheService,
+		Cipher: new(cipher.ROT13Cipher), // Example cipher
+	}
+
+	controller := NewVehicleOnboardController(
+		&s.settings,
+		&mockDeps.logger,
+		mockDeps.identity,
+		s.onboardingSvc,
+		s.river,
+		s.ws,
+		nil,
+		&s.pdb,
+		&credStore,
+	)
+
+	app := fiber.New(fiber.Config{
+		EnableSplittingOnParsers: true,
+	})
+
+	app.Use(func(c *fiber.Ctx) error {
+		// Simulate JWT middleware setting the user in Locals
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"ethereum_address": ownerAdd,
+		})
+		c.Locals("user", token)
+		return c.Next()
+	})
+
+	app.Use(helpers.NewWalletMiddleware())
+	app.Post("/vehicle/finalize", controller.FinalizeOnboarding)
+
+	s.Run("Empty VIN list", func() {
+		// given
+		reqBody := `{"vins": []}`
+		req := test.BuildRequest("POST", "/vehicle/finalize", reqBody)
+
+		// then
+		resp, err := app.Test(req)
+
+		// verify
+		require.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+	})
+
+	s.Run("Invalid VINs", func() {
+		// given
+		reqBody := `{"vins": ["INVALIDVIN123"]}`
+		req := test.BuildRequest("POST", "/vehicle/finalize", reqBody)
+
+		// then
+		resp, err := app.Test(req)
+		require.NoError(t, err)
+		assert.Equal(t, fiber.StatusBadRequest, resp.StatusCode)
+
+		// verify
+		body, _ := io.ReadAll(resp.Body)
+		expectedResp := `{"error":"Invalid VINs provided"}`
+		assert.Equal(t, string(body), expectedResp)
+	})
+
+	s.Run("Valid VINs onboarded and ready for finalization", func() {
+		// given
+		// Insert a synthetic device with the wallet address and VIN
+		onboardings := dbmodels.Onboarding{
+			Vin:              vin,
+			SyntheticTokenID: null.NewInt64(456, true),
+			VehicleTokenID:   null.NewInt64(vehicleTokenID, true),
+			WalletIndex:      null.NewInt64(1, true),
+		}
+		require.NoError(s.T(), onboardings.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+		// insert to cache
+		user := common.HexToAddress(ownerAdd)
+		creds := &service.Credential{
+			AccessToken:   "access_token",
+			RefreshToken:  "refresh_token",
+			AccessExpiry:  time.Now().Add(1 * time.Hour),
+			RefreshExpiry: time.Now().Add(24 * time.Hour),
+		}
+		controller.credentials.Store(s.ctx, user, creds)
+
+		reqBody := `{"vins": ["1HGCM82633A123456"]}`
+		req := test.BuildRequest("POST", "/vehicle/finalize", reqBody)
+
+		// then
+		resp, err := app.Test(req)
+
+		// verify
+		require.NoError(t, err)
+		assert.Equal(t, fiber.StatusOK, resp.StatusCode)
+
+		body, _ := io.ReadAll(resp.Body)
+		expectedBody := `{"vehicles":[{"vin":"1HGCM82633A123456","vehicleTokenId":789,"syntheticTokenId":456}]}`
+		assert.Equal(t, string(body), expectedBody)
+
+		// Verify that the cache no longer contains the credentials
+		retrievedCreds, err := controller.credentials.Retrieve(s.ctx, user)
+		require.Nil(t, retrievedCreds)
+	})
 }
