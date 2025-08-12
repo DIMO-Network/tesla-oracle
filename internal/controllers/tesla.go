@@ -3,13 +3,12 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"github.com/DIMO-Network/shared/pkg/cipher"
-	"github.com/patrickmn/go-cache"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -22,6 +21,7 @@ import (
 	"github.com/friendsofgo/errors"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
