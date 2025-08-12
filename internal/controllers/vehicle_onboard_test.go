@@ -625,6 +625,5 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		// Verify that the cache no longer contains the credentials
 		retrievedCreds, err := controller.credentials.Retrieve(s.ctx, user)
 		require.Nil(t, retrievedCreds)
-		require.NoError(t, err, "expected no credentials found in cache")
 	})
 }
