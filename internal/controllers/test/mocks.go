@@ -74,3 +74,89 @@ func (m *MockCredStore) Store(ctx context.Context, user common.Address, cred *se
 	args := m.Called(ctx, user, cred)
 	return args.Error(0)
 }
+
+// MockTeslaFleetAPIService is a mock implementation of the TeslaFleetAPIService interface.
+type MockTeslaFleetAPIService struct {
+	mock.Mock
+}
+
+func (m *MockTeslaFleetAPIService) GetPartnersToken(ctx context.Context) (*service.PartnersAccessTokenResponse, error) {
+	args := m.Called(ctx)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.PartnersAccessTokenResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockTeslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*service.TeslaAuthCodeResponse, error) {
+	args := m.Called(ctx, authCode, redirectURI)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.TeslaAuthCodeResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockTeslaFleetAPIService) GetVehicles(ctx context.Context, token string) ([]service.TeslaVehicle, error) {
+	args := m.Called(ctx, token)
+	if args.Get(0) != nil {
+		return args.Get(0).([]service.TeslaVehicle), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockTeslaFleetAPIService) GetVehicle(ctx context.Context, token string, vehicleID int) (*service.TeslaVehicle, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockTeslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vehicleID int) error {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockTeslaFleetAPIService) VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*service.VehicleFleetStatus, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockTeslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error {
+	args := m.Called(ctx, token, vin)
+	return args.Error(0)
+}
+
+func (m *MockTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*service.VehicleTelemetryStatus, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (m *MockTeslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context, accessToken, vin string) error {
+	args := m.Called(ctx, accessToken, vin)
+	return args.Error(0)
+}
+
+// MockDevicesGRPCService is a mock implementation of the DevicesGRPCService interface.
+type MockDevicesGRPCService struct {
+	mock.Mock
+}
+
+func (m *MockDevicesGRPCService) StopTeslaTask(ctx context.Context, tokenID int64) error {
+	args := m.Called(ctx, tokenID)
+	return args.Error(0)
+}
+
+func (m *MockDevicesGRPCService) Close() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+type MockDeviceDefinitionsAPIService struct {
+	mock.Mock
+}
+
+func (m *MockDeviceDefinitionsAPIService) DecodeVin(vin, countryCode string) (*service.DecodeVinResponse, error) {
+	args := m.Called(vin, countryCode)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.DecodeVinResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
+}

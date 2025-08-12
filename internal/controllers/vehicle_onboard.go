@@ -711,6 +711,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 
 				creds, err := v.credentials.RetrieveWithTokensEncrypted(c.Context(), walletAddress)
 				if err != nil {
+					localLog.Error().Err(err).Msg("Failed to retrieve credentials")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 						"error": "Failed to retrieve credentials",
 					})
@@ -728,8 +729,9 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					RefreshExpiresAt:  null.TimeFrom(creds.RefreshExpiry),
 				}
 
-				err = sdRecord.Insert(c.Context(), v.pdb.DBS().Writer, boil.Infer())
-				if err != nil {
+				errIns := sdRecord.Insert(c.Context(), v.pdb.DBS().Writer, boil.Infer())
+				if errIns != nil {
+					localLog.Error().Err(errIns).Msg("Failed to insert Synthetic Device")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 						"error": "Failed to insert Synthetic Device",
 					})

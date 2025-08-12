@@ -23,6 +23,11 @@ type Settings struct {
 	JwtKeySetURL                string      `yaml:"JWT_KEY_SET_URL"`
 	UseLocalTLS                 bool        `yaml:"USE_LOCAL_TLS"`
 
+	RedisURL         string `yaml:"REDIS_URL"`
+	RedisPassword    string `yaml:"REDIS_PASSWORD"`
+	RedisTLS         bool   `yaml:"REDIS_TLS"`
+	EnableLocalCache bool   `env:"ENABLE_LOCAL_CACHE" default:"false"`
+
 	IdentityAPIEndpoint          url.URL `yaml:"IDENTITY_API_ENDPOINT"`
 	DeviceDefinitionsAPIEndpoint url.URL `yaml:"DEVICE_DEFINITIONS_API_ENDPOINT"`
 	DevicesGRPCEndpoint          string  `yaml:"DEVICES_GRPC_ADDR"`
@@ -57,4 +62,8 @@ type Settings struct {
 	PartnersTeslaFleetURL string `json:"PARTNERS_FLEET_URL"`
 
 	MobileAppDevLicense common.Address `yaml:"MOBILE_APP_DEV_LICENSE"`
+}
+
+func (app *Settings) IsProduction() bool {
+	return app.Environment == "prod" // this string is set in the helm chart values-prod.yaml
 }

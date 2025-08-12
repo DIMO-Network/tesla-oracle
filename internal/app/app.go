@@ -4,13 +4,12 @@ import (
 	"errors"
 	"os"
 	"strconv"
-	"time"
-
-	"github.com/DIMO-Network/shared/pkg/db"
 
 	"github.com/DIMO-Network/go-transactions"
 	"github.com/DIMO-Network/shared/pkg/cipher"
+	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
+	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
@@ -20,7 +19,6 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/jackc/pgx/v5"
-	"github.com/patrickmn/go-cache"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
@@ -82,9 +80,16 @@ func App(
 	// application routes
 	app.Get("/health", healthCheck)
 
-	credStore := service.Store{
-		Cache: cache.New(5*time.Minute, 10*time.Minute),
-		// FIXME: for development only, use KMS
+	cacheService := redis.NewRedisCacheService(settings.IsProduction(), redis.Settings{
+		URL:       settings.RedisURL,
+		Password:  settings.RedisPassword,
+		TLS:       settings.RedisTLS,
+		KeyPrefix: "tesla-oracle",
+	})
+
+	credStore := service.TempCredsStore{
+		Cache: cacheService,
+		// TODO: for development only, use KMS
 		Cipher: new(cipher.ROT13Cipher),
 	}
 	teslaFleetAPISvc, err := service.NewTeslaFleetAPIService(settings, logger)
@@ -110,7 +115,7 @@ func App(
 	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
 	vehicleGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
-	// FIXME: temporary, remove when finished
+	// TODO: temporary, remove when finished
 	vehicleGroup.Post("/clear", onboardCtrl.ClearOnboardingData)
 
 	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
