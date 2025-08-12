@@ -492,7 +492,11 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		Started: true,
 	})
 	require.NoError(s.T(), err)
-	defer redisContainer.Terminate(s.ctx)
+	defer func() {
+		if err := redisContainer.Terminate(s.ctx); err != nil {
+			s.T().Logf("failed to terminate Redis container: %v", err)
+		}
+	}()
 
 	// Get the Redis container's host and port
 	redisHost, err := redisContainer.Host(s.ctx)
@@ -505,7 +509,11 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 	redisClient := rd.NewClient(&rd.Options{
 		Addr: redisAddr,
 	})
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			fmt.Printf("failed to close Redis client: %v\n", err)
+		}
+	}()
 
 	// Create cacheService
 	cacheService := redis.NewRedisCacheService(false, redis.Settings{
@@ -596,7 +604,9 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 			AccessExpiry:  time.Now().Add(1 * time.Hour),
 			RefreshExpiry: time.Now().Add(24 * time.Hour),
 		}
-		controller.credentials.Store(s.ctx, user, creds)
+		if err := controller.credentials.Store(s.ctx, user, creds); err != nil {
+			s.T().Fatalf("failed to store credentials: %v", err)
+		}
 
 		reqBody := `{"vins": ["1HGCM82633A123456"]}`
 		req := test.BuildRequest("POST", "/vehicle/finalize", reqBody)
@@ -615,5 +625,6 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		// Verify that the cache no longer contains the credentials
 		retrievedCreds, err := controller.credentials.Retrieve(s.ctx, user)
 		require.Nil(t, retrievedCreds)
+		require.NoError(t, err, "expected no credentials found in cache")
 	})
 }

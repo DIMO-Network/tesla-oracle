@@ -429,7 +429,11 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 		Started: true,
 	})
 	require.NoError(s.T(), err)
-	defer redisContainer.Terminate(s.ctx)
+	defer func() {
+		if err := redisContainer.Terminate(s.ctx); err != nil {
+			s.T().Logf("failed to terminate Redis container: %v", err)
+		}
+	}()
 
 	// Get the Redis container's host and port
 	redisHost, err := redisContainer.Host(s.ctx)
@@ -442,7 +446,11 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	redisClient := rd.NewClient(&rd.Options{
 		Addr: redisAddr,
 	})
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			fmt.Printf("failed to close Redis client: %v\n", err)
+		}
+	}()
 
 	// Create cacheService
 	cacheService := redis.NewRedisCacheService(false, redis.Settings{
