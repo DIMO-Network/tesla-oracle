@@ -165,12 +165,12 @@ func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) 
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
-		client, err = shttp.NewClientWrapper(u.String(), "", 10*time.Second, nil, true, shttp.WithRetry(3), shttp.WithTransport(tr))
+		client, err = shttp.NewClientWrapper(u.String(), "", 5*time.Second, nil, true, shttp.WithRetry(3), shttp.WithTransport(tr))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Tesla Fleet API client: %w", err)
 		}
 	} else {
-		client, err = shttp.NewClientWrapper(u.String(), "", 10*time.Second, nil, true, shttp.WithRetry(3))
+		client, err = shttp.NewClientWrapper(u.String(), "", 5*time.Second, nil, true, shttp.WithRetry(3))
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Tesla Fleet API client: %w", err)
 		}
@@ -180,7 +180,7 @@ func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) 
 	h := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	partnersClient, err := shttp.NewClientWrapper(settings.TeslaTokenURL, "", 10*time.Second, h, true, shttp.WithRetry(3))
+	partnersClient, err := shttp.NewClientWrapper(settings.TeslaTokenURL, "", 5*time.Second, h, true, shttp.WithRetry(3))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Tesla Fleet API client: %w", err)
 	}
