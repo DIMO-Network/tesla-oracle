@@ -152,14 +152,14 @@ func (s *TempCredsStore) EncryptTokens(cred *Credential) (*Credential, error) {
 	}, nil
 }
 
-// Store For local development, we use a different store implementation
-type Store struct {
+// TempCredsLocalStore For local development, we use a different store implementation
+type TempCredsLocalStore struct {
 	Cache  *cache.Cache
 	Cipher cipher.Cipher
 }
 
 // Store stores the given credential for the given user.
-func (s *Store) Store(_ context.Context, user common.Address, cred *Credential) error {
+func (s *TempCredsLocalStore) Store(_ context.Context, user common.Address, cred *Credential) error {
 	credJSON, err := json.Marshal(cred)
 	if err != nil {
 		return fmt.Errorf("failed to marshal credentials: %w", err)
@@ -176,7 +176,7 @@ func (s *Store) Store(_ context.Context, user common.Address, cred *Credential) 
 	return nil
 }
 
-func (s *Store) Retrieve(_ context.Context, user common.Address) (*Credential, error) {
+func (s *TempCredsLocalStore) Retrieve(_ context.Context, user common.Address) (*Credential, error) {
 	cacheKey := prefix + user.Hex()
 	cachedCred, ok := s.Cache.Get(cacheKey)
 	if !ok {
@@ -209,7 +209,7 @@ func (s *Store) Retrieve(_ context.Context, user common.Address) (*Credential, e
 	return &cred, nil
 }
 
-func (s *Store) RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*Credential, error) {
+func (s *TempCredsLocalStore) RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*Credential, error) {
 	cacheKey := prefix + user.Hex()
 	cachedCred, ok := s.Cache.Get(cacheKey)
 	if !ok {
@@ -247,7 +247,7 @@ func (s *Store) RetrieveWithTokensEncrypted(_ context.Context, user common.Addre
 	return credsWithEncryptedTokens, nil
 }
 
-func (s *Store) EncryptTokens(cred *Credential) (*Credential, error) {
+func (s *TempCredsLocalStore) EncryptTokens(cred *Credential) (*Credential, error) {
 	encAccess, err := s.Cipher.Encrypt(cred.AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt access token: %w", err)
