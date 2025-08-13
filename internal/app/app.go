@@ -132,6 +132,7 @@ func App(
 	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
+	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
 
 	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
 	vehicleGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)

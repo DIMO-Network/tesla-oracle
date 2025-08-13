@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -30,6 +31,7 @@ import (
 type CredStore interface {
 	Store(ctx context.Context, user common.Address, cred *service.Credential) error
 	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
+	RetrieveAndDelete(_ context.Context, user common.Address) (*service.Credential, error)
 	RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*service.Credential, error)
 	EncryptTokens(cred *service.Credential) (*service.Credential, error)
 }
@@ -41,7 +43,7 @@ type TeslaController struct {
 	ddSvc          service.DeviceDefinitionsAPIService
 	identitySvc    service.IdentityAPIService
 	requiredScopes []string
-	store          CredStore
+	credStore      CredStore
 	onboarding     *service.OnboardingService
 	pdb            *db.Store
 	devicesService service.DevicesGRPCService
@@ -64,7 +66,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		ddSvc:          ddSvc,
 		identitySvc:    identitySvc,
 		requiredScopes: requiredScopes,
-		store:          store,
+		credStore:      store,
 		onboarding:     onboardingSvc,
 		pdb:            pdb,
 		devicesService: devicesService,
@@ -79,11 +81,12 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 // @Success 200
 // @Security     BearerAuth
 // @Router /v1/tesla/settings [get]
-func (t *TeslaController) GetSettings(c *fiber.Ctx) error {
+func (tc *TeslaController) GetSettings(c *fiber.Ctx) error {
 	payload := TeslaSettingsResponse{
-		TeslaClientID:    t.settings.TeslaClientID,
-		TeslaAuthURL:     t.settings.TeslaAuthURL,
-		TeslaRedirectURI: t.settings.TeslaRedirectURL,
+		TeslaClientID:    tc.settings.TeslaClientID,
+		TeslaAuthURL:     tc.settings.TeslaAuthURL.String(),
+		TeslaRedirectURI: tc.settings.TeslaRedirectURL.String(),
+		VirtualKeyURL:    tc.settings.TeslaVirtualKeyURL.String(),
 	}
 	return c.JSON(payload)
 }
@@ -92,6 +95,7 @@ type TeslaSettingsResponse struct {
 	TeslaAuthURL     string `json:"authUrl"`
 	TeslaClientID    string `json:"clientId"`
 	TeslaRedirectURI string `json:"redirectUri"`
+	VirtualKeyURL    string `json:"virtualKeyUrl"`
 }
 
 type partialTeslaClaims struct {
@@ -117,34 +121,34 @@ type partialTeslaClaims struct {
 // @Failure     404 {object} fiber.Error "OnboardingService not found or owner information is missing."
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/tesla/telemetry/subscribe/{vehicleTokenId} [post]
-func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
+func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	vehicleTokenId := c.Params("vehicleTokenId")
 	if vehicleTokenId == "" {
-		t.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
+		tc.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
 		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusBadRequest, "VehicleTokenId is required in the request path.")
 	}
 
-	logger := helpers.GetLogger(c, t.logger).With().
+	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Telemetry/Subscribe").
 		Logger()
 
 	logger.Debug().Msgf("Received telemetry subscribe request for %s.", vehicleTokenId)
 
 	walletAddress := helpers.GetWallet(c)
-	if walletAddress != t.settings.MobileAppDevLicense {
+	if walletAddress != tc.settings.MobileAppDevLicense {
 		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
 	}
 
-	teslaAuth, err := t.getAccessToken(c)
+	teslaAuth, err := tc.getAccessToken(c)
 	if err != nil {
 		logger.Err(err).Msg("Failed to get access token.")
 		subscribeTelemetryFailureCount.Inc()
 		return err
 	}
 
-	vehicle, err := t.fetchVehicle(vehicleTokenId)
+	vehicle, err := tc.fetchVehicle(vehicleTokenId)
 	if err != nil {
 		subscribeTelemetryFailureCount.Inc()
 		return err
@@ -152,14 +156,14 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	device, err := dbmodels.SyntheticDevices(
 		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes()),
-	).One(c.Context(), t.pdb.DBS().Reader)
+	).One(c.Context(), tc.pdb.DBS().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
 	}
 
-	if err := t.fleetAPISvc.SubscribeForTelemetryData(c.Context(), teslaAuth.AccessToken, device.Vin); err != nil {
+	if err := tc.fleetAPISvc.SubscribeForTelemetryData(c.Context(), teslaAuth.AccessToken, device.Vin); err != nil {
 		logger.Err(err).Msg("Error registering for telemetry")
 		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
@@ -173,7 +177,7 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		RefreshExpiry: refreshExpiry,
 	}
 
-	err = t.UpdateCredsAndStatusToSuccess(c.Context(), device, &creds)
+	err = tc.UpdateCredsAndStatusToSuccess(c.Context(), device, &creds)
 	if err != nil {
 		logger.Err(err).Msg("Failed to update telemetry credentials.")
 		subscribeTelemetryFailureCount.Inc()
@@ -199,27 +203,27 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 // @Failure     404 {object} fiber.Error "OnboardingService not found or owner information is missing."
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/tesla/telemetry/unsubscribe/{vehicleTokenId} [post]
-func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
+func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	vehicleTokenId := c.Params("vehicleTokenId")
 	if vehicleTokenId == "" {
-		t.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
+		tc.logger.Warn().Msg("VehicleTokenId is missing in the request path.")
 		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusBadRequest, "VehicleTokenId is required in the request path.")
 	}
 
-	logger := helpers.GetLogger(c, t.logger).With().
+	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Telemetry/Unsubscribe").
 		Logger()
 
 	logger.Info().Msgf("Received telemetry unsubscribe request for %s.", vehicleTokenId)
 
 	walletAddress := helpers.GetWallet(c)
-	if walletAddress != t.settings.MobileAppDevLicense {
+	if walletAddress != tc.settings.MobileAppDevLicense {
 		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to unsubscribe from telemetry.", walletAddress.Hex()))
 	}
 
-	partnersTokenResp, err := t.fleetAPISvc.GetPartnersToken(c.Context())
+	partnersTokenResp, err := tc.fleetAPISvc.GetPartnersToken(c.Context())
 	if err != nil {
 		logger.Err(err).Msg("Failed to get partners token.")
 		unsubscribeTelemetryFailureCount.Inc()
@@ -231,34 +235,34 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Partners token response did not contain an access token.")
 	}
 
-	vehicle, err := t.fetchVehicle(vehicleTokenId)
+	vehicle, err := tc.fetchVehicle(vehicleTokenId)
 	if err != nil {
 		unsubscribeTelemetryFailureCount.Inc()
 		return err
 	}
 
 	device, err := dbmodels.SyntheticDevices(
-		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), t.pdb.DBS().Reader)
+		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), tc.pdb.DBS().Reader)
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to find synthetic device.")
 	}
 
-	err = t.fleetAPISvc.UnSubscribeFromTelemetryData(c.Context(), partnersTokenResp.AccessToken, device.Vin)
+	err = tc.fleetAPISvc.UnSubscribeFromTelemetryData(c.Context(), partnersTokenResp.AccessToken, device.Vin)
 	if err != nil {
 		logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
 		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data")
 	}
 
-	stopErr := t.devicesService.StopTeslaTask(c.Context(), vehicle.TokenID)
+	stopErr := tc.devicesService.StopTeslaTask(c.Context(), vehicle.TokenID)
 	if stopErr != nil {
 		logger.Warn().Err(stopErr).Msg("Failed to stop Tesla task for synthetic device.")
 	}
 
 	device.SubscriptionStatus = null.String{String: "inactive", Valid: true}
-	_, err = device.Update(c.Context(), t.pdb.DBS().Writer, boil.Infer())
+	_, err = device.Update(c.Context(), tc.pdb.DBS().Writer, boil.Infer())
 	if err != nil {
 		logger.Err(err).Msg("Failed to update synthetic device status.")
 		unsubscribeTelemetryFailureCount.Inc()
@@ -272,11 +276,11 @@ func (t *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	})
 }
 
-func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
+func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
-	logger := helpers.GetLogger(c, t.logger)
+	logger := helpers.GetLogger(c, tc.logger)
 
-	teslaAuth, err := t.getAccessToken(c)
+	teslaAuth, err := tc.getAccessToken(c)
 	if err != nil {
 		return err
 	}
@@ -288,7 +292,7 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	}
 
 	var missingScopes []string
-	for _, scope := range t.requiredScopes {
+	for _, scope := range tc.requiredScopes {
 		if !slices.Contains(claims.Scopes, scope) {
 			missingScopes = append(missingScopes, scope)
 		}
@@ -299,7 +303,7 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	}
 
 	// Save tesla oauth credentials in cache
-	if err := t.store.Store(c.Context(), walletAddress, &service.Credential{
+	if err := tc.credStore.Store(c.Context(), walletAddress, &service.Credential{
 		AccessToken:   teslaAuth.AccessToken,
 		RefreshToken:  teslaAuth.RefreshToken,
 		AccessExpiry:  teslaAuth.Expiry,
@@ -308,7 +312,7 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 		return fmt.Errorf("error persisting credentials: %w", err)
 	}
 
-	vehicles, err := t.fleetAPISvc.GetVehicles(c.Context(), teslaAuth.AccessToken)
+	vehicles, err := tc.fleetAPISvc.GetVehicles(c.Context(), teslaAuth.AccessToken)
 	if err != nil {
 		logger.Err(err).Str("subject", claims.Subject).Str("ouCode", claims.OUCode).Interface("audience", claims.Audience).Msg("Error retrieving vehicles.")
 		if errors.Is(err, service.ErrWrongRegion) {
@@ -321,14 +325,14 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	decodeStart := time.Now()
 	response := make([]TeslaVehicle, 0, len(vehicles))
 	for _, v := range vehicles {
-		ddRes, err := t.decodeTeslaVIN(v.VIN)
+		ddRes, err := tc.decodeTeslaVIN(v.VIN)
 		if err != nil {
 			teslaCodeFailureCount.WithLabelValues("vin_decode").Inc()
 			logger.Err(err).Str("vin", v.VIN).Msg("Failed to decode Tesla VIN.")
 			return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
 		}
 
-		record, err := t.onboarding.GetVehicleByVin(c.Context(), v.VIN)
+		record, err := tc.onboarding.GetVehicleByVin(c.Context(), v.VIN)
 		if err != nil {
 			if !errors.Is(err, service.ErrVehicleNotFound) {
 				logger.Err(err).Str("vin", v.VIN).Msg("Failed to fetch record.")
@@ -336,7 +340,7 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 		}
 
 		if record == nil {
-			err = t.onboarding.InsertVinToDB(c.Context(), &dbmodels.Onboarding{
+			err = tc.onboarding.InsertVinToDB(c.Context(), &dbmodels.Onboarding{
 				Vin:                v.VIN,
 				DeviceDefinitionID: null.String{String: ddRes.DeviceDefinitionID, Valid: true},
 				OnboardingStatus:   onboarding.OnboardingStatusVendorValidationSuccess,
@@ -368,10 +372,115 @@ func (t *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	return c.JSON(vehicleResp)
 }
 
-func (t *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeResponse, error) {
+func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
+	walletAddress := helpers.GetWallet(c)
+
+	var params VinInput
+	if err := c.QueryParser(&params); err != nil {
+		tc.logger.Err(err).Msg("Failed to parse request URL params")
+		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse request URL params")
+	}
+
+	teslaAuth, err := tc.credStore.Retrieve(c.Context(), walletAddress)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+	}
+
+	fleetStatus, err := tc.fleetAPISvc.VirtualKeyConnectionStatus(c.Context(), teslaAuth.AccessToken, teslaAuth.RefreshToken)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Error checking fleet status.")
+	}
+
+	fleetTelemetryCapable := IsFleetTelemetryCapable(fleetStatus)
+
+	var response = VirtualKeyStatusResponse{}
+	response.Added = fleetStatus.KeyPaired
+	if !fleetTelemetryCapable {
+		response.Status = Incapable
+	} else if fleetStatus.KeyPaired {
+		response.Status = Paired
+	} else {
+		response.Status = Unpaired
+	}
+
+	return c.JSON(nil)
+}
+
+type VirtualKeyStatusResponse struct {
+	Added  bool             `json:"added"`
+	Status VirtualKeyStatus `json:"status"`
+}
+
+type VirtualKeyStatus int
+
+const (
+	Incapable VirtualKeyStatus = iota
+	Paired
+	Unpaired
+)
+
+func (s VirtualKeyStatus) String() string {
+	switch s {
+	case Incapable:
+		return "Incapable"
+	case Paired:
+		return "Paired"
+	case Unpaired:
+		return "Unpaired"
+	}
+	return ""
+}
+
+func (s VirtualKeyStatus) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
+}
+
+func (s *VirtualKeyStatus) UnmarshalText(text []byte) error {
+	switch str := string(text); str {
+	case "Incapable":
+		*s = Incapable
+	case "Paired":
+		*s = Paired
+	case "Unpaired":
+		*s = Unpaired
+	default:
+		return fmt.Errorf("unrecognized status %q", str)
+	}
+	return nil
+}
+
+func IsFleetTelemetryCapable(fs *service.VehicleFleetStatus) bool {
+	// We used to check for the presence of a meaningful value (not ""
+	// or "unknown") for fleet_telemetry_version, but this started
+	// populating on old cars that are not capable of streaming.
+	return fs.VehicleCommandProtocolRequired || !fs.DiscountedDeviceData
+}
+
+var teslaFirmwareStart = regexp.MustCompile(`^(\d{4})\.(\d+)`)
+
+func IsFirmwareFleetTelemetryCapable(v string) (bool, error) {
+	m := teslaFirmwareStart.FindStringSubmatch(v)
+	if len(m) == 0 {
+		return false, fmt.Errorf("unexpected firmware version format %q", v)
+	}
+
+	year, err := strconv.Atoi(m[1])
+	if err != nil {
+		return false, fmt.Errorf("couldn't parse year %q", m[1])
+	}
+
+	week, err := strconv.Atoi(m[2])
+	if err != nil {
+		return false, fmt.Errorf("couldn't parse week %q", m[2])
+	}
+
+	return year > 2024 || year == 2024 && week >= 26, nil
+}
+
+func (tc *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeResponse, error) {
 	var reqBody CompleteOAuthExchangeRequest
 	if err := c.BodyParser(&reqBody); err != nil {
-		t.logger.Err(err).Msg("Failed to parse request body OR it is empty.")
+		tc.logger.Err(err).Msg("Failed to parse request body OR it is empty.")
 		return nil, fiber.NewError(fiber.StatusBadRequest, "Failed to parse request body OR it is empty.")
 	}
 
@@ -386,7 +495,7 @@ func (t *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeRe
 		return nil, fiber.NewError(fiber.StatusBadRequest, "No redirect URI provided.")
 	}
 
-	teslaAuth, err := t.fleetAPISvc.CompleteTeslaAuthCodeExchange(c.Context(), reqBody.AuthorizationCode, reqBody.RedirectURI)
+	teslaAuth, err := tc.fleetAPISvc.CompleteTeslaAuthCodeExchange(c.Context(), reqBody.AuthorizationCode, reqBody.RedirectURI)
 	if err != nil {
 		if errors.Is(err, service.ErrInvalidAuthCode) {
 			teslaCodeFailureCount.WithLabelValues("auth_code").Inc()
@@ -437,6 +546,10 @@ type TeslaVehicle struct {
 	Definition DeviceDefinition `json:"definition"`
 }
 
+type VinInput struct {
+	VIN string `json:"vin"`
+}
+
 type DeviceDefinition struct {
 	Make               string `json:"make"`
 	Model              string `json:"model"`
@@ -444,13 +557,13 @@ type DeviceDefinition struct {
 	DeviceDefinitionID string `json:"id"`
 }
 
-func (t *TeslaController) decodeTeslaVIN(vin string) (*models.DeviceDefinition, error) {
-	decodeVIN, err := t.ddSvc.DecodeVin(vin, "USA")
+func (tc *TeslaController) decodeTeslaVIN(vin string) (*models.DeviceDefinition, error) {
+	decodeVIN, err := tc.ddSvc.DecodeVin(vin, "USA")
 	if err != nil {
 		return nil, err
 	}
 
-	dd, err := t.getOrWaitForDeviceDefinition(decodeVIN.DeviceDefinitionID)
+	dd, err := tc.getOrWaitForDeviceDefinition(decodeVIN.DeviceDefinitionID)
 	if err != nil {
 		return nil, err
 	}
@@ -458,13 +571,13 @@ func (t *TeslaController) decodeTeslaVIN(vin string) (*models.DeviceDefinition, 
 	return dd, nil
 }
 
-func (t *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string) (*models.DeviceDefinition, error) {
-	t.logger.Debug().Str(logfields.DefinitionID, deviceDefinitionID).Msg("Waiting for device definition")
+func (tc *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string) (*models.DeviceDefinition, error) {
+	tc.logger.Debug().Str(logfields.DefinitionID, deviceDefinitionID).Msg("Waiting for device definition")
 	for i := 0; i < 12; i++ {
-		definition, err := t.identitySvc.FetchDeviceDefinitionByID(deviceDefinitionID)
+		definition, err := tc.identitySvc.FetchDeviceDefinitionByID(deviceDefinitionID)
 		if err != nil || definition == nil || definition.DeviceDefinitionID == "" {
 			time.Sleep(5 * time.Second)
-			t.logger.Debug().Str(logfields.DefinitionID, deviceDefinitionID).Msgf("Still waiting, retry %d", i+1)
+			tc.logger.Debug().Str(logfields.DefinitionID, deviceDefinitionID).Msgf("Still waiting, retry %d", i+1)
 			continue
 		}
 		return definition, nil
@@ -476,8 +589,8 @@ func (t *TeslaController) getOrWaitForDeviceDefinition(deviceDefinitionID string
 // UpdateCredsAndStatusToSuccess stores the given credential for the given synthDevice.
 // This function encrypts the access and refresh tokens before saving them to the database.
 // TODO implement encryption using KMS
-func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *dbmodels.SyntheticDevice, creds *service.Credential) error {
-	encCreds, err := t.store.EncryptTokens(creds)
+func (tc *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synthDevice *dbmodels.SyntheticDevice, creds *service.Credential) error {
+	encCreds, err := tc.credStore.EncryptTokens(creds)
 	if err != nil {
 		return err
 	}
@@ -493,7 +606,7 @@ func (t *TeslaController) UpdateCredsAndStatusToSuccess(c context.Context, synth
 
 	// Save the changes to the database
 	// todo add transaction handling
-	_, err = synthDevice.Update(c, t.pdb.DBS().Writer, boil.Infer())
+	_, err = synthDevice.Update(c, tc.pdb.DBS().Writer, boil.Infer())
 	if err != nil {
 		return err
 	}

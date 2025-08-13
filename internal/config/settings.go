@@ -52,16 +52,17 @@ type Settings struct {
 	SDWalletsSeed            string         `yaml:"SD_WALLETS_SEED"`
 	ConnectionTokenID        string         `yaml:"CONNECTION_TOKEN_ID"`
 
-	TeslaClientID               string `yaml:"TESLA_CLIENT_ID"`
-	TeslaClientSecret           string `yaml:"TESLA_CLIENT_SECRET"`
-	TeslaAuthURL                string `yaml:"TESLA_AUTH_URL"`
-	TeslaRedirectURL            string `yaml:"TESLA_REDIRECT_URL"`
-	TeslaTokenURL               string `yaml:"TESLA_TOKEN_URL"`
-	TeslaFleetURL               string `yaml:"TESLA_FLEET_URL"`
-	TeslaTelemetryHostName      string `yaml:"TESLA_TELEMETRY_HOST_NAME"`
-	TeslaTelemetryPort          int    `yaml:"TESLA_TELEMETRY_PORT"`
-	TeslaTelemetryCACertificate string `yaml:"TESLA_TELEMETRY_CA_CERTIFICATE"`
-	TeslaRequiredScopes         string `yaml:"TESLA_REQUIRED_SCOPES"`
+	TeslaClientID               string  `yaml:"TESLA_CLIENT_ID"`
+	TeslaClientSecret           string  `yaml:"TESLA_CLIENT_SECRET"`
+	TeslaAuthURL                url.URL `yaml:"TESLA_AUTH_URL"`
+	TeslaRedirectURL            url.URL `yaml:"TESLA_REDIRECT_URL"`
+	TeslaTokenURL               url.URL `yaml:"TESLA_TOKEN_URL"`
+	TeslaFleetURL               url.URL `yaml:"TESLA_FLEET_URL"`
+	TeslaTelemetryHostName      string  `yaml:"TESLA_TELEMETRY_HOST_NAME"`
+	TeslaTelemetryPort          int     `yaml:"TESLA_TELEMETRY_PORT"`
+	TeslaTelemetryCACertificate string  `yaml:"TESLA_TELEMETRY_CA_CERTIFICATE"`
+	TeslaRequiredScopes         string  `yaml:"TESLA_REQUIRED_SCOPES"`
+	TeslaVirtualKeyURL          url.URL `yaml:"TESLA_VIRTUAL_KEY_URL"`
 
 	// Settings for the partners token
 	PartnersTeslaFleetURL string `json:"PARTNERS_FLEET_URL"`

@@ -60,6 +60,11 @@ func (m *MockCredStore) Retrieve(ctx context.Context, user common.Address) (*ser
 	return args.Get(0).(*service.Credential), args.Error(1)
 }
 
+func (m *MockCredStore) RetrieveAndDelete(ctx context.Context, user common.Address) (*service.Credential, error) {
+	args := m.Called(ctx, user)
+	return args.Get(0).(*service.Credential), args.Error(1)
+}
+
 func (m *MockCredStore) EncryptTokens(credential *service.Credential) (*service.Credential, error) {
 	args := m.Called(credential)
 	return args.Get(0).(*service.Credential), args.Error(1)

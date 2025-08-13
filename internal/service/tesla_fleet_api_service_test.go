@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -24,7 +25,8 @@ type TeslaFleetAPIServiceTestSuite struct {
 func (t *TeslaFleetAPIServiceTestSuite) SetupSuite() {
 	t.ctx = context.Background()
 	logger := test.Logger()
-	t.settings = &config.Settings{TeslaFleetURL: mockTeslaFleetBaseURL, TeslaTelemetryCACertificate: "Ca-Cert", TeslaTelemetryPort: 443, TeslaTelemetryHostName: "tel.dimo.com"}
+	fleetUrl, _ := url.ParseRequestURI(mockTeslaFleetBaseURL)
+	t.settings = &config.Settings{TeslaFleetURL: *fleetUrl, TeslaTelemetryCACertificate: "Ca-Cert", TeslaTelemetryPort: 443, TeslaTelemetryHostName: "tel.dimo.com"}
 
 	var err error
 	t.SUT, err = NewTeslaFleetAPIService(t.settings, logger)
