@@ -46,7 +46,7 @@ env:
     VJfn+Y6hzMyVYhAcbfzSwFPY1XtEbsNh
     -----END CERTIFICATE-----
 ingress:
-  enabled: false
+  enabled: true
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/auth-tls-secret: ingress/cf-origin-ca
