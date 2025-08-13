@@ -23,10 +23,15 @@ type Settings struct {
 	JwtKeySetURL                string      `yaml:"JWT_KEY_SET_URL"`
 	UseLocalTLS                 bool        `yaml:"USE_LOCAL_TLS"`
 
+	// For temp credentials cache
 	RedisURL         string `yaml:"REDIS_URL"`
 	RedisPassword    string `yaml:"REDIS_PASSWORD"`
 	RedisTLS         bool   `yaml:"REDIS_TLS"`
 	EnableLocalCache bool   `env:"ENABLE_LOCAL_CACHE" default:"false"`
+
+	// KMS and AWS
+	AWSRegion string `yaml:"AWS_REGION"`
+	KMSKeyID  string `yaml:"KMS_KEY_ID"`
 
 	IdentityAPIEndpoint          url.URL `yaml:"IDENTITY_API_ENDPOINT"`
 	DeviceDefinitionsAPIEndpoint url.URL `yaml:"DEVICE_DEFINITIONS_API_ENDPOINT"`

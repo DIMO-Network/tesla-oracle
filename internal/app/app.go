@@ -1,9 +1,11 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/DIMO-Network/go-transactions"
 	"github.com/DIMO-Network/shared/pkg/cipher"
@@ -14,11 +16,14 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/jackc/pgx/v5"
+	"github.com/patrickmn/go-cache"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
@@ -87,18 +92,36 @@ func App(
 		KeyPrefix: "tesla-oracle",
 	})
 
-	credStore := service.TempCredsStore{
-		Cache: cacheService,
-		// TODO: for development only, use KMS
-		Cipher: new(cipher.ROT13Cipher),
+	// define cipher based on environment
+	var cip cipher.Cipher
+	if settings.Environment == "dev" || settings.IsProduction() {
+		cip = createKMS(settings, logger)
+	} else {
+		logger.Warn().Msg("Using ROT13 encrypter. Only use this for local testing!")
+		cip = new(cipher.ROT13Cipher)
+	}
+
+	var credStore controllers.CredStore
+	if settings.EnableLocalCache {
+		credStore = &service.TempCredsLocalStore{
+			Cache:  cache.New(5*time.Minute, 10*time.Minute),
+			Cipher: cip,
+		}
+		logger.Info().Msg("Using LocalCache for CredStore.")
+	} else {
+		credStore = &service.TempCredsStore{
+			Cache:  cacheService,
+			Cipher: cip,
+		}
+		logger.Info().Msg("Using redis CredStore implementation.")
 	}
 	teslaFleetAPISvc, err := service.NewTeslaFleetAPIService(settings, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
 	}
 
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, &credStore, onboardingSvc, pdb)
-	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr, pdb, &credStore)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, credStore, onboardingSvc, pdb)
+	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr, pdb, credStore)
 
 	jwtAuth := jwtware.New(jwtware.Config{
 		JWKSetURLs: []string{settings.JwtKeySetURL},
@@ -177,4 +200,17 @@ func ErrorHandler(c *fiber.Ctx, err error, logger *zerolog.Logger) error {
 type ErrorRes struct {
 	Code    int    `json:"code"`
 	Message string `json:"message"`
+}
+
+func createKMS(settings *config.Settings, logger *zerolog.Logger) cipher.Cipher {
+	// Need AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to be set.
+	awscfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(settings.AWSRegion))
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Couldn't create AWS config.")
+	}
+
+	return &cipher.KMSCipher{
+		KeyID:  settings.KMSKeyID,
+		Client: kms.NewFromConfig(awscfg),
+	}
 }

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -21,7 +20,6 @@ import (
 	"github.com/friendsofgo/errors"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/patrickmn/go-cache"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/rs/zerolog"
@@ -50,19 +48,6 @@ type TeslaController struct {
 }
 
 func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, pdb *db.Store) *TeslaController {
-	var credStore CredStore
-	if settings.EnableLocalCache {
-		credStore = &service.Store{
-			Cache: cache.New(5*time.Minute, 10*time.Minute),
-			// TODO: for development only, use KMS
-			Cipher: new(cipher.ROT13Cipher),
-		}
-		logger.Info().Msg("Using LocalCache for CredStore.")
-	} else {
-		credStore = store
-		logger.Info().Msg("Using redis CredStore implementation.")
-	}
-
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -79,7 +64,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		ddSvc:          ddSvc,
 		identitySvc:    identitySvc,
 		requiredScopes: requiredScopes,
-		store:          credStore,
+		store:          store,
 		onboarding:     onboardingSvc,
 		pdb:            pdb,
 		devicesService: devicesService,
