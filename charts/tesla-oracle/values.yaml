@@ -45,9 +45,9 @@ env:
   DIMO_AUTH_URL: https://auth.dev.dimo.zone
   DIMO_AUTH_CLIENT_ID: '0x4328433252fD5a7dF7C4Fc3f5F8680a49bb7b401'
   DIMO_AUTH_DOMAIN: https://tesla-oracle.dev.dimo.zone/index.html
-  TESLA_AUTH_URL: https://auth.tesla.com/oauth2/v3/authorize
+  TESLA_AUTH_URL: https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/authorize
   TESLA_REDIRECT_URL: https://tesla-oracle.dev.dimo.zone/index.html
-  TESLA_TOKEN_URL: https://auth.tesla.com/oauth2/v3/token
+  TESLA_TOKEN_URL: https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token
   TESLA_FLEET_URL: http://tesla-command-api-dev.dev.svc.cluster.local:8080
   TESLA_REQUIRED_SCOPES: vehicle_device_data,vehicle_location
   TESLA_TELEMETRY_HOST_NAME: ingest-tesla.dev.drivedimo.com
