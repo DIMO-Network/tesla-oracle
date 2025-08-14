@@ -1,7 +1,6 @@
 package service
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"errors"
@@ -17,8 +16,8 @@ import (
 
 	"github.com/DIMO-Network/tesla-oracle/internal/constants"
 
+	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
-	//"github.com/DIMO-Network/devices-api/internal/constants"
 	"github.com/goccy/go-json"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
@@ -147,10 +146,11 @@ type UnSubscribeFromTelemetryDataResponse struct {
 }
 
 type teslaFleetAPIService struct {
-	Settings   *config.Settings
-	HTTPClient *http.Client
-	log        *zerolog.Logger
-	FleetBase  *url.URL
+	Settings           *config.Settings
+	HTTPClient         shttp.ClientWrapper
+	PartnersHTTPClient shttp.ClientWrapper
+	log                *zerolog.Logger
+	FleetBase          *url.URL
 }
 
 func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) (TeslaFleetAPIService, error) {
@@ -159,22 +159,38 @@ func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) 
 		return nil, err
 	}
 
-	var client *http.Client
+	var client shttp.ClientWrapper
 	if settings.Environment == "local" {
 		logger.Warn().Msg("LOCAL ENV - disabling cert verification")
 		tr := &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		}
-		client = &http.Client{Transport: tr}
+		client, err = shttp.NewClientWrapper(u.String(), "", 5*time.Second, nil, true, shttp.WithRetry(3), shttp.WithTransport(tr))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Tesla Fleet API client: %w", err)
+		}
 	} else {
-		client = &http.Client{}
+		client, err = shttp.NewClientWrapper(u.String(), "", 5*time.Second, nil, true, shttp.WithRetry(3))
+		if err != nil {
+			return nil, fmt.Errorf("failed to create Tesla Fleet API client: %w", err)
+		}
+	}
+
+	// init Partners Token HTTP client
+	h := map[string]string{
+		"Content-Type": "application/x-www-form-urlencoded",
+	}
+	partnersClient, err := shttp.NewClientWrapper(settings.TeslaTokenURL, "", 5*time.Second, h, true, shttp.WithRetry(3))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Tesla Fleet API client: %w", err)
 	}
 
 	return &teslaFleetAPIService{
-		Settings:   settings,
-		HTTPClient: client,
-		log:        logger,
-		FleetBase:  u,
+		Settings:           settings,
+		HTTPClient:         client,
+		PartnersHTTPClient: partnersClient,
+		log:                logger,
+		FleetBase:          u,
 	}, nil
 }
 
@@ -229,22 +245,11 @@ func (t *teslaFleetAPIService) GetPartnersToken(ctx context.Context) (*PartnersA
 	data.Set("audience", t.Settings.PartnersTeslaFleetURL)
 	data.Set("scope", strings.Join(teslaScopes, " "))
 
-	teslaUrl := t.Settings.TeslaTokenURL
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, teslaUrl, strings.NewReader(data.Encode()))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	resp, err := t.HTTPClient.Do(req)
+	// we have baseUrl set as whole URI
+	resp, err := t.PartnersHTTPClient.ExecuteRequest("", http.MethodPost, []byte(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to perform request: %w", err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.log.Warn().Err(err).Msg("Failed to close response body")
-		}
-	}()
 
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
@@ -252,8 +257,8 @@ func (t *teslaFleetAPIService) GetPartnersToken(ctx context.Context) (*PartnersA
 	}
 
 	var tokenResponse PartnersAccessTokenResponse
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResponse); err != nil {
-		return nil, fmt.Errorf("failed to parse response: %w", err)
+	if errDecoding := json.NewDecoder(resp.Body).Decode(&tokenResponse); errDecoding != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", errDecoding)
 	}
 
 	return &tokenResponse, nil
@@ -373,9 +378,8 @@ func (t *teslaFleetAPIService) VirtualKeyConnectionStatus(ctx context.Context, t
 	url := t.FleetBase.JoinPath("api/1/vehicles/fleet_status")
 
 	jsonBody := fmt.Sprintf(`{"vins": [%q]}`, vin)
-	inBody := strings.NewReader(jsonBody)
 
-	body, err := t.performRequest(ctx, url, token, http.MethodPost, inBody)
+	body, err := t.performRequest(ctx, url, token, http.MethodPost, []byte(jsonBody))
 	if err != nil {
 		t.log.Warn().Str("body", jsonBody).Msg("Virtual key status request failure.")
 		return nil, fmt.Errorf("error requesting key status: %w", err)
@@ -486,7 +490,7 @@ func (t *teslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context, to
 		return err
 	}
 
-	body, err := t.performRequest(ctx, url, token, http.MethodPost, bytes.NewReader(b))
+	body, err := t.performRequest(ctx, url, token, http.MethodPost, b)
 	if err != nil {
 		return err
 	}
@@ -572,29 +576,12 @@ func (t *teslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Contex
 var ErrUnauthorized = errors.New("unauthorized")
 
 // performRequest a helper function for making http requests, it adds a timeout context and parses error response
-func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL, token, method string, body io.Reader) ([]byte, error) {
-	ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Minute)
-	defer cancel()
+func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL, token, method string, body []byte) ([]byte, error) {
 
-	req, err := http.NewRequestWithContext(ctxTimeout, method, url.String(), body)
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-
-	resp, err := t.HTTPClient.Do(req)
+	resp, err := t.HTTPClient.ExecuteRequestWithAuth("/"+url.Path, method, body, "Bearer "+token)
 	if err != nil {
 		return nil, fmt.Errorf("failed to make request: %w", err)
 	}
-
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			t.log.Warn().Err(err).Msg("Failed to close response body")
-		}
-	}()
 
 	if resp.StatusCode != http.StatusOK {
 		if resp.StatusCode == http.StatusMisdirectedRequest {
