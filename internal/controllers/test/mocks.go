@@ -139,6 +139,11 @@ type MockDevicesGRPCService struct {
 	mock.Mock
 }
 
+func (m *MockDevicesGRPCService) StartTeslaTask(ctx context.Context, tokenID int64) error {
+	args := m.Called(ctx, tokenID)
+	return args.Error(0)
+}
+
 func (m *MockDevicesGRPCService) StopTeslaTask(ctx context.Context, tokenID int64) error {
 	args := m.Called(ctx, tokenID)
 	return args.Error(0)

@@ -165,6 +165,12 @@ func (t *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
 	}
 
+	// TODO when we sync devices-api and tesla-oracle dbs or migrated commands, we should fail the subscription if the task fails to start,
+	startErr := t.devicesService.StartTeslaTask(c.Context(), vehicle.TokenID)
+	if startErr != nil {
+		logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
+	}
+
 	refreshExpiry := time.Now().AddDate(0, 3, 0)
 	creds := service.Credential{
 		AccessToken:   teslaAuth.AccessToken,

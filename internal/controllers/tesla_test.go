@@ -108,7 +108,8 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	// when
 	mockIdentitySvc := new(test.MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
-		Owner: ownerAdd,
+		Owner:   ownerAdd,
+		TokenID: vehicleTokenID,
 		SyntheticDevice: mods.SyntheticDevice{
 			Address: synthDeviceAddressStr,
 		},
@@ -126,13 +127,16 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 	mockTeslaService := new(test.MockTeslaFleetAPIService)
 
-	//mockCredStore.On("Retrieve", mock.Anything, walletAddress).Return(cred, nil)
 	mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, expectedResponse.AccessToken, vin).Return(nil)
 	mockTeslaService.On("CompleteTeslaAuthCodeExchange", mock.Anything, authCode, redirectURI).Return(expectedResponse, nil)
+	// Mock the DevicesGRPCService
+	mockDevicesService := new(test.MockDevicesGRPCService)
+	mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
 
 	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, &s.pdb)
+	controller.devicesService = mockDevicesService
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -181,6 +185,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 	mockCredStore.AssertExpectations(s.T())
 	mockTeslaService.AssertExpectations(s.T())
+	mockDevicesService.AssertExpectations(s.T())
 }
 
 func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
@@ -408,6 +413,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// Verify mock expectations
 	mockCredStore.AssertExpectations(s.T())
 	mockTeslaService.AssertExpectations(s.T())
+	mockDevicesService.AssertExpectations(s.T())
 }
 
 func (s *TeslaControllerTestSuite) TestListVehicles() {
