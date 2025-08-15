@@ -62,7 +62,7 @@ export class MessageService {
         }
 
         const message = JSON.parse(event.data) as Message;
-        if (!message.type || !['message', 'signature', 'signature-mint'].includes(message.type)) {
+        if (!message.type || !['message', 'signature', 'signature-mint', 'open'].includes(message.type)) {
             return;
         }
 
