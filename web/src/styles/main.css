@@ -21,5 +21,12 @@
     focus-visible:outline-2
     focus-visible:outline-offset-2
     focus-visible:outline-red-600
+}
 
+.button.disabled {
+    @apply
+    bg-red-400
+    text-white
+    hover:bg-red-400
+    focus-visible:outline-red-400
 }

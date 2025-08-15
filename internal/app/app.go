@@ -135,6 +135,7 @@ func App(
 	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
 
 	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
+	vehicleGroup.Post("/verify", onboardCtrl.VerifyVins)
 	vehicleGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)
 	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)

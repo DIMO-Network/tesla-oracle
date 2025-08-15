@@ -27,7 +27,7 @@ type Settings struct {
 	RedisURL         string `yaml:"REDIS_URL"`
 	RedisPassword    string `yaml:"REDIS_PASSWORD"`
 	RedisTLS         bool   `yaml:"REDIS_TLS"`
-	EnableLocalCache bool   `env:"ENABLE_LOCAL_CACHE" default:"false"`
+	EnableLocalCache bool   `yaml:"ENABLE_LOCAL_CACHE" default:"false"`
 
 	// KMS and AWS
 	AWSRegion string `yaml:"AWS_REGION"`
@@ -36,6 +36,7 @@ type Settings struct {
 	IdentityAPIEndpoint          url.URL `yaml:"IDENTITY_API_ENDPOINT"`
 	DeviceDefinitionsAPIEndpoint url.URL `yaml:"DEVICE_DEFINITIONS_API_ENDPOINT"`
 	DevicesGRPCEndpoint          string  `yaml:"DEVICES_GRPC_ADDR"`
+	DisableDevicesGRPC           bool    `yaml:"DISABLE_DEVICES_GRPC" default:"false"`
 
 	DimoAuthURL        url.URL        `yaml:"DIMO_AUTH_URL"`
 	DimoAuthClientID   common.Address `yaml:"DIMO_AUTH_CLIENT_ID"`

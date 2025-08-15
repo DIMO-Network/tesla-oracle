@@ -4,7 +4,7 @@ import {Task} from '@lit/task'
 // @ts-ignore
 import styles from '@styles/main.css?inline'
 
-import {customElement, property} from "lit/decorators.js";
+import {customElement, property, state} from "lit/decorators.js";
 import {consume} from "@lit/context";
 
 import {TeslaSettingsContext, teslaSettingsContext} from "@context/tesla-settings.context.ts";
@@ -14,6 +14,7 @@ import {repeat} from "lit/directives/repeat.js";
 import {BaseOnboardingElement} from "@elements/base-onboarding-element.ts";
 import {MessageService} from "@services/message.service.ts";
 import {AuthContext, authContext} from "@context/auth.context.ts";
+import {LinkingService} from "@services/linking.service.ts";
 
 interface DeviceDefinition {
     id: string;
@@ -32,6 +33,11 @@ interface VehiclesResponse {
     vehicles: TeslaVehicle[];
 }
 
+interface VirtualKeyResponse {
+    added: boolean;
+    status: string;
+}
+
 @customElement('tesla-element')
 export class TeslaElement extends BaseOnboardingElement {
     static styles = css`${unsafeCSS(styles)}`;
@@ -48,7 +54,23 @@ export class TeslaElement extends BaseOnboardingElement {
     @property({attribute: false})
     private auth?: AuthContext;
 
+    protected linkingService: LinkingService = LinkingService.getInstance();
     protected messageService: MessageService = MessageService.getInstance();
+
+    @state()
+    private virtualKeyChecked = false;
+
+    @state()
+    private canSetupVirtualKey = false;
+
+    @state()
+    private linkOpened = false;
+
+    connectedCallback() {
+        super.connectedCallback();
+
+        this.linkingService.useMessageService(this.messageService);
+    }
 
     private loadVehiclesTask = new Task(this, {
         task: async ([authorizationCode, redirectUri], {}) => {
@@ -63,6 +85,18 @@ export class TeslaElement extends BaseOnboardingElement {
             return response.data?.vehicles || [];
         },
         args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri]
+    });
+
+    private checkVirtualKeyTask = new Task(this, {
+        task: async ([vin], {}) => {
+            if (!vin) {
+                return [];
+            }
+            const query = qs.stringify({vin});
+            const response = await this.api.callApi<VirtualKeyResponse>("GET", `/v1/tesla/virtual-key?${query}`, null, true);
+            return response.data || null;
+        },
+        autoRun: false
     });
 
     private onboardVehicleTask = new Task(this, {
@@ -90,12 +124,40 @@ export class TeslaElement extends BaseOnboardingElement {
                         ${item.vin}: ${item.definition.model} ${item.definition.year}
                     </div>
                     <div class="col-span-3">
-                        ${this.onboardVehicleTask.render({
-                            initial: () => html`<button class="button" @click=${() => this.handleOnboardClick(item.vin)}>Onboard</button>`,
-                            pending: () => html`<button class="button in-progress" disabled>...</button>`,
-                            complete: () => html`<button class="button done" disabled>Finished</button>`,
-                            error: () => html`<button class="button" @click=${() => this.handleOnboardClick(item.vin)}>Onboard</button>`,
+                        <button
+                                class="button ${this.virtualKeyChecked ? 'disabled' : ''}"
+                                @click=${() => this.handleOnboardClick(item.vin)}
+                                ?disabled=${this.virtualKeyChecked}
+                        >Start onboarding</button>
+                    </div>
+                    <div class="col-span-3">
+                        ${this.checkVirtualKeyTask.render({
+                            initial: () => html``,
+                            pending: () => html`<span>Checking virtual key status</span>`,
+                            complete: () => html`<span>Virtual key status: ${(this.checkVirtualKeyTask.value as VirtualKeyResponse).status}</span>`,
+                            error: () => html`<span>Failed to check virtual key status</span>`,
                         })}
+                    </div>
+                    <div class="col-span-3" ?hidden=${!this.virtualKeyChecked || !this.canSetupVirtualKey}>
+                        <button 
+                                class="button ${!this.canSetupVirtualKey ? 'disabled' : ''}" 
+                                @click=${() => this.handleVirtualKeyClick(item.vin)}
+                                
+                        >Setup Virtual Key</button>
+                    </div>
+                    <div class="col-span-3" ?hidden=${!this.linkOpened}>
+                        <button
+                                class="button"
+                                @click=${() => this.handleOnboardClick(item.vin)}
+                                ?disabled=${this.virtualKeyChecked}
+                        >Verify virtual key setup</button>
+                    </div>
+                    <div class="col-span-3" ?hidden=${!this.virtualKeyChecked}>
+                        <button
+                                class="button ${!this.virtualKeyChecked || this.canSetupVirtualKey ? 'disabled' : ''}"
+                                @click=${() => this.handleContinueClick(item.vin)}
+                                ?disabled=${!this.virtualKeyChecked || this.canSetupVirtualKey}
+                        >Continue</button>
                     </div>
                 </div>`)}
         `
@@ -146,7 +208,30 @@ export class TeslaElement extends BaseOnboardingElement {
         return `${url}?${query}`;
     }
 
-    handleOnboardClick(vin: string) {
+    async handleOnboardClick(vin: string) {
+        await this.checkVirtualKeyTask.run([vin])
+        const value = this.checkVirtualKeyTask.value as VirtualKeyResponse;
+        if (!!value && !!value.status) {
+            this.canSetupVirtualKey = value.status === "Unpaired";
+        } else {
+            this.canSetupVirtualKey = false;
+        }
+
+        this.virtualKeyChecked = true;
+    }
+
+    async handleVirtualKeyClick(_: string) {
+        if (!this.teslaSettings?.virtualKeyUrl) {
+            return;
+        }
+
+        const openedUrl = await this.linkingService.openLink(this.teslaSettings.virtualKeyUrl);
+        if (openedUrl.url === this.teslaSettings.virtualKeyUrl) {
+            this.linkOpened = true;
+        }
+    }
+
+    async handleContinueClick(vin: string) {
         let vehicleTokenId = undefined
         if (this.auth?.vehicleTokenId) {
             const tid = Number(this.auth.vehicleTokenId)

@@ -54,9 +54,16 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
 	}
-	devicesService, err := service.NewDevicesGRPCService(settings, logger)
-	if err != nil {
-		logger.Fatal().Err(err).Msg("Failed to initialize DevicesGRPCService")
+
+	var devicesService service.DevicesGRPCService
+	var err error
+	if !settings.DisableDevicesGRPC {
+		devicesService, err = service.NewDevicesGRPCService(settings, logger)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("Failed to initialize DevicesGRPCService")
+		}
+	} else {
+		logger.Warn().Msgf("Devices GRPC is DISABLED")
 	}
 
 	return &TeslaController{
@@ -386,7 +393,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
 
-	fleetStatus, err := tc.fleetAPISvc.VirtualKeyConnectionStatus(c.Context(), teslaAuth.AccessToken, teslaAuth.RefreshToken)
+	fleetStatus, err := tc.fleetAPISvc.VirtualKeyConnectionStatus(c.Context(), teslaAuth.AccessToken, params.VIN)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Error checking fleet status.")
 	}
@@ -403,7 +410,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 		response.Status = Unpaired
 	}
 
-	return c.JSON(nil)
+	return c.JSON(response)
 }
 
 type VirtualKeyStatusResponse struct {

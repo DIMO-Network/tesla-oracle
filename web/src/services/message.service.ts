@@ -1,4 +1,4 @@
-export type MessageType = 'message' | 'sign' | 'sign-mint' | 'signature' | 'onboarded';
+export type MessageType = 'message' | 'sign' | 'sign-mint' | 'signature' | 'onboarded' | 'open';
 
 export interface Message {
     type: MessageType;
@@ -16,6 +16,7 @@ export class MessageService {
         'sign-mint': [],
         signature: [],
         onboarded: [],
+        open: [],
     };
 
     private constructor() {
@@ -42,7 +43,7 @@ export class MessageService {
             // @ts-ignore
             window.ReactNativeWebView.postMessage(JSON.stringify(message));
         } else if (window.top) {
-            window.top.postMessage(JSON.stringify(message), 'https://localdev.dimo.org:3008');
+            window.top.postMessage(JSON.stringify(message));
         }
     }
 

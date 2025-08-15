@@ -14,6 +14,7 @@ export class SettingsProvider extends LitElement {
         clientId: '',
         authUrl: '',
         redirectUri: '',
+        virtualKeyUrl: ''
     };
 
     private api = ApiService.getInstance();
