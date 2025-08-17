@@ -1,4 +1,4 @@
-replicaCount: 3
+replicaCount: 2
 image:
   repository: dimozone/tesla-oracle
   pullPolicy: IfNotPresent
