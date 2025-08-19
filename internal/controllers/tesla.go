@@ -120,7 +120,7 @@ type partialTeslaClaims struct {
 // @Accept      json
 // @Produce     json
 // @Param       vehicleTokenId path string true "OnboardingService Token ID"
-// @Param       body CompleteOAuthExchangeRequest  "Authorization details"
+// @Param       payload body CompleteOAuthExchangeRequest true  "Authorization details"
 // @Security    BearerAuth
 // @Success     200 {object} map[string]string "Successfully subscribed to vehicle telemetry."
 // @Failure     400 {object} fiber.Error "Bad Request"
@@ -283,6 +283,20 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	})
 }
 
+// ListVehicles godoc
+// @Summary     Get user vehicles
+// @Description Gets Tesla vehicles owned by the user. Creates initial onboarding records for all of them.
+// @Tags        tesla,vehicles
+// @Accept      json
+// @Produce     json
+// @Param       payload body controllers.CompleteOAuthExchangeRequest true "Authorization details"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.CompleteOAuthExchangeResponseWrapper
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     424 {object} fiber.Error "Failed Dependency"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/vehicles [post]
 func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
 	logger := helpers.GetLogger(c, tc.logger)
@@ -379,6 +393,19 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	return c.JSON(vehicleResp)
 }
 
+// GetVirtualKeyStatus godoc
+// @Summary     Get virtual key status
+// @Description Gets information about Tesla virtual key.
+// @Tags        tesla,virtual-key
+// @Accept      json
+// @Produce     json
+// @Param       vin	query string true "Vehicle VIN"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.VirtualKeyStatusResponse
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/virtual-key [get]
 func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
 
@@ -415,7 +442,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 
 type VirtualKeyStatusResponse struct {
 	Added  bool             `json:"added"`
-	Status VirtualKeyStatus `json:"status"`
+	Status VirtualKeyStatus `json:"status" swaggertype:"string"`
 }
 
 type VirtualKeyStatus int

@@ -79,7 +79,8 @@ type VinsVerifyParams struct {
 }
 
 type VinStatus struct {
-	Vin     string `json:"vin"`
+	Vin string `json:"vin"`
+	// Status `"Pending"`, `"Failure"`, `"Success"`
 	Status  string `json:"status"`
 	Details string `json:"details"`
 }
@@ -88,6 +89,19 @@ type StatusForVinsResponse struct {
 	Statuses []VinStatus `json:"statuses"`
 }
 
+// VerifyVins godoc
+// @Summary     Verify vehicle before onboarding
+// @Description Verifies vehicle before onboarding. In case of already minted vehicle checks ownership, synthetic token ID (should be empty), etc.
+// @Tags        onboarding,verify
+// @Accept      json
+// @Produce     json
+// @Param       payload body controllers.VinsVerifyParams true "Vehicles to verify"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.StatusForVinsResponse
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/vehicle/verify [post]
 func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 	walletAddress := c.Locals("wallet").(common.Address)
 
@@ -216,6 +230,19 @@ func (v *VehicleController) isValidVin(vin string) bool {
 	return vinRegexp.MatchString(vin)
 }
 
+// GetMintDataForVins godoc
+// @Summary     Get minting payload for signing
+// @Description Gets minting payload for signing. Only `typedData` field is populated in the response.
+// @Tags        onboarding,mint
+// @Accept      json
+// @Produce     json
+// @Param       vins query []string true "VINs"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.MintDataForVins "Only `typedData` field is populated for each item"
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/vehicle/mint [get]
 func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 	walletAddress := c.Locals("wallet").(common.Address)
 
@@ -374,6 +401,19 @@ type DisconnectDataForVins struct {
 	VinDisconnectData []VinUserOperationData `json:"vinDisconnectData"`
 }
 
+// SubmitMintDataForVins godoc
+// @Summary     Submit signed data and sacd to mint
+// @Description Submits signed data and sacd and triggers minting job start.
+// @Tags        onboarding,mint
+// @Accept      json
+// @Produce     json
+// @Param       payload body controllers.MintDataForVins true "Signed typed data and sacd for minting"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.StatusForVinsResponse
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/vehicle/mint [post]
 func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 	walletAddress := c.Locals("wallet").(common.Address)
 
@@ -545,6 +585,19 @@ func (v *VehicleController) canSubmitMintingJob(record *dbmodels.Onboarding) boo
 	return (minted) || (!minted || burned) && (failed || !pending)
 }
 
+// GetMintStatusForVins godoc
+// @Summary     Get minting status
+// @Description Gets status of minting jobs for provided VINs. Can be polled to wait for all minting jobs.
+// @Tags        onboarding,mint
+// @Accept      json
+// @Produce     json
+// @Param       vins query []string true "VINs"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.StatusForVinsResponse
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/vehicle/mint/status [get]
 func (v *VehicleController) GetMintStatusForVins(c *fiber.Ctx) error {
 	params := new(VinsGetParams)
 	if err := c.QueryParser(params); err != nil {
@@ -634,14 +687,27 @@ func (v *VehicleController) ClearOnboardingData(c *fiber.Ctx) error {
 
 type OnboardedVehicle struct {
 	Vin              string   `json:"vin"`
-	VehicleTokenID   *big.Int `json:"vehicleTokenId,omitempty"`
-	SyntheticTokenID *big.Int `json:"syntheticTokenId,omitempty"`
+	VehicleTokenID   *big.Int `json:"vehicleTokenId,omitempty" swaggertype:"integer"`
+	SyntheticTokenID *big.Int `json:"syntheticTokenId,omitempty" swaggertype:"integer"`
 }
 
 type FinalizeResponse struct {
 	Vehicles []OnboardedVehicle `json:"vehicles"`
 }
 
+// FinalizeOnboarding godoc
+// @Summary     Finalize onboarding
+// @Description Finalizes onboarding process, returns minted token IDs
+// @Tags        onboarding,mint
+// @Accept      json
+// @Produce     json
+// @Param       payload body controllers.VinsGetParams true "VINs to finalize"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.FinalizeResponse
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/vehicle/finalize [post]
 func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 	walletAddress := c.Locals("wallet").(common.Address)
 

@@ -1,0 +1,556 @@
+definitions:
+  apitypes.Type:
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+    type: object
+  apitypes.TypedData:
+    properties:
+      domain:
+        $ref: '#/definitions/apitypes.TypedDataDomain'
+      message:
+        $ref: '#/definitions/apitypes.TypedDataMessage'
+      primaryType:
+        type: string
+      types:
+        $ref: '#/definitions/apitypes.Types'
+    type: object
+  apitypes.TypedDataDomain:
+    properties:
+      chainId:
+        $ref: '#/definitions/math.HexOrDecimal256'
+      name:
+        type: string
+      salt:
+        type: string
+      verifyingContract:
+        type: string
+      version:
+        type: string
+    type: object
+  apitypes.TypedDataMessage:
+    additionalProperties: true
+    type: object
+  apitypes.Types:
+    additionalProperties:
+      items:
+        $ref: '#/definitions/apitypes.Type'
+      type: array
+    type: object
+  fiber.Error:
+    properties:
+      code:
+        type: integer
+      message:
+        type: string
+    type: object
+  internal_controllers.CompleteOAuthExchangeRequest:
+    properties:
+      authorizationCode:
+        type: string
+      redirectUri:
+        type: string
+    type: object
+  internal_controllers.CompleteOAuthExchangeResponseWrapper:
+    properties:
+      vehicles:
+        items:
+          $ref: '#/definitions/internal_controllers.TeslaVehicle'
+        type: array
+    type: object
+  internal_controllers.DeviceDefinition:
+    properties:
+      id:
+        type: string
+      make:
+        type: string
+      model:
+        type: string
+      year:
+        type: integer
+    type: object
+  internal_controllers.FinalizeResponse:
+    properties:
+      vehicles:
+        items:
+          $ref: '#/definitions/internal_controllers.OnboardedVehicle'
+        type: array
+    type: object
+  internal_controllers.MintDataForVins:
+    properties:
+      vinMintingData:
+        items:
+          $ref: '#/definitions/internal_controllers.VinTransactionData'
+        type: array
+    type: object
+  internal_controllers.OnboardedVehicle:
+    properties:
+      syntheticTokenId:
+        type: integer
+      vehicleTokenId:
+        type: integer
+      vin:
+        type: string
+    type: object
+  internal_controllers.SacdInput:
+    properties:
+      expiration:
+        type: integer
+      grantee:
+        items:
+          type: integer
+        type: array
+      permissions:
+        type: integer
+      source:
+        type: string
+    type: object
+  internal_controllers.StatusForVinsResponse:
+    properties:
+      statuses:
+        items:
+          $ref: '#/definitions/internal_controllers.VinStatus'
+        type: array
+    type: object
+  internal_controllers.TeslaVehicle:
+    properties:
+      definition:
+        $ref: '#/definitions/internal_controllers.DeviceDefinition'
+      externalId:
+        type: string
+      vin:
+        type: string
+    type: object
+  internal_controllers.VinStatus:
+    properties:
+      details:
+        type: string
+      status:
+        description: Status `"Pending"`, `"Failure"`, `"Success"`
+        type: string
+      vin:
+        type: string
+    type: object
+  internal_controllers.VinTransactionData:
+    properties:
+      sacd:
+        $ref: '#/definitions/internal_controllers.SacdInput'
+      signature:
+        items:
+          type: integer
+        type: array
+      typedData:
+        $ref: '#/definitions/apitypes.TypedData'
+      vin:
+        type: string
+    type: object
+  internal_controllers.VinWithTokenID:
+    properties:
+      vehicleTokenId:
+        type: integer
+      vin:
+        type: string
+    type: object
+  internal_controllers.VinsGetParams:
+    properties:
+      vins:
+        items:
+          type: string
+        type: array
+    type: object
+  internal_controllers.VinsVerifyParams:
+    properties:
+      vins:
+        items:
+          $ref: '#/definitions/internal_controllers.VinWithTokenID'
+        type: array
+    type: object
+  internal_controllers.VirtualKeyStatusResponse:
+    properties:
+      added:
+        type: boolean
+      status:
+        type: string
+    type: object
+  math.HexOrDecimal256:
+    type: object
+info:
+  contact: {}
+paths:
+  /v1/tesla/settings:
+    get:
+      description: Get config params for frontend app
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+      security:
+      - BearerAuth: []
+      summary: Get tesla-related configuration parameters
+      tags:
+      - Settings
+  /v1/tesla/telemetry/subscribe/{vehicleTokenId}:
+    post:
+      consumes:
+      - application/json
+      description: Subscribes a vehicle for telemetry data using the provided vehicle
+        token ID and authorization details in the request body.
+      parameters:
+      - description: OnboardingService Token ID
+        in: path
+        name: vehicleTokenId
+        required: true
+        type: string
+      - description: Authorization details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully subscribed to vehicle telemetry.
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "404":
+          description: OnboardingService not found or owner information is missing.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Subscribe vehicle for Tesla Telemetry Data
+      tags:
+      - tesla
+      - subscribe
+  /v1/tesla/telemetry/unsubscribe/{vehicleTokenId}:
+    post:
+      consumes:
+      - application/json
+      description: Unsubscribes a vehicle from telemetry data using the provided vehicle
+        token ID.
+      parameters:
+      - description: OnboardingService Token ID
+        in: path
+        name: vehicleTokenId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully unsubscribed from telemetry data.
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "404":
+          description: OnboardingService not found or owner information is missing.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Unsubscribe vehicle from Tesla Telemetry Data
+      tags:
+      - tesla
+      - unsubscribe
+  /v1/tesla/vehicles:
+    post:
+      consumes:
+      - application/json
+      description: Gets Tesla vehicles owned by the user. Creates initial onboarding
+        records for all of them.
+      parameters:
+      - description: Authorization details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeResponseWrapper'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "424":
+          description: Failed Dependency
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Get user vehicles
+      tags:
+      - tesla
+      - vehicles
+  /v1/tesla/virtual-key:
+    get:
+      consumes:
+      - application/json
+      description: Gets information about Tesla virtual key.
+      parameters:
+      - description: Vehicle VIN
+        in: query
+        name: vin
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.VirtualKeyStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Get virtual key status
+      tags:
+      - tesla
+      - virtual-key
+  /v1/vehicle/finalize:
+    post:
+      consumes:
+      - application/json
+      description: Finalizes onboarding process, returns minted token IDs
+      parameters:
+      - description: VINs to finalize
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.VinsGetParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.FinalizeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Finalize onboarding
+      tags:
+      - onboarding
+      - mint
+  /v1/vehicle/mint:
+    get:
+      consumes:
+      - application/json
+      description: Gets minting payload for signing. Only `typedData` field is populated
+        in the response.
+      parameters:
+      - collectionFormat: csv
+        description: VINs
+        in: query
+        items:
+          type: string
+        name: vins
+        required: true
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Only `typedData` field is populated for each item
+          schema:
+            $ref: '#/definitions/internal_controllers.MintDataForVins'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Get minting payload for signing
+      tags:
+      - onboarding
+      - mint
+    post:
+      consumes:
+      - application/json
+      description: Submits signed data and sacd and triggers minting job start.
+      parameters:
+      - description: Signed typed data and sacd for minting
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.MintDataForVins'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.StatusForVinsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Submit signed data and sacd to mint
+      tags:
+      - onboarding
+      - mint
+  /v1/vehicle/mint/status:
+    get:
+      consumes:
+      - application/json
+      description: Gets status of minting jobs for provided VINs. Can be polled to
+        wait for all minting jobs.
+      parameters:
+      - collectionFormat: csv
+        description: VINs
+        in: query
+        items:
+          type: string
+        name: vins
+        required: true
+        type: array
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.StatusForVinsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Get minting status
+      tags:
+      - onboarding
+      - mint
+  /v1/vehicle/verify:
+    post:
+      consumes:
+      - application/json
+      description: Verifies vehicle before onboarding. In case of already minted vehicle
+        checks ownership, synthetic token ID (should be empty), etc.
+      parameters:
+      - description: Vehicles to verify
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.VinsVerifyParams'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.StatusForVinsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Verify vehicle before onboarding
+      tags:
+      - onboarding
+      - verify
+swagger: "2.0"

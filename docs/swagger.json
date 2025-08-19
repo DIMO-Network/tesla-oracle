@@ -1,0 +1,857 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "contact": {}
+    },
+    "paths": {
+        "/v1/tesla/settings": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get config params for frontend app",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Settings"
+                ],
+                "summary": "Get tesla-related configuration parameters",
+                "responses": {
+                    "200": {
+                        "description": "OK"
+                    }
+                }
+            }
+        },
+        "/v1/tesla/telemetry/subscribe/{vehicleTokenId}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Subscribes a vehicle for telemetry data using the provided vehicle token ID and authorization details in the request body.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla",
+                    "subscribe"
+                ],
+                "summary": "Subscribe vehicle for Tesla Telemetry Data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "OnboardingService Token ID",
+                        "name": "vehicleTokenId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Authorization details",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.CompleteOAuthExchangeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully subscribed to vehicle telemetry.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "404": {
+                        "description": "OnboardingService not found or owner information is missing.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/tesla/telemetry/unsubscribe/{vehicleTokenId}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Unsubscribes a vehicle from telemetry data using the provided vehicle token ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla",
+                    "unsubscribe"
+                ],
+                "summary": "Unsubscribe vehicle from Tesla Telemetry Data",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "OnboardingService Token ID",
+                        "name": "vehicleTokenId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully unsubscribed from telemetry data.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "404": {
+                        "description": "OnboardingService not found or owner information is missing.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/tesla/vehicles": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gets Tesla vehicles owned by the user. Creates initial onboarding records for all of them.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla",
+                    "vehicles"
+                ],
+                "summary": "Get user vehicles",
+                "parameters": [
+                    {
+                        "description": "Authorization details",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.CompleteOAuthExchangeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.CompleteOAuthExchangeResponseWrapper"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "424": {
+                        "description": "Failed Dependency",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/tesla/virtual-key": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gets information about Tesla virtual key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla",
+                    "virtual-key"
+                ],
+                "summary": "Get virtual key status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Vehicle VIN",
+                        "name": "vin",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.VirtualKeyStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/vehicle/finalize": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Finalizes onboarding process, returns minted token IDs",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding",
+                    "mint"
+                ],
+                "summary": "Finalize onboarding",
+                "parameters": [
+                    {
+                        "description": "VINs to finalize",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.VinsGetParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.FinalizeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/vehicle/mint": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gets minting payload for signing. Only `typedData` field is populated in the response.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding",
+                    "mint"
+                ],
+                "summary": "Get minting payload for signing",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "VINs",
+                        "name": "vins",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Only `typedData` field is populated for each item",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.MintDataForVins"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Submits signed data and sacd and triggers minting job start.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding",
+                    "mint"
+                ],
+                "summary": "Submit signed data and sacd to mint",
+                "parameters": [
+                    {
+                        "description": "Signed typed data and sacd for minting",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.MintDataForVins"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.StatusForVinsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/vehicle/mint/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gets status of minting jobs for provided VINs. Can be polled to wait for all minting jobs.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding",
+                    "mint"
+                ],
+                "summary": "Get minting status",
+                "parameters": [
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "csv",
+                        "description": "VINs",
+                        "name": "vins",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.StatusForVinsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/vehicle/verify": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Verifies vehicle before onboarding. In case of already minted vehicle checks ownership, synthetic token ID (should be empty), etc.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "onboarding",
+                    "verify"
+                ],
+                "summary": "Verify vehicle before onboarding",
+                "parameters": [
+                    {
+                        "description": "Vehicles to verify",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.VinsVerifyParams"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.StatusForVinsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "apitypes.Type": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "apitypes.TypedData": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "$ref": "#/definitions/apitypes.TypedDataDomain"
+                },
+                "message": {
+                    "$ref": "#/definitions/apitypes.TypedDataMessage"
+                },
+                "primaryType": {
+                    "type": "string"
+                },
+                "types": {
+                    "$ref": "#/definitions/apitypes.Types"
+                }
+            }
+        },
+        "apitypes.TypedDataDomain": {
+            "type": "object",
+            "properties": {
+                "chainId": {
+                    "$ref": "#/definitions/math.HexOrDecimal256"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "salt": {
+                    "type": "string"
+                },
+                "verifyingContract": {
+                    "type": "string"
+                },
+                "version": {
+                    "type": "string"
+                }
+            }
+        },
+        "apitypes.TypedDataMessage": {
+            "type": "object",
+            "additionalProperties": true
+        },
+        "apitypes.Types": {
+            "type": "object",
+            "additionalProperties": {
+                "type": "array",
+                "items": {
+                    "$ref": "#/definitions/apitypes.Type"
+                }
+            }
+        },
+        "fiber.Error": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.CompleteOAuthExchangeRequest": {
+            "type": "object",
+            "properties": {
+                "authorizationCode": {
+                    "type": "string"
+                },
+                "redirectUri": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.CompleteOAuthExchangeResponseWrapper": {
+            "type": "object",
+            "properties": {
+                "vehicles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_controllers.TeslaVehicle"
+                    }
+                }
+            }
+        },
+        "internal_controllers.DeviceDefinition": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "make": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "year": {
+                    "type": "integer"
+                }
+            }
+        },
+        "internal_controllers.FinalizeResponse": {
+            "type": "object",
+            "properties": {
+                "vehicles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_controllers.OnboardedVehicle"
+                    }
+                }
+            }
+        },
+        "internal_controllers.MintDataForVins": {
+            "type": "object",
+            "properties": {
+                "vinMintingData": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_controllers.VinTransactionData"
+                    }
+                }
+            }
+        },
+        "internal_controllers.OnboardedVehicle": {
+            "type": "object",
+            "properties": {
+                "syntheticTokenId": {
+                    "type": "integer"
+                },
+                "vehicleTokenId": {
+                    "type": "integer"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.SacdInput": {
+            "type": "object",
+            "properties": {
+                "expiration": {
+                    "type": "integer"
+                },
+                "grantee": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "permissions": {
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.StatusForVinsResponse": {
+            "type": "object",
+            "properties": {
+                "statuses": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_controllers.VinStatus"
+                    }
+                }
+            }
+        },
+        "internal_controllers.TeslaVehicle": {
+            "type": "object",
+            "properties": {
+                "definition": {
+                    "$ref": "#/definitions/internal_controllers.DeviceDefinition"
+                },
+                "externalId": {
+                    "type": "string"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.VinStatus": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status `\"Pending\"`, `\"Failure\"`, `\"Success\"`",
+                    "type": "string"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.VinTransactionData": {
+            "type": "object",
+            "properties": {
+                "sacd": {
+                    "$ref": "#/definitions/internal_controllers.SacdInput"
+                },
+                "signature": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "typedData": {
+                    "$ref": "#/definitions/apitypes.TypedData"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.VinWithTokenID": {
+            "type": "object",
+            "properties": {
+                "vehicleTokenId": {
+                    "type": "integer"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.VinsGetParams": {
+            "type": "object",
+            "properties": {
+                "vins": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "internal_controllers.VinsVerifyParams": {
+            "type": "object",
+            "properties": {
+                "vins": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_controllers.VinWithTokenID"
+                    }
+                }
+            }
+        },
+        "internal_controllers.VirtualKeyStatusResponse": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "math.HexOrDecimal256": {
+            "type": "object"
+        }
+    }
+}
