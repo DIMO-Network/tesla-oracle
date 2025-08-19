@@ -778,11 +778,19 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					})
 				}
 
-				creds, err := v.credentials.RetrieveWithTokensEncrypted(c.Context(), walletAddress)
+				creds, err := v.credentials.RetrieveAndDelete(c.Context(), walletAddress)
 				if err != nil {
 					localLog.Error().Err(err).Msg("Failed to retrieve credentials")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 						"error": "Failed to retrieve credentials",
+					})
+				}
+
+				encryptedCreds, err := v.credentials.EncryptTokens(creds)
+				if err != nil {
+					localLog.Error().Err(err).Msg("Failed to encrypt credentials")
+					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
+						"error": "Failed to encrypt credentials",
 					})
 				}
 
@@ -792,10 +800,10 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					TokenID:           null.Int{Int: int(dbVin.SyntheticTokenID.Int64), Valid: true},
 					VehicleTokenID:    null.Int{Int: int(dbVin.VehicleTokenID.Int64), Valid: true},
 					WalletChildNumber: int(dbVin.WalletIndex.Int64),
-					AccessToken:       null.StringFrom(creds.AccessToken),
-					AccessExpiresAt:   null.TimeFrom(creds.AccessExpiry),
-					RefreshToken:      null.StringFrom(creds.RefreshToken),
-					RefreshExpiresAt:  null.TimeFrom(creds.RefreshExpiry),
+					AccessToken:       null.StringFrom(encryptedCreds.AccessToken),
+					AccessExpiresAt:   null.TimeFrom(encryptedCreds.AccessExpiry),
+					RefreshToken:      null.StringFrom(encryptedCreds.RefreshToken),
+					RefreshExpiresAt:  null.TimeFrom(encryptedCreds.RefreshExpiry),
 				}
 
 				errIns := sdRecord.Insert(c.Context(), v.pdb.DBS().Writer, boil.Infer())
