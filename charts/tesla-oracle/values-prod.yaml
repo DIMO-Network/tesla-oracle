@@ -1,8 +1,8 @@
-replicaCount: 3
+replicaCount: 2
 image:
   repository: dimozone/tesla-oracle
   pullPolicy: IfNotPresent
-  tag: 0.2.0
+  tag: 0.3.0
 env:
   LOG_LEVEL: info
   ENVIRONMENT: prod
@@ -47,13 +47,13 @@ env:
     VJfn+Y6hzMyVYhAcbfzSwFPY1XtEbsNh
     -----END CERTIFICATE-----
 ingress:
-  enabled: false
+  enabled: true
   className: nginx
   annotations:
     nginx.ingress.kubernetes.io/auth-tls-secret: ingress/cf-origin-ca
     nginx.ingress.kubernetes.io/auth-tls-verify-client: 'on'
     nginx.ingress.kubernetes.io/enable-cors: 'true'
-    nginx.ingress.kubernetes.io/cors-allow-origin: https://app.dimo.zone
+    nginx.ingress.kubernetes.io/cors-allow-origin: https://tesla-oracle.dimo.zone, https://app.dimo.zone
     external-dns.alpha.kubernetes.io/hostname: tesla-oracle.dimo.zone
   hosts:
     - host: tesla-oracle.dimo.zone

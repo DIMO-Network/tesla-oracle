@@ -3,7 +3,7 @@ module github.com/DIMO-Network/tesla-oracle
 go 1.24.0
 
 require (
-	github.com/DIMO-Network/devices-api v1.39.1-0.20250808131113-7ef4c7df7219
+	github.com/DIMO-Network/devices-api v1.40.2
 	github.com/DIMO-Network/go-transactions v0.3.4
 	github.com/DIMO-Network/go-zerodev v0.4.2
 	github.com/DIMO-Network/model-garage v0.4.16
