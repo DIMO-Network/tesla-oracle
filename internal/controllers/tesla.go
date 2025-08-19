@@ -177,7 +177,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	}
 
 	// TODO when we sync devices-api and tesla-oracle dbs or migrated commands, we should fail the subscription if the task fails to start,
-	startErr := t.devicesService.StartTeslaTask(c.Context(), vehicle.TokenID)
+	startErr := tc.devicesService.StartTeslaTask(c.Context(), vehicle.TokenID)
 	if startErr != nil {
 		logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
 	}

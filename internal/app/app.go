@@ -141,7 +141,7 @@ func App(
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
 	vehicleGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
 	// TODO: temporary, remove when finished
-	vehicleGroup.Post("/clear", onboardCtrl.ClearOnboardingData)
+	//vehicleGroup.Post("/clear", onboardCtrl.ClearOnboardingData)
 
 	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
 	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)

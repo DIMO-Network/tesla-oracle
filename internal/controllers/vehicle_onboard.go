@@ -520,11 +520,13 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 						Status:  "Pending",
 						Details: onboarding.GetDetailedStatus(onboarding.OnboardingStatusMintSubmitPending),
 					})
+					// TODO: set onboarding status to onboarding.OnboardingStatusMintSubmitPending
 				}
 			} else {
 				v.logger.Debug().Str(logfields.VIN, mint.Vin).Msg("Skipping minting job submission")
 				statuses = append(statuses, VinStatus{
-					Vin:     mint.Vin,
+					Vin: mint.Vin,
+					// TODO: Verify if that status is actually correct
 					Status:  onboarding.GetVerificationStatus(dbVin.OnboardingStatus),
 					Details: onboarding.GetDetailedStatus(dbVin.OnboardingStatus),
 				})
@@ -582,6 +584,7 @@ func (v *VehicleController) canSubmitMintingJob(record *dbmodels.Onboarding) boo
 	failed := onboarding.IsFailure(record.OnboardingStatus)
 	pending := onboarding.IsMintPending(record.OnboardingStatus) || onboarding.IsDisconnectPending(record.OnboardingStatus)
 
+	// we allow already minted vehicles since minting will be skipped anyway, but all other steps can execute
 	return (minted) || (!minted || burned) && (failed || !pending)
 }
 

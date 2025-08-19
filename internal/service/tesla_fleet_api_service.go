@@ -180,7 +180,7 @@ func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) 
 	h := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	partnersClient, err := shttp.NewClientWrapper(settings.TeslaTokenURL, "", 5*time.Second, h, false, shttp.WithRetry(3))
+	partnersClient, err := shttp.NewClientWrapper(settings.TeslaTokenURL.String(), "", 5*time.Second, h, false, shttp.WithRetry(3))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Tesla Fleet API client: %w", err)
 	}
