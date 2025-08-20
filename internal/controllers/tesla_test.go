@@ -38,6 +38,7 @@ import (
 )
 
 const vin = "1HGCM82633A123456"
+const walletAddress = "0x1234567890AbcdEF1234567890aBcdef12345678"
 
 type TeslaControllerTestSuite struct {
 	suite.Suite
@@ -82,7 +83,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	// given
 	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
-	walletAddress := common.HexToAddress(ownerAdd)
+	wallet := common.HexToAddress(walletAddress)
 
 	dbVin := models.SyntheticDevice{
 		Address:           synthDeviceAddress.Bytes(),
@@ -108,7 +109,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	// when
 	mockIdentitySvc := new(test.MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
-		Owner:   ownerAdd,
+		Owner:   walletAddress,
 		TokenID: vehicleTokenID,
 		SyntheticDevice: mods.SyntheticDevice{
 			Address: synthDeviceAddressStr,
@@ -133,7 +134,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	mockDevicesService := new(test.MockDevicesGRPCService)
 	mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
+	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, &s.pdb)
 	controller.devicesService = mockDevicesService
@@ -142,7 +143,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	app.Use(func(c *fiber.Ctx) error {
 		// Simulate JWT middleware setting the user in Locals
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"ethereum_address": ownerAdd,
+			"ethereum_address": walletAddress,
 		})
 		c.Locals("user", token)
 		return c.Next()
@@ -192,7 +193,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 	// given
 	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
-	walletAddress := common.HexToAddress(ownerAdd)
+	wallet := common.HexToAddress(walletAddress)
 
 	dbVin := models.SyntheticDevice{
 		Address:           synthDeviceAddress.Bytes(),
@@ -207,7 +208,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 	// when
 	mockTeslaService := new(test.MockTeslaFleetAPIService)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
+	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, &s.pdb)
 
@@ -215,7 +216,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 	app.Use(func(c *fiber.Ctx) error {
 		// Simulate JWT middleware setting the user in Locals
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"ethereum_address": ownerAdd,
+			"ethereum_address": walletAddress,
 		})
 		c.Locals("user", token)
 		return c.Next()
@@ -258,7 +259,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 	// given
 	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
-	walletAddress := common.HexToAddress(ownerAdd)
+	wallet := common.HexToAddress(walletAddress)
 
 	dbVin := models.SyntheticDevice{
 		Address:           synthDeviceAddress.Bytes(),
@@ -273,7 +274,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 	// when
 	mockTeslaService := new(test.MockTeslaFleetAPIService)
 
-	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
+	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, &s.pdb)
 
@@ -281,7 +282,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 	app.Use(func(c *fiber.Ctx) error {
 		// Simulate JWT middleware setting the user in Locals
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"ethereum_address": ownerAdd,
+			"ethereum_address": walletAddress,
 		})
 		c.Locals("user", token)
 		return c.Next()
@@ -326,7 +327,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// given
 	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
-	walletAddress := common.HexToAddress(ownerAdd)
+	wallet := common.HexToAddress(walletAddress)
 
 	// Insert a synthetic device with the wallet address and VIN
 	dbVin := models.SyntheticDevice{
@@ -341,7 +342,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// when
 	mockIdentitySvc := new(test.MockIdentityAPIService)
 	mockVehicle := &mods.Vehicle{
-		Owner:   ownerAdd,
+		Owner:   walletAddress,
 		TokenID: vehicleTokenID,
 		SyntheticDevice: mods.SyntheticDevice{
 			Address: synthDeviceAddressStr,
@@ -365,7 +366,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockDevicesService.On("StopTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
 
 	// Initialize the controller
-	settings := config.Settings{MobileAppDevLicense: walletAddress, DevicesGRPCEndpoint: "localhost:50051"}
+	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, &s.pdb)
 	controller.devicesService = mockDevicesService
@@ -375,7 +376,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	app.Use(func(c *fiber.Ctx) error {
 		// Simulate JWT middleware setting the user in Locals
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"ethereum_address": "0x1234567890abcdef1234567890abcdef12345678",
+			"ethereum_address": walletAddress,
 		})
 		c.Locals("user", token)
 		return c.Next()
@@ -529,7 +530,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	app.Use(func(c *fiber.Ctx) error {
 		// Simulate JWT middleware setting the user in Locals
 		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"ethereum_address": "0x1234567890abcdef1234567890abcdef12345678",
+			"ethereum_address": walletAddress,
 			"iss":              "tesla-oracle",
 			"sub":              "user123",
 			"aud":              "tesla-api",
@@ -575,7 +576,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	assert.Equal(s.T(), expectedVehicles, responseWrapper.Vehicles)
 
 	// Check if the vehicle was cached
-	cachedVehicles, err := cacheService.Get(s.ctx, "credentials:0x1234567890AbcdEF1234567890aBcdef12345678").Result()
+	cachedVehicles, err := cacheService.Get(s.ctx, "credentials:"+walletAddress).Result()
 	assert.NoError(s.T(), err)
 	assert.NotEmpty(s.T(), cachedVehicles)
 
@@ -584,12 +585,79 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	mockTeslaService.AssertExpectations(s.T())
 }
 
+func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
+	// given
+	walletAdd := common.HexToAddress(walletAddress)
+
+	// Mock dependencies
+	mockCredStore := new(test.MockCredStore)
+	mockTeslaService := new(test.MockTeslaFleetAPIService)
+
+	// Mock Retrieve to return a valid TeslaAuth object
+	mockCredStore.On("Retrieve", mock.Anything, walletAdd).Return(&service.Credential{
+		AccessToken: "mockAccessToken",
+	}, nil)
+
+	// Mock VirtualKeyConnectionStatus to return the expected response
+	mockTeslaService.On("VirtualKeyConnectionStatus", mock.Anything, "mockAccessToken", vin).Return(&service.VehicleFleetStatus{
+		KeyPaired:                      true,
+		VehicleCommandProtocolRequired: true,
+		NumberOfKeys:                   1,
+	}, nil)
+
+	// Initialize the controller
+	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, mockCredStore, nil, &s.pdb)
+
+	// Set up the Fiber app
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		// Simulate JWT middleware setting the user in Locals
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"ethereum_address": walletAdd.Hex(),
+		})
+		c.Locals("user", token)
+		return c.Next()
+	})
+	app.Use(helpers.NewWalletMiddleware())
+	app.Get("/v1/tesla/virtual-key", controller.GetVirtualKeyStatus)
+
+	// Create the request
+	req, _ := http.NewRequest("GET", "/v1/tesla/virtual-key?vin="+vin, nil)
+	req.Header.Set("Authorization", "Bearer mockToken")
+
+	// when
+	resp, err := app.Test(req)
+
+	// then
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+
+	// Read and parse the response body
+	bodyBytes, err := io.ReadAll(resp.Body)
+	require.NoError(s.T(), err)
+	defer resp.Body.Close()
+
+	var response VirtualKeyStatusResponse
+	err = json.Unmarshal(bodyBytes, &response)
+	require.NoError(s.T(), err)
+
+	// Assert the response fields
+	assert.True(s.T(), response.Added)
+	assert.Equal(s.T(), VirtualKeyStatus(1), response.Status)
+
+	// Verify mock expectations
+	mockCredStore.AssertExpectations(s.T())
+	mockTeslaService.AssertExpectations(s.T())
+}
+
 func generateTokenWithClaims() string {
 	secretKey := []byte("your-secret-key")
 
 	// Define the claims for the token
 	claims := jwt.MapClaims{
-		"ethereum_address": "0x1234567890AbcdEF1234567890aBcdef12345678",
+		"ethereum_address": walletAddress,
 		"iss":              "tesla-oracle",
 		"sub":              "user123",
 		"aud":              "tesla-api",
@@ -617,8 +685,8 @@ func generateJWT(req *http.Request) error {
 
 	// Create claims with the required `ethereum_address`
 	claims := jwt.MapClaims{
-		"ethereum_address": "0x1234567890abcdef1234567890abcdef12345678", // Valid Ethereum address
-		"exp":              time.Now().Add(time.Hour).Unix(),             // Token expiration time
+		"ethereum_address": walletAddress,                    // Valid Ethereum address
+		"exp":              time.Now().Add(time.Hour).Unix(), // Token expiration time
 	}
 
 	// Create a new token with the claims
