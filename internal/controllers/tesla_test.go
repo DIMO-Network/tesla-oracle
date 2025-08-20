@@ -136,8 +136,8 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	teslaSvc := *service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, teslaSvc, &s.pdb)
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, *teslaSvc, &s.pdb)
 	controller.devicesService = mockDevicesService
 
 	app := fiber.New()
@@ -211,8 +211,8 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoBody() {
 
 	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	teslaSvc := *service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, teslaSvc, &s.pdb)
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, *teslaSvc, &s.pdb)
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -278,8 +278,8 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribeNoAuthCode() {
 
 	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	teslaSvc := *service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, teslaSvc, &s.pdb)
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, *teslaSvc, &s.pdb)
 
 	app := fiber.New()
 	app.Use(func(c *fiber.Ctx) error {
@@ -371,8 +371,8 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// Initialize the controller
 	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	teslaSvc := *service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, teslaSvc, &s.pdb)
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, *teslaSvc, &s.pdb)
 	controller.devicesService = mockDevicesService
 
 	// Set up the Fiber app
@@ -527,8 +527,8 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	ons := service.NewOnboardingService(&s.pdb, &logger)
-	teslaSvc := *service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, mockDDService, mockIdentitySvc, &credStore, ons, teslaSvc, &s.pdb)
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, mockDDService, mockIdentitySvc, &credStore, ons, *teslaSvc, &s.pdb)
 
 	// Set up the Fiber app
 	app := fiber.New()
@@ -613,8 +613,8 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	// Initialize the controller
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	teslaSvc := *service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, mockCredStore, nil, teslaSvc, &s.pdb)
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, mockCredStore, nil, *teslaSvc, &s.pdb)
 
 	// Set up the Fiber app
 	app := s.setupFiberApp("/v1/tesla/virtual-key", "GET", controller.GetVirtualKeyStatus)
@@ -673,8 +673,8 @@ func (s *TeslaControllerTestSuite) TestGetFleetStatusSuccess() {
 
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	teslaSvc := *service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, teslaSvc, &s.pdb)
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, *teslaSvc, &s.pdb)
 	encryptedAccessToken, _ := teslaSvc.Cipher.Encrypt("mockAccessToken")
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	dbVin := models.SyntheticDevice{
@@ -866,7 +866,11 @@ func parseResponse(resp *http.Response, target interface{}) error {
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("failed to close response body: %v\n", err)
+		}
+	}()
 	return json.Unmarshal(bodyBytes, target)
 }
 func (s *TeslaControllerTestSuite) initMocks() (*test.MockTeslaFleetAPIService, *test.MockCredStore) {
@@ -880,7 +884,11 @@ func parseResponseToMap(resp *http.Response) (map[string]interface{}, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error reading response body: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		if err := resp.Body.Close(); err != nil {
+			fmt.Printf("failed to close response body: %v\n", err)
+		}
+	}()
 
 	var result map[string]interface{}
 	err = json.Unmarshal(bodyBytes, &result)
