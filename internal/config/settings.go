@@ -27,7 +27,7 @@ type Settings struct {
 	RedisURL         string `yaml:"REDIS_URL"`
 	RedisPassword    string `yaml:"REDIS_PASSWORD"`
 	RedisTLS         bool   `yaml:"REDIS_TLS"`
-	EnableLocalCache bool   `env:"ENABLE_LOCAL_CACHE" default:"false"`
+	EnableLocalCache bool   `yaml:"ENABLE_LOCAL_CACHE" default:"false"`
 
 	// KMS and AWS
 	AWSRegion string `yaml:"AWS_REGION"`
@@ -36,6 +36,7 @@ type Settings struct {
 	IdentityAPIEndpoint          url.URL `yaml:"IDENTITY_API_ENDPOINT"`
 	DeviceDefinitionsAPIEndpoint url.URL `yaml:"DEVICE_DEFINITIONS_API_ENDPOINT"`
 	DevicesGRPCEndpoint          string  `yaml:"DEVICES_GRPC_ADDR"`
+	DisableDevicesGRPC           bool    `yaml:"DISABLE_DEVICES_GRPC" default:"false"`
 
 	DimoAuthURL        url.URL        `yaml:"DIMO_AUTH_URL"`
 	DimoAuthClientID   common.Address `yaml:"DIMO_AUTH_CLIENT_ID"`
@@ -52,16 +53,17 @@ type Settings struct {
 	SDWalletsSeed            string         `yaml:"SD_WALLETS_SEED"`
 	ConnectionTokenID        string         `yaml:"CONNECTION_TOKEN_ID"`
 
-	TeslaClientID               string `yaml:"TESLA_CLIENT_ID"`
-	TeslaClientSecret           string `yaml:"TESLA_CLIENT_SECRET"`
-	TeslaAuthURL                string `yaml:"TESLA_AUTH_URL"`
-	TeslaRedirectURL            string `yaml:"TESLA_REDIRECT_URL"`
-	TeslaTokenURL               string `yaml:"TESLA_TOKEN_URL"`
-	TeslaFleetURL               string `yaml:"TESLA_FLEET_URL"`
-	TeslaTelemetryHostName      string `yaml:"TESLA_TELEMETRY_HOST_NAME"`
-	TeslaTelemetryPort          int    `yaml:"TESLA_TELEMETRY_PORT"`
-	TeslaTelemetryCACertificate string `yaml:"TESLA_TELEMETRY_CA_CERTIFICATE"`
-	TeslaRequiredScopes         string `yaml:"TESLA_REQUIRED_SCOPES"`
+	TeslaClientID               string  `yaml:"TESLA_CLIENT_ID"`
+	TeslaClientSecret           string  `yaml:"TESLA_CLIENT_SECRET"`
+	TeslaAuthURL                url.URL `yaml:"TESLA_AUTH_URL"`
+	TeslaRedirectURL            url.URL `yaml:"TESLA_REDIRECT_URL"`
+	TeslaTokenURL               url.URL `yaml:"TESLA_TOKEN_URL"`
+	TeslaFleetURL               url.URL `yaml:"TESLA_FLEET_URL"`
+	TeslaTelemetryHostName      string  `yaml:"TESLA_TELEMETRY_HOST_NAME"`
+	TeslaTelemetryPort          int     `yaml:"TESLA_TELEMETRY_PORT"`
+	TeslaTelemetryCACertificate string  `yaml:"TESLA_TELEMETRY_CA_CERTIFICATE"`
+	TeslaRequiredScopes         string  `yaml:"TESLA_REQUIRED_SCOPES"`
+	TeslaVirtualKeyURL          url.URL `yaml:"TESLA_VIRTUAL_KEY_URL"`
 
 	// Settings for the partners token
 	PartnersTeslaFleetURL string `json:"PARTNERS_FLEET_URL"`

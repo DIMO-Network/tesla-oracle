@@ -153,9 +153,9 @@ func (w *OnboardingWorker) Work(ctx context.Context, job *river.Job[OnboardingAr
 		return err
 	}
 
-	// If there's no OnboardingService Token ID, mint all
+	// If there's no Onboarding record Token ID, mint all
 	if !record.VehicleTokenID.Valid {
-		w.logger.Debug().Str(logfields.VIN, job.Args.VIN).Msg("No OnboardingService Token ID, minting all")
+		w.logger.Debug().Str(logfields.VIN, job.Args.VIN).Msg("No Onboarding record Token ID, minting all")
 		record, err = w.MintVehicleWithSDAndUpdate(ctx, record, job.Args)
 		if err != nil {
 			return err

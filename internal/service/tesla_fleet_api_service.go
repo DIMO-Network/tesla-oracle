@@ -154,7 +154,7 @@ type teslaFleetAPIService struct {
 }
 
 func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) (TeslaFleetAPIService, error) {
-	u, err := url.ParseRequestURI(settings.TeslaFleetURL)
+	u, err := url.ParseRequestURI(settings.TeslaFleetURL.String())
 	if err != nil {
 		return nil, err
 	}
@@ -180,7 +180,7 @@ func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) 
 	h := map[string]string{
 		"Content-Type": "application/x-www-form-urlencoded",
 	}
-	partnersClient, err := shttp.NewClientWrapper(settings.TeslaTokenURL, "", 5*time.Second, h, false, shttp.WithRetry(3))
+	partnersClient, err := shttp.NewClientWrapper(settings.TeslaTokenURL.String(), "", 5*time.Second, h, false, shttp.WithRetry(3))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Tesla Fleet API client: %w", err)
 	}
@@ -202,7 +202,7 @@ func (t *teslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context
 		ClientID:     t.Settings.TeslaClientID,
 		ClientSecret: t.Settings.TeslaClientSecret,
 		Endpoint: oauth2.Endpoint{
-			TokenURL: t.Settings.TeslaTokenURL,
+			TokenURL: t.Settings.TeslaTokenURL.String(),
 		},
 		RedirectURL: redirectURI,
 		Scopes:      teslaScopes,

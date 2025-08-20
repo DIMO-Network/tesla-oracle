@@ -132,14 +132,16 @@ func App(
 	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
+	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
 
 	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
+	vehicleGroup.Post("/verify", onboardCtrl.VerifyVins)
 	vehicleGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)
 	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
 	vehicleGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
 	// TODO: temporary, remove when finished
-	vehicleGroup.Post("/clear", onboardCtrl.ClearOnboardingData)
+	//vehicleGroup.Post("/clear", onboardCtrl.ClearOnboardingData)
 
 	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
 	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
