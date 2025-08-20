@@ -115,12 +115,14 @@ func App(
 		}
 		logger.Info().Msg("Using redis CredStore implementation.")
 	}
+	// todo put teslaFleetAPISvc as member of teslaService
 	teslaFleetAPISvc, err := service.NewTeslaFleetAPIService(settings, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
 	}
 
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, credStore, onboardingSvc, pdb)
+	teslaService := *service.NewTeslaService(settings, logger, cip, pdb)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, credStore, onboardingSvc, teslaService, pdb)
 	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr, pdb, credStore)
 
 	jwtAuth := jwtware.New(jwtware.Config{

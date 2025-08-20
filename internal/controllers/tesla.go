@@ -3,7 +3,6 @@ package controllers
 import (
 	"context"
 	"fmt"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -47,9 +46,10 @@ type TeslaController struct {
 	onboarding     *service.OnboardingService
 	pdb            *db.Store
 	devicesService service.DevicesGRPCService
+	teslaService   service.TeslaService
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, pdb *db.Store) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, teslaService service.TeslaService, pdb *db.Store) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -77,6 +77,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		onboarding:     onboardingSvc,
 		pdb:            pdb,
 		devicesService: devicesService,
+		teslaService:   teslaService,
 	}
 }
 
@@ -431,16 +432,16 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Error checking fleet status.")
 	}
 
-	fleetTelemetryCapable := IsFleetTelemetryCapable(fleetStatus)
+	fleetTelemetryCapable := service.IsFleetTelemetryCapable(fleetStatus)
 
 	var response = VirtualKeyStatusResponse{}
 	response.Added = fleetStatus.KeyPaired
 	if !fleetTelemetryCapable {
-		response.Status = Incapable
+		response.Status = service.Incapable
 	} else if fleetStatus.KeyPaired {
-		response.Status = Paired
+		response.Status = service.Paired
 	} else {
-		response.Status = Unpaired
+		response.Status = service.Unpaired
 	}
 
 	return c.JSON(response)
@@ -468,12 +469,33 @@ func (tc *TeslaController) GetFleetStatus(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse request URL params")
 	}
 
-	teslaAuth, err := tc.credStore.Retrieve(c.Context(), walletAddress)
+	sd, err := tc.teslaService.GetVehicleByVIN(c.Context(), tc.logger, tc.pdb, params.VIN)
 	if err != nil {
-		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get vehicle by VIN.")
 	}
 
-	fleetStatus, err := tc.fleetAPISvc.VirtualKeyConnectionStatus(c.Context(), teslaAuth.AccessToken, params.VIN)
+	vehicleTokenIDStr := strconv.FormatInt(int64(sd.VehicleTokenID.Int), 10)
+	vehicle, err := tc.fetchVehicle(vehicleTokenIDStr)
+	if err != nil {
+		return err
+	}
+
+	if vehicle == nil || vehicle.Owner != walletAddress.Hex() {
+		return fiber.NewError(fiber.StatusUnauthorized, "Vehicle does not belong to the authenticated user.")
+	}
+
+	if sd == nil || sd.AccessToken.String == "" {
+		return fiber.NewError(fiber.StatusUnauthorized, "No credentials found for vehicle.")
+	}
+
+	// now we need to decrypt access token
+	// todo we need extract it to tesla service
+	accessToken, err := tc.teslaService.Cipher.Decrypt(sd.AccessToken.String)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to decrypt access token.")
+	}
+
+	fleetStatus, err := tc.fleetAPISvc.VirtualKeyConnectionStatus(c.Context(), accessToken, params.VIN)
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Error checking fleet status.")
 	}
@@ -482,74 +504,8 @@ func (tc *TeslaController) GetFleetStatus(c *fiber.Ctx) error {
 }
 
 type VirtualKeyStatusResponse struct {
-	Added  bool             `json:"added"`
-	Status VirtualKeyStatus `json:"status" swaggertype:"string"`
-}
-
-type VirtualKeyStatus int
-
-const (
-	Incapable VirtualKeyStatus = iota
-	Paired
-	Unpaired
-)
-
-func (s VirtualKeyStatus) String() string {
-	switch s {
-	case Incapable:
-		return "Incapable"
-	case Paired:
-		return "Paired"
-	case Unpaired:
-		return "Unpaired"
-	}
-	return ""
-}
-
-func (s VirtualKeyStatus) MarshalText() ([]byte, error) {
-	return []byte(s.String()), nil
-}
-
-func (s *VirtualKeyStatus) UnmarshalText(text []byte) error {
-	switch str := string(text); str {
-	case "Incapable":
-		*s = Incapable
-	case "Paired":
-		*s = Paired
-	case "Unpaired":
-		*s = Unpaired
-	default:
-		return fmt.Errorf("unrecognized status %q", str)
-	}
-	return nil
-}
-
-func IsFleetTelemetryCapable(fs *service.VehicleFleetStatus) bool {
-	// We used to check for the presence of a meaningful value (not ""
-	// or "unknown") for fleet_telemetry_version, but this started
-	// populating on old cars that are not capable of streaming.
-	return fs.VehicleCommandProtocolRequired || !fs.DiscountedDeviceData
-}
-
-var teslaFirmwareStart = regexp.MustCompile(`^(\d{4})\.(\d+)`)
-
-func IsFirmwareFleetTelemetryCapable(v string) (bool, error) {
-	m := teslaFirmwareStart.FindStringSubmatch(v)
-	if len(m) == 0 {
-		return false, fmt.Errorf("unexpected firmware version format %q", v)
-	}
-
-	year, err := strconv.Atoi(m[1])
-	if err != nil {
-		return false, fmt.Errorf("couldn't parse year %q", m[1])
-	}
-
-	week, err := strconv.Atoi(m[2])
-	if err != nil {
-		return false, fmt.Errorf("couldn't parse week %q", m[2])
-	}
-
-	return year > 2024 || year == 2024 && week >= 26, nil
+	Added  bool                     `json:"added"`
+	Status service.VirtualKeyStatus `json:"status" swaggertype:"string"`
 }
 
 func (tc *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeResponse, error) {
