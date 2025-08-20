@@ -36,8 +36,16 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+
+	// import docs for swagger generation.
+	_ "github.com/DIMO-Network/tesla-oracle/docs"
 )
 
+// @title                       DIMO Tesla Oracle API
+// @version                     1.0
+// @securityDefinitions.apikey  BearerAuth
+// @in                          header
+// @name                        Authorization
 func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 	defer cancel()

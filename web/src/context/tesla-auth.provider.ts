@@ -16,22 +16,24 @@ export class AuthProvider extends LitElement {
         issuer: '',
     };
 
+    // called on page load
     connectedCallback() {
         super.connectedCallback();
         this._auth = {
             ...this._auth,
             state: this.createRandomState(),
         }
-
+        // clear the sensitive values from the URL after parsing them
         if (this.parseQueryString()) {
             history.pushState(null, '', '/');
         }
     }
 
     render() {
-        return html`<slot></slot>`;
+        return html`<slot></slot>`; // slot means just render everything in the dom eg. inside the web component
     }
 
+    // data passed via URL from Tesla on redirect auth success
     parseQueryString() {
         const params = new URLSearchParams(window.location.search);
 

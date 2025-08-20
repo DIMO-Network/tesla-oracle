@@ -1,5 +1,6 @@
 import {createContext} from '@lit/context';
 
+// settings from backend for tesla
 export interface TeslaSettingsContext {
     clientId: string;
     authUrl: string;

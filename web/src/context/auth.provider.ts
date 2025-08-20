@@ -13,6 +13,7 @@ export class AuthProvider extends LitElement {
         vehicleTokenId: '',
     };
 
+    // this is a lit lifecycle event that gets called when the web component loads (ie. page load).
     connectedCallback() {
         super.connectedCallback();
 
@@ -48,6 +49,7 @@ export class AuthProvider extends LitElement {
         });
     }
 
+    // when the webview is open from the mobile app, this is called to get the dimo JWT and optionally vehicle token id
     parseQueryString() {
         const params = new URLSearchParams(window.location.search);
         let hadParams = false;
@@ -63,6 +65,7 @@ export class AuthProvider extends LitElement {
         return hadParams;
     }
 
+    // gets the DIMO JWT and check that it is not expired, from localstorage.
     getToken() {
         const token = localStorage.getItem("token");
         if (!token) {

@@ -123,3 +123,7 @@ tools: tools-golangci-lint tools-gqlgen tools-goose tools-sqlboiler ## Install a
 
 proto:
 	protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative pkg/grpc/accounts.proto
+
+generate-swagger: ## generate swagger documentation
+	@swag -version
+	swag init -g cmd/tesla-oracle/main.go --parseDependency --parseInternal

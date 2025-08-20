@@ -22,6 +22,7 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
+	"github.com/gofiber/swagger"
 	"github.com/jackc/pgx/v5"
 	"github.com/patrickmn/go-cache"
 	"github.com/riverqueue/river"
@@ -128,6 +129,10 @@ func App(
 	})
 
 	walletMdw := helpers.NewWalletMiddleware()
+
+	// add v1 swagger to align with other services
+	app.Get("/v1/swagger/*", swagger.HandlerDefault)
+	app.Get("/swagger/*", swagger.HandlerDefault)
 
 	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)

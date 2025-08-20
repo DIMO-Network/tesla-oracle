@@ -178,6 +178,8 @@ definitions:
     type: object
 info:
   contact: {}
+  title: DIMO Tesla Oracle API
+  version: "1.0"
 paths:
   /v1/tesla/settings:
     get:
@@ -553,4 +555,9 @@ paths:
       tags:
       - onboarding
       - verify
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
 swagger: "2.0"

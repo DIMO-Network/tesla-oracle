@@ -54,7 +54,9 @@ export class TeslaElement extends BaseOnboardingElement {
     @property({attribute: false})
     private auth?: AuthContext;
 
+    // linking service wraps opening urls
     protected linkingService: LinkingService = LinkingService.getInstance();
+    // wraps all the logic for sending and receiving messages from the host mobile app
     protected messageService: MessageService = MessageService.getInstance();
 
     @state()
@@ -73,6 +75,7 @@ export class TeslaElement extends BaseOnboardingElement {
     }
 
     private loadVehiclesTask = new Task(this, {
+        // async lit task feature. Useful for rendering b/c handles state, in progress, error, success
         task: async ([authorizationCode, redirectUri], {}) => {
             if (!authorizationCode || !redirectUri) {
                 return [];
@@ -84,6 +87,7 @@ export class TeslaElement extends BaseOnboardingElement {
             }, true);
             return response.data?.vehicles || [];
         },
+        // arguments to pass into the task. This task watches the arguments for changes to execute the task
         args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri]
     });
 
@@ -238,8 +242,9 @@ export class TeslaElement extends BaseOnboardingElement {
         if (!this.teslaSettings?.virtualKeyUrl) {
             return;
         }
-
+        // this blocks until the host completes the operation (uses a promise that waits for opened link to have a specific url). Has a timeout.
         const openedUrl = await this.linkingService.openLink(this.teslaSettings.virtualKeyUrl);
+        // this should be true, but just in case. there could be timeouts
         if (openedUrl.url === this.teslaSettings.virtualKeyUrl) {
             this.linkOpened = true;
         }
@@ -248,6 +253,7 @@ export class TeslaElement extends BaseOnboardingElement {
     async handleContinueClick(vin: string) {
         let vehicleTokenId = undefined
         if (this.auth?.vehicleTokenId) {
+            // just making sure it is a number
             const tid = Number(this.auth.vehicleTokenId)
             if (!Number.isNaN(tid)) {
                 vehicleTokenId = tid
