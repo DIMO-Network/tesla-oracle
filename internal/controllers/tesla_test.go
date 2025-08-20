@@ -589,9 +589,8 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	// given
 	walletAdd := common.HexToAddress(walletAddress)
 
-	// Mock dependencies
-	mockCredStore := new(test.MockCredStore)
-	mockTeslaService := new(test.MockTeslaFleetAPIService)
+	// Initialize mocks
+	mockTeslaService, mockCredStore := s.initMocks()
 
 	// Mock Retrieve to return a valid TeslaAuth object
 	mockCredStore.On("Retrieve", mock.Anything, walletAdd).Return(&service.Credential{
@@ -599,11 +598,12 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	}, nil)
 
 	// Mock VirtualKeyConnectionStatus to return the expected response
-	mockTeslaService.On("VirtualKeyConnectionStatus", mock.Anything, "mockAccessToken", vin).Return(&service.VehicleFleetStatus{
+	expectedResponse := &service.VehicleFleetStatus{
 		KeyPaired:                      true,
 		VehicleCommandProtocolRequired: true,
 		NumberOfKeys:                   1,
-	}, nil)
+	}
+	mockTeslaService.On("VirtualKeyConnectionStatus", mock.Anything, "mockAccessToken", vin).Return(expectedResponse, nil)
 
 	// Initialize the controller
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
@@ -611,36 +611,26 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, mockCredStore, nil, &s.pdb)
 
 	// Set up the Fiber app
-	app := fiber.New()
-	app.Use(func(c *fiber.Ctx) error {
-		// Simulate JWT middleware setting the user in Locals
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"ethereum_address": walletAdd.Hex(),
-		})
-		c.Locals("user", token)
-		return c.Next()
-	})
-	app.Use(helpers.NewWalletMiddleware())
-	app.Get("/v1/tesla/virtual-key", controller.GetVirtualKeyStatus)
+	app := s.setupFiberApp(controller, "/v1/tesla/virtual-key", "GET", controller.GetVirtualKeyStatus)
 
 	// Create the request
-	req, _ := http.NewRequest("GET", "/v1/tesla/virtual-key?vin="+vin, nil)
-	req.Header.Set("Authorization", "Bearer mockToken")
+	req, err := createRequest("GET", "/v1/tesla/virtual-key?vin="+vin, "")
+	require.NoError(s.T(), err)
+
+	// Generate JWT token
+	err = generateJWT(req)
+	require.NoError(s.T(), err)
 
 	// when
 	resp, err := app.Test(req)
 
 	// then
-	assert.NoError(s.T(), err)
+	require.NoError(s.T(), err)
 	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
 
-	// Read and parse the response body
-	bodyBytes, err := io.ReadAll(resp.Body)
-	require.NoError(s.T(), err)
-	defer resp.Body.Close()
-
+	// Parse the response
 	var response VirtualKeyStatusResponse
-	err = json.Unmarshal(bodyBytes, &response)
+	err = parseResponse(resp, &response)
 	require.NoError(s.T(), err)
 
 	// Assert the response fields
@@ -648,6 +638,46 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	assert.Equal(s.T(), VirtualKeyStatus(1), response.Status)
 
 	// Verify mock expectations
+	mockCredStore.AssertExpectations(s.T())
+	mockTeslaService.AssertExpectations(s.T())
+}
+
+func (s *TeslaControllerTestSuite) TestGetFleetStatusSuccess() {
+	// given
+	walletAdd := common.HexToAddress(walletAddress)
+	expectedFleetStatus := &service.VehicleFleetStatus{
+		KeyPaired:                      true,
+		VehicleCommandProtocolRequired: false,
+		DiscountedDeviceData:           false,
+	}
+
+	mockTeslaService, mockCredStore := s.initMocks()
+	mockTeslaService.On("VirtualKeyConnectionStatus", mock.Anything, "mockAccessToken", vin).Return(expectedFleetStatus, nil)
+	mockCredStore.On("Retrieve", mock.Anything, walletAdd).Return(&service.Credential{
+		AccessToken: "mockAccessToken",
+	}, nil)
+
+	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, mockCredStore, nil, &s.pdb)
+
+	app := s.setupFiberApp(controller, "/v1/tesla/fleet-status", "GET", controller.GetFleetStatus)
+
+	// when
+	req, _ := createRequest("GET", "/v1/tesla/fleet-status?vin="+vin, "")
+	err := generateJWT(req)
+	assert.NoError(s.T(), err)
+
+	resp, err := app.Test(req)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+
+	// verify
+	var actualFleetStatus service.VehicleFleetStatus
+	err = parseResponse(resp, &actualFleetStatus)
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), *expectedFleetStatus, actualFleetStatus)
+
 	mockCredStore.AssertExpectations(s.T())
 	mockTeslaService.AssertExpectations(s.T())
 }
@@ -701,4 +731,52 @@ func generateJWT(req *http.Request) error {
 
 	req.Header.Set("Authorization", "Bearer "+signedToken)
 	return nil
+}
+
+func (s *TeslaControllerTestSuite) setupFiberApp(controller *TeslaController, route string, method string, handler fiber.Handler) *fiber.App {
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"ethereum_address": walletAddress,
+		})
+		c.Locals("user", token)
+		return c.Next()
+	})
+	app.Use(helpers.NewWalletMiddleware())
+
+	switch method {
+	case "GET":
+		app.Get(route, handler)
+	case "POST":
+		app.Post(route, handler)
+	case "DELETE":
+		app.Delete(route, handler)
+	}
+	return app
+}
+
+func createRequest(method, url, body string) (*http.Request, error) {
+	var req *http.Request
+	var err error
+	if body != "" {
+		req, err = http.NewRequest(method, url, strings.NewReader(body))
+	} else {
+		req, err = http.NewRequest(method, url, nil)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return req, err
+}
+
+func parseResponse(resp *http.Response, target interface{}) error {
+	bodyBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	return json.Unmarshal(bodyBytes, target)
+}
+func (s *TeslaControllerTestSuite) initMocks() (*test.MockTeslaFleetAPIService, *test.MockCredStore) {
+	mockTeslaService := new(test.MockTeslaFleetAPIService)
+	mockCredStore := new(test.MockCredStore)
+	return mockTeslaService, mockCredStore
 }

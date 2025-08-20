@@ -446,6 +446,41 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
+// GetFleetStatus godoc
+// @Summary     Get fleet status
+// @Description Retrieves detailed fleet status information for a Tesla vehicle, including virtual key connection status and telemetry capabilities.
+// @Tags        tesla,fleet
+// @Accept      json
+// @Produce     json
+// @Param       vin query string true "Vehicle VIN"
+// @Security    BearerAuth
+// @Success     200 {object} service.VehicleFleetStatus "Fleet status details"
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/fleet-status [get]
+func (tc *TeslaController) GetFleetStatus(c *fiber.Ctx) error {
+	walletAddress := helpers.GetWallet(c)
+
+	var params VinInput
+	if err := c.QueryParser(&params); err != nil {
+		tc.logger.Err(err).Msgf("Failed to parse request URL params")
+		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse request URL params")
+	}
+
+	teslaAuth, err := tc.credStore.Retrieve(c.Context(), walletAddress)
+	if err != nil {
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+	}
+
+	fleetStatus, err := tc.fleetAPISvc.VirtualKeyConnectionStatus(c.Context(), teslaAuth.AccessToken, params.VIN)
+	if err != nil {
+		return fiber.NewError(fiber.StatusInternalServerError, "Error checking fleet status.")
+	}
+
+	return c.JSON(fleetStatus)
+}
+
 type VirtualKeyStatusResponse struct {
 	Added  bool             `json:"added"`
 	Status VirtualKeyStatus `json:"status" swaggertype:"string"`
