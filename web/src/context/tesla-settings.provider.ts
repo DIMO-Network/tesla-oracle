@@ -19,6 +19,7 @@ export class SettingsProvider extends LitElement {
 
     private api = ApiService.getInstance();
 
+    // on load it calls a backend setting api and sets the values in the TeslaSettingsContext. These are all the same for any authorized user.
     async connectedCallback() {
         super.connectedCallback();
 
