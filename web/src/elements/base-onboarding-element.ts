@@ -221,6 +221,7 @@ export class BaseOnboardingElement extends LitElement {
         return await this.api.callApi<FinalizeResponse>('POST', '/v1/vehicle/finalize', {vins}, true);
     }
 
+    // this does the minting of vehicle and synthetic. borrowed from fleet web app
     async onboardVINs(vehicles: VehicleOnboardingData[]): Promise<FinalizeResponse | null> {
         let allVinsValid = true;
         for (const vehicle of vehicles) {

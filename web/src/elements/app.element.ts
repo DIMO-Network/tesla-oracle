@@ -7,7 +7,7 @@ import {Message, MessageService} from "@services/message.service.ts";
 import styles from '@styles/main.css?inline'
 import {SignatureMessageData, SigningService} from "@services/signing.service.ts";
 
-
+// this is the main app
 @customElement('app-element')
 export class AppElement extends LitElement {
     static styles = css`${unsafeCSS(styles)}`;
@@ -32,10 +32,12 @@ export class AppElement extends LitElement {
         this.messages = [...this.messages, message]; // .push won't trigger re-render
     }
 
+    // test sending a message to validate we can communicate with the wrapping mobile app
     handleSendMessage() {
         this.messageService.sendMessage({type: 'message', data: 'Message from Orache UI'})
     }
 
+    // test signing request with typed data to validate the mobile app is triggering the signing. This does not mint or perform any action. SACD type, uploads to ipfs etc.
     async handleSignRequest() {
         const data = {
             types: {
