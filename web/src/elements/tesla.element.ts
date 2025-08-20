@@ -167,6 +167,11 @@ export class TeslaElement extends BaseOnboardingElement {
         return html`
             <div>
                 <div>
+                    <button type="button" class="button" @click=${() => this.handleTestVirtualKeyClick()}>
+                        Test Virtual Key
+                    </button>
+                </div>
+                <div>
                     <a href="${this.getAuthUrl()}" type="button" class="button">
                         Onboard my Tesla
                     </a>
@@ -218,6 +223,15 @@ export class TeslaElement extends BaseOnboardingElement {
         }
 
         this.virtualKeyChecked = true;
+    }
+
+    async handleTestVirtualKeyClick() {
+        if (!this.teslaSettings?.virtualKeyUrl) {
+            return;
+        }
+
+        const openedUrl = await this.linkingService.openLink(this.teslaSettings.virtualKeyUrl);
+        console.log(openedUrl);
     }
 
     async handleVirtualKeyClick(_: string) {
