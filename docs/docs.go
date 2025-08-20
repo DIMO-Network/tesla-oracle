@@ -15,6 +15,62 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/v1/tesla/fleet-status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Retrieves detailed fleet status information for a Tesla vehicle, including virtual key connection status and telemetry capabilities.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla",
+                    "fleet"
+                ],
+                "summary": "Get fleet status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Vehicle VIN",
+                        "name": "vin",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Fleet status details",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VehicleFleetStatus"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/tesla/settings": {
             "get": {
                 "security": [
@@ -659,6 +715,33 @@ const docTemplate = `{
                 },
                 "message": {
                     "type": "string"
+                }
+            }
+        },
+        "github_com_DIMO-Network_tesla-oracle_internal_service.VehicleFleetStatus": {
+            "type": "object",
+            "properties": {
+                "discounted_device_data": {
+                    "type": "boolean"
+                },
+                "firmware_version": {
+                    "type": "string"
+                },
+                "fleet_telemetry_version": {
+                    "type": "string"
+                },
+                "key_paired": {
+                    "type": "boolean"
+                },
+                "number_of_keys": {
+                    "description": "limit 20",
+                    "type": "integer"
+                },
+                "safety_screen_streaming_toggle_enabled": {
+                    "type": "boolean"
+                },
+                "vehicle_command_protocol_required": {
+                    "type": "boolean"
                 }
             }
         },

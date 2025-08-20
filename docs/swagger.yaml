@@ -46,6 +46,24 @@ definitions:
       message:
         type: string
     type: object
+  github_com_DIMO-Network_tesla-oracle_internal_service.VehicleFleetStatus:
+    properties:
+      discounted_device_data:
+        type: boolean
+      firmware_version:
+        type: string
+      fleet_telemetry_version:
+        type: string
+      key_paired:
+        type: boolean
+      number_of_keys:
+        description: limit 20
+        type: integer
+      safety_screen_streaming_toggle_enabled:
+        type: boolean
+      vehicle_command_protocol_required:
+        type: boolean
+    type: object
   internal_controllers.CompleteOAuthExchangeRequest:
     properties:
       authorizationCode:
@@ -181,6 +199,43 @@ info:
   title: DIMO Tesla Oracle API
   version: "1.0"
 paths:
+  /v1/tesla/fleet-status:
+    get:
+      consumes:
+      - application/json
+      description: Retrieves detailed fleet status information for a Tesla vehicle,
+        including virtual key connection status and telemetry capabilities.
+      parameters:
+      - description: Vehicle VIN
+        in: query
+        name: vin
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Fleet status details
+          schema:
+            $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VehicleFleetStatus'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Get fleet status
+      tags:
+      - tesla
+      - fleet
   /v1/tesla/settings:
     get:
       description: Get config params for frontend app
