@@ -3,11 +3,11 @@ package rpc
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/DIMO-Network/tesla-oracle/pkg/grpc"
+	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/null/v8"
@@ -66,8 +66,11 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 		return nil, fmt.Errorf("failed to get synthetic wallet index: %w", err)
 	}
 
-	if walletIndex < 0 || walletIndex > math.MaxInt32 {
-		return nil, fmt.Errorf("wallet index %d is out of bounds", walletIndex)
+	// For key derivation, the indexes can be in the range [0, 2^31 - 1]. This also,
+	// conveniently, means the value fits in an int32, which is what Postgres is using;
+	// and such values certainly fit into uint32.
+	if walletIndex < 0 || walletIndex >= hdkeychain.HardenedKeyStart {
+		return nil, fmt.Errorf("generated wallet index %d is out of bounds", walletIndex)
 	}
 
 	sdAddr, err := t.wp.GetAddress(uint32(walletIndex))
@@ -87,7 +90,7 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 
 	err = sd.Insert(ctx, t.dbs().Writer, boil.Infer())
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("couldn't insert synthetic device record: %w", err)
 	}
 
 	return &grpc.RegisterNewSyntheticDeviceV2Response{
