@@ -67,7 +67,7 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 	}
 
 	// For key derivation, the indexes can be in the range [0, 2^31 - 1]. This also,
-	// conveniently, means the value fits in an int32, which is what Postgres is using;
+	// conveniently, means the value fits in an int32, which is what Postgres is using,
 	// and such values certainly fit into uint32.
 	if walletIndex < 0 || walletIndex >= hdkeychain.HardenedKeyStart {
 		return nil, fmt.Errorf("generated wallet index %d is out of bounds", walletIndex)
