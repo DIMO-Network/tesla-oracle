@@ -13,6 +13,8 @@ import (
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type WalletProvider interface {
@@ -59,7 +61,21 @@ func (t *TeslaRPCService) RegisterNewSyntheticDevice(ctx context.Context, req *g
 	return &grpc.RegisterNewSyntheticDeviceResponse{}, nil
 }
 
+func isVINChar(c rune) bool {
+	// Of course, there is more subtlety to this: disallowed characters, among other things.
+	return 'A' <= c && c <= 'Z' || '0' <= c && c <= '9'
+}
+
 func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req *grpc.RegisterNewSyntheticDeviceV2Request) (*grpc.RegisterNewSyntheticDeviceV2Response, error) {
+	if len(req.Vin) != 17 {
+		return nil, status.Error(codes.InvalidArgument, "VIN does not have length 17")
+	}
+	for i, c := range req.Vin {
+		if !isVINChar(c) {
+			return nil, status.Error(codes.InvalidArgument, fmt.Sprintf("VIN has invalid character %q at position %d", c, i))
+		}
+	}
+
 	var walletIndex int64
 	err := queries.Raw("SELECT nextval(sd_wallet_index_seq)").Bind(ctx, t.dbs().Reader, &walletIndex)
 	if err != nil {
