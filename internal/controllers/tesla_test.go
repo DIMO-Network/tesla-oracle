@@ -711,6 +711,55 @@ func (s *TeslaControllerTestSuite) TestGetFleetStatusSuccess() {
 	mockTeslaService.AssertExpectations(s.T())
 }
 
+func (s *TeslaControllerTestSuite) TestGetFleetStatusNotOwner() {
+	// given
+	synthDeviceAddressStr := "0xabcdef1234567890abcdef1234567890abcdef12"
+
+	mockIdentitySvc := new(test.MockIdentityAPIService)
+	mockVehicle := &mods.Vehicle{
+		Owner:   "0xabcdef1234567890abcdef1234567890abcdef12",
+		TokenID: vehicleTokenID,
+		SyntheticDevice: mods.SyntheticDevice{
+			Address: synthDeviceAddressStr,
+		},
+	}
+	mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
+
+	mockTeslaService, mockCredStore := s.initMocks()
+
+	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), &s.pdb)
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, *teslaSvc, &s.pdb)
+	encryptedAccessToken, _ := teslaSvc.Cipher.Encrypt("mockAccessToken")
+	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
+	dbVin := models.SyntheticDevice{
+		Address:           synthDeviceAddress.Bytes(),
+		Vin:               vin,
+		TokenID:           null.NewInt(456, true),
+		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
+		WalletChildNumber: 111,
+		AccessToken:       null.StringFrom(encryptedAccessToken),
+	}
+
+	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+	app := s.setupFiberApp("/v1/tesla/fleet-status", "GET", controller.GetFleetStatus)
+
+	// when
+	req, _ := createRequest("GET", "/v1/tesla/fleet-status?vin="+vin, "")
+	err := generateJWT(req)
+	assert.NoError(s.T(), err)
+
+	// then
+	resp, err := app.Test(req)
+
+	// verify
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fiber.StatusUnauthorized, resp.StatusCode)
+	mockTeslaService.AssertExpectations(s.T())
+}
+
 func (s *TeslaControllerTestSuite) TestGetFleetStatusSafetyScreenToggle() {
 	// given
 	value := false
