@@ -142,6 +142,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 	statuses := make([]VinStatus, 0, len(validVins))
 
 	if len(validVins) > 0 {
+		// fetch all the onboarding records that could still be moved forward. Eg. also onboardings that need to be retried.
 		dbVins, err := v.onboardingSvc.GetVehiclesByVinsAndOnboardingStatusRange(
 			c.Context(),
 			validVins,

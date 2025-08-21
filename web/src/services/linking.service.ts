@@ -6,6 +6,7 @@ export interface OpenMessageData {
     url: string,
 }
 
+// similar to signing-service in the way it waits for user. It waits for open message to be returned.
 export class LinkingService {
     private static instance: LinkingService;
     private messageService?: MessageService;
@@ -53,7 +54,7 @@ export class LinkingService {
     }
 
     private onMessage(message: Message) {
-        console.debug('SigningService.onMessage', message)
+        console.debug('LinkingService.onMessage', message)
 
         if (!!this.waitForOpenResolve) {
             this.waitForOpenResolve(message.data as OpenMessageData);
