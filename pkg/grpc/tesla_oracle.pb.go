@@ -197,7 +197,7 @@ func (x *RegisterNewSyntheticDeviceV2Request) GetRefreshTokenExpiry() *timestamp
 type RegisterNewSyntheticDeviceV2Response struct {
 	state                  protoimpl.MessageState `protogen:"open.v1"`
 	SyntheticDeviceAddress []byte                 `protobuf:"bytes,1,opt,name=synthetic_device_address,json=syntheticDeviceAddress,proto3" json:"synthetic_device_address,omitempty"`
-	WalletChildNum         uint64                 `protobuf:"varint,2,opt,name=wallet_child_num,json=walletChildNum,proto3" json:"wallet_child_num,omitempty"`
+	WalletChildNum         uint32                 `protobuf:"varint,2,opt,name=wallet_child_num,json=walletChildNum,proto3" json:"wallet_child_num,omitempty"`
 	unknownFields          protoimpl.UnknownFields
 	sizeCache              protoimpl.SizeCache
 }
@@ -239,7 +239,7 @@ func (x *RegisterNewSyntheticDeviceV2Response) GetSyntheticDeviceAddress() []byt
 	return nil
 }
 
-func (x *RegisterNewSyntheticDeviceV2Response) GetWalletChildNum() uint64 {
+func (x *RegisterNewSyntheticDeviceV2Response) GetWalletChildNum() uint32 {
 	if x != nil {
 		return x.WalletChildNum
 	}
@@ -436,7 +436,7 @@ const file_pkg_grpc_tesla_oracle_proto_rawDesc = "" +
 	"\x14refresh_token_expiry\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\x12refreshTokenExpiry\"\x8a\x01\n" +
 	"$RegisterNewSyntheticDeviceV2Response\x128\n" +
 	"\x18synthetic_device_address\x18\x01 \x01(\fR\x16syntheticDeviceAddress\x12(\n" +
-	"\x10wallet_child_num\x18\x02 \x01(\x04R\x0ewalletChildNum\"3\n" +
+	"\x10wallet_child_num\x18\x02 \x01(\rR\x0ewalletChildNum\"3\n" +
 	"\x1fGetSyntheticDevicesByVINRequest\x12\x10\n" +
 	"\x03vin\x18\x01 \x01(\tR\x03vin\"n\n" +
 	" GetSyntheticDevicesByVINResponse\x12J\n" +

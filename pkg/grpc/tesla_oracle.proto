@@ -34,7 +34,7 @@ message RegisterNewSyntheticDeviceV2Request {
 
 message RegisterNewSyntheticDeviceV2Response {
   bytes synthetic_device_address = 1;
-  uint64 wallet_child_num = 2;
+  uint32 wallet_child_num = 2;
 }
 
 

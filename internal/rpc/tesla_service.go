@@ -89,7 +89,9 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 		return nil, fmt.Errorf("generated wallet index %d is out of bounds", walletIndex)
 	}
 
-	sdAddr, err := t.wp.GetAddress(uint32(walletIndex))
+	walletIndexBounded := uint32(walletIndex)
+
+	sdAddr, err := t.wp.GetAddress(walletIndexBounded)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct synthetic wallet from index: %w", err)
 	}
@@ -111,7 +113,7 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 
 	return &grpc.RegisterNewSyntheticDeviceV2Response{
 		SyntheticDeviceAddress: sdAddr.Bytes(),
-		WalletChildNum:         uint64(walletIndex),
+		WalletChildNum:         walletIndexBounded,
 	}, nil
 }
 
