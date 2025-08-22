@@ -114,7 +114,7 @@ func main() {
 	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
 	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger, useLocalTLS)
 
-	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &logger)
+	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &logger, walletService)
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
 			mdw.MetricsMiddleware(),
