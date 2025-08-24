@@ -111,6 +111,8 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 		return nil, fmt.Errorf("couldn't insert synthetic device record: %w", err)
 	}
 
+	t.logger.Info().Str("vin", req.Vin).Str("address", sdAddr.Hex()).Msgf("Creating pre-synthetic for devices-api.")
+
 	return &grpc.RegisterNewSyntheticDeviceV2Response{
 		SyntheticDeviceAddress: sdAddr.Bytes(),
 		WalletChildNum:         walletIndexBounded,
