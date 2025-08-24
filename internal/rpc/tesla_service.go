@@ -76,7 +76,7 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 	}
 
 	var walletIndex int64 // The sequence has the default type, bigint.
-	err := t.dbs().Writer.QueryRowContext(ctx, "SELECT nextval(sd_wallet_index_seq)").Scan(&walletIndex)
+	err := t.dbs().Writer.QueryRowContext(ctx, "SELECT nextval('sd_wallet_index_seq')").Scan(&walletIndex)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get synthetic wallet index: %w", err)
 	}
