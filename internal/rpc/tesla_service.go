@@ -12,7 +12,6 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
-	"github.com/volatiletech/sqlboiler/v4/queries"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
@@ -76,8 +75,8 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 		}
 	}
 
-	var walletIndex int64
-	err := queries.Raw("SELECT nextval(sd_wallet_index_seq)").Bind(ctx, t.dbs().Reader, &walletIndex)
+	var walletIndex int64 // The sequence has the default type, bigint.
+	err := t.dbs().Writer.QueryRowContext(ctx, "SELECT nextval(sd_wallet_index_seq)").Scan(&walletIndex)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get synthetic wallet index: %w", err)
 	}
