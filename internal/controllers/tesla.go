@@ -487,7 +487,10 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to decrypt access token.")
 	}
-	// todo check if the access token is expired and refresh it if needed
+
+	if !sd.AccessExpiresAt.IsZero() && time.Now().After(sd.AccessExpiresAt.Time) {
+		// todo check if the access token is expired and refresh it if needed
+	}
 
 	fleetStatus, err := tc.fleetAPISvc.VirtualKeyConnectionStatus(c.Context(), accessToken, sd.Vin)
 	if err != nil {
