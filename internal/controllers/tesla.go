@@ -162,16 +162,19 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	if err != nil {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to decrypt access token.")
 	}
-	// todo check if the access token is expired and refresh it if needed
 
-	// TODO this should be modified based on if streaming or polling, maybe we check if the vehicle already streaming or polling?
+	if !sd.AccessExpiresAt.IsZero() && time.Now().After(sd.AccessExpiresAt.Time) {
+		// todo check if the access token is expired and refresh it if needed
+	}
+
+	// TODO we should decide here if we streaming or polling, maybe we check if the vehicle already streaming or polling?
 	if err := tc.fleetAPISvc.SubscribeForTelemetryData(c.Context(), accessToken, sd.Vin); err != nil {
 		logger.Err(err).Msg("Error registering for telemetry")
 		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
 	}
 
-	// TODO when we sync devices-api and tesla-oracle dbs or migrated commands, we should fail the subscription if the task fails to start,
+	// TODO when we sync devices-api and tesla-oracle dbs or migrated commands, we should fail the subscription if the task fails to start
 	startErr := tc.devicesService.StartTeslaTask(c.Context(), tokenID)
 	if startErr != nil {
 		logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
