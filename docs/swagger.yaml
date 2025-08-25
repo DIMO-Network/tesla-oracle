@@ -46,7 +46,14 @@ definitions:
       message:
         type: string
     type: object
-  github_com_DIMO-Network_tesla-oracle_internal_models.FleetDecisionAction:
+  github_com_DIMO-Network_tesla-oracle_internal_models.NextAction:
+    properties:
+      endpoint:
+        type: string
+      method:
+        type: string
+    type: object
+  github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionAction:
     enum:
     - set_telemetry_config
     - open_tesla_deeplink
@@ -60,17 +67,10 @@ definitions:
     - ActionUpdateFirmware
     - ActionStartPolling
     - ActionPromptToggle
-  github_com_DIMO-Network_tesla-oracle_internal_models.NextAction:
-    properties:
-      endpoint:
-        type: string
-      method:
-        type: string
-    type: object
   github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionResponse:
     properties:
       action:
-        $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.FleetDecisionAction'
+        $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionAction'
       message:
         type: string
       next:

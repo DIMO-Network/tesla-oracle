@@ -715,7 +715,18 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_DIMO-Network_tesla-oracle_internal_models.FleetDecisionAction": {
+        "github_com_DIMO-Network_tesla-oracle_internal_models.NextAction": {
+            "type": "object",
+            "properties": {
+                "endpoint": {
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionAction": {
             "type": "string",
             "enum": [
                 "set_telemetry_config",
@@ -732,22 +743,11 @@ const docTemplate = `{
                 "ActionPromptToggle"
             ]
         },
-        "github_com_DIMO-Network_tesla-oracle_internal_models.NextAction": {
-            "type": "object",
-            "properties": {
-                "endpoint": {
-                    "type": "string"
-                },
-                "method": {
-                    "type": "string"
-                }
-            }
-        },
         "github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionResponse": {
             "type": "object",
             "properties": {
                 "action": {
-                    "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.FleetDecisionAction"
+                    "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionAction"
                 },
                 "message": {
                     "type": "string"

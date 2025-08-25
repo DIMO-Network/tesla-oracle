@@ -130,7 +130,7 @@ func (ts *TeslaService) UpdateSubscriptionStatus(ctx context.Context, synthDevic
 }
 
 func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.StatusDecisionResponse, error) {
-	var action models.FleetDecisionAction
+	var action models.StatusDecisionAction
 	var message string
 	var next *models.NextAction
 

@@ -74,20 +74,20 @@ type GraphQlData[T any] struct {
 	Data T `json:"data"`
 }
 
-type FleetDecisionAction string
+type StatusDecisionAction string
 
 const (
-	ActionSetTelemetryConfig FleetDecisionAction = "set_telemetry_config"
-	ActionOpenTeslaDeeplink  FleetDecisionAction = "open_tesla_deeplink"
-	ActionUpdateFirmware     FleetDecisionAction = "update_firmware"
-	ActionStartPolling       FleetDecisionAction = "start_polling"
-	ActionPromptToggle       FleetDecisionAction = "prompt_toggle"
+	ActionSetTelemetryConfig StatusDecisionAction = "set_telemetry_config"
+	ActionOpenTeslaDeeplink  StatusDecisionAction = "open_tesla_deeplink"
+	ActionUpdateFirmware     StatusDecisionAction = "update_firmware"
+	ActionStartPolling       StatusDecisionAction = "start_polling"
+	ActionPromptToggle       StatusDecisionAction = "prompt_toggle"
 )
 
 type StatusDecisionResponse struct {
-	Action  FleetDecisionAction `json:"action"`
-	Message string              `json:"message"`
-	Next    *NextAction         `json:"next,omitempty"`
+	Action  StatusDecisionAction `json:"action"`
+	Message string               `json:"message"`
+	Next    *NextAction          `json:"next,omitempty"`
 }
 
 type NextAction struct {
