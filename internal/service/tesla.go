@@ -8,8 +8,10 @@ import (
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/rs/zerolog"
+	"github.com/volatiletech/null/v8"
 	"regexp"
 	"strconv"
 )
@@ -29,14 +31,6 @@ func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, cipher c
 		pdb:      pdb,
 	}
 }
-
-type VirtualKeyStatus int
-
-const (
-	Incapable VirtualKeyStatus = iota
-	Paired
-	Unpaired
-)
 
 // GetVehicleByVIN retrieves a vehicle by its VIN.
 func (ts *TeslaService) GetVehicleByVIN(ctx context.Context, logger *zerolog.Logger, pdb *db.Store, vin string) (*dbmodels.SyntheticDevice, error) {
@@ -70,34 +64,90 @@ func (ts *TeslaService) GetVehicleByVIN(ctx context.Context, logger *zerolog.Log
 	return sd, nil
 }
 
-func (s VirtualKeyStatus) String() string {
-	switch s {
-	case Incapable:
-		return "Incapable"
-	case Paired:
-		return "Paired"
-	case Unpaired:
-		return "Unpaired"
+// GetByVehicleTokenID retrieves a vehicle by its VIN.
+func (ts *TeslaService) GetByVehicleTokenID(ctx context.Context, logger *zerolog.Logger, pdb *db.Store, tokenID int64) (*dbmodels.SyntheticDevice, error) {
+	tx, err := pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %d", tokenID)
+		return nil, err
 	}
-	return ""
+	defer func() {
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				logger.Error().Err(rbErr).Msgf("GetVehicleByVIN: Failed to rollback transaction for vehicle %d", tokenID)
+			}
+		} else {
+			if cmErr := tx.Commit(); cmErr != nil {
+				logger.Error().Err(cmErr).Msgf("GetVehicleByVIN: Failed to commit transaction for vehicle %d", tokenID)
+			}
+		}
+	}()
+
+	sd, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.VehicleTokenID.EQ(null.IntFrom(int(tokenID)))).One(ctx, tx)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrVehicleNotFound
+		}
+		logger.Error().Err(err).Msgf("Failed to check if vehicle %d has been processed", tokenID)
+		return nil, err
+	}
+
+	return sd, nil
 }
 
-func (s VirtualKeyStatus) MarshalText() ([]byte, error) {
-	return []byte(s.String()), nil
-}
+func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.FleetDecisionResponse, error) {
+	var action models.FleetDecisionAction
+	var message string
+	var next *models.NextAction
 
-func (s *VirtualKeyStatus) UnmarshalText(text []byte) error {
-	switch str := string(text); str {
-	case "Incapable":
-		*s = Incapable
-	case "Paired":
-		*s = Paired
-	case "Unpaired":
-		*s = Unpaired
-	default:
-		return fmt.Errorf("unrecognized status %q", str)
+	if fleetStatus.VehicleCommandProtocolRequired {
+		if fleetStatus.KeyPaired {
+			action = models.ActionSetTelemetryConfig
+			message = "Vehicle stream compatible. Subscribe to telemetry to enable streaming."
+			next = &models.NextAction{
+				Method:   "POST",
+				Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
+			}
+		} else {
+			action = models.ActionOpenTeslaDeeplink
+			message = "Virtual key not paired. Open Tesla app deeplink for pairing."
+		}
+	} else {
+		meetsFirmware, err := IsFirmwareFleetTelemetryCapable(fleetStatus.FirmwareVersion)
+		if err != nil {
+			return nil, fmt.Errorf("unexpected firmware version format %q", fleetStatus.FirmwareVersion)
+		}
+		if !meetsFirmware {
+			action = models.ActionUpdateFirmware
+			message = "Firmware too old. Please update to 2025.20 or higher."
+		} else {
+			if fleetStatus.SafetyScreenStreamingToggleEnabled == nil {
+				action = models.ActionStartPolling
+				message = "Streaming toggle not present. Start polling vehicle telemetry."
+				next = &models.NextAction{
+					Method:   "POST",
+					Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
+				}
+			} else if *fleetStatus.SafetyScreenStreamingToggleEnabled {
+				action = models.ActionSetTelemetryConfig
+				message = "Vehicle stream compatible. Subscribe to telemetry to enable streaming."
+				next = &models.NextAction{
+					Method:   "POST",
+					Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
+				}
+			} else {
+				action = models.ActionPromptToggle
+				message = "Streaming toggle disabled. Prompt user to enable it."
+			}
+		}
 	}
-	return nil
+
+	return &models.FleetDecisionResponse{
+		Action:  action,
+		Message: message,
+		Next:    next,
+	}, nil
 }
 
 func IsFleetTelemetryCapable(fs *VehicleFleetStatus) bool {
@@ -111,7 +161,7 @@ var teslaFirmwareStart = regexp.MustCompile(`^(\d{4})\.(\d+)`)
 
 func IsFirmwareFleetTelemetryCapable(v string) (bool, error) {
 	m := teslaFirmwareStart.FindStringSubmatch(v)
-	if len(m) == 0 {
+	if len(m) != 3 {
 		return false, fmt.Errorf("unexpected firmware version format %q", v)
 	}
 
@@ -125,5 +175,5 @@ func IsFirmwareFleetTelemetryCapable(v string) (bool, error) {
 		return false, fmt.Errorf("couldn't parse week %q", m[2])
 	}
 
-	return year > 2024 || year == 2024 && week >= 26, nil
+	return year > 2025 || (year == 2025 && week >= 20) && week >= 26, nil
 }

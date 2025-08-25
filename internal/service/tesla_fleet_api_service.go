@@ -393,7 +393,11 @@ func (t *teslaFleetAPIService) VirtualKeyConnectionStatus(ctx context.Context, t
 		return nil, fmt.Errorf("error decoding key status %w", err)
 	}
 
-	vi := keyConn.Response.VehicleInfo[vin]
+	vi, ok := keyConn.Response.VehicleInfo[vin]
+	if !ok {
+		// Handle the case where the VIN is not found in the map
+		return nil, fmt.Errorf("VIN %s not found in vehicle info map", vin)
+	}
 
 	return &VehicleFleetStatus{
 		KeyPaired:                          len(keyConn.Response.KeyPairedVINs) == 1,

@@ -73,3 +73,24 @@ type Manufacturer struct {
 type GraphQlData[T any] struct {
 	Data T `json:"data"`
 }
+
+type FleetDecisionAction string
+
+const (
+	ActionSetTelemetryConfig FleetDecisionAction = "set_telemetry_config"
+	ActionOpenTeslaDeeplink  FleetDecisionAction = "open_tesla_deeplink"
+	ActionUpdateFirmware     FleetDecisionAction = "update_firmware"
+	ActionStartPolling       FleetDecisionAction = "start_polling"
+	ActionPromptToggle       FleetDecisionAction = "prompt_toggle"
+)
+
+type FleetDecisionResponse struct {
+	Action  FleetDecisionAction `json:"action"`
+	Message string              `json:"message"`
+	Next    *NextAction         `json:"next,omitempty"`
+}
+
+type NextAction struct {
+	Method   string `json:"method"`
+	Endpoint string `json:"endpoint"`
+}

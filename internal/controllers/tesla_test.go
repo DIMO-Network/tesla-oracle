@@ -688,7 +688,7 @@ func (s *TeslaControllerTestSuite) TestGetFleetStatusSuccess() {
 
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
-	app := s.setupFiberApp("/v1/tesla/fleet-status", "GET", controller.GetFleetStatus)
+	app := s.setupFiberApp("/v1/tesla/fleet-status", "GET", controller.GetStatus)
 
 	// when
 	req, _ := createRequest("GET", "/v1/tesla/fleet-status?vin="+vin, "")
@@ -744,7 +744,7 @@ func (s *TeslaControllerTestSuite) TestGetFleetStatusNotOwner() {
 
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
-	app := s.setupFiberApp("/v1/tesla/fleet-status", "GET", controller.GetFleetStatus)
+	app := s.setupFiberApp("/v1/tesla/fleet-status", "GET", controller.GetStatus)
 
 	// when
 	req, _ := createRequest("GET", "/v1/tesla/fleet-status?vin="+vin, "")
@@ -802,7 +802,7 @@ func (s *TeslaControllerTestSuite) TestGetFleetStatusSafetyScreenToggle() {
 
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
-	app := s.setupFiberApp("/v1/tesla/fleet-status", "GET", controller.GetFleetStatus)
+	app := s.setupFiberApp("/v1/tesla/fleet-status", "GET", controller.GetStatus)
 
 	// when
 	req, _ := createRequest("GET", "/v1/tesla/fleet-status?vin="+vin, "")
