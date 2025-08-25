@@ -22,7 +22,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/null/v8"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 )
 
 type CredStore interface {
@@ -178,6 +177,13 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
 	}
 
+	err = tc.teslaService.UpdateSubscriptionStatus(c.Context(), sd, "active")
+	if err != nil {
+		logger.Err(err).Msg("Failed to update subscription status.")
+		subscribeTelemetryFailureCount.Inc()
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update subscription status.")
+	}
+
 	logger.Info().Msgf("Successfully subscribed to telemetry vehicle: %d.", tokenID)
 	subscribeTelemetrySuccessCount.Inc()
 	return c.JSON(fiber.Map{"message": "Successfully subscribed to vehicle telemetry."})
@@ -255,12 +261,11 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 		logger.Warn().Err(stopErr).Msg("Failed to stop Tesla task for synthetic device.")
 	}
 
-	device.SubscriptionStatus = null.String{String: "inactive", Valid: true}
-	_, err = device.Update(c.Context(), tc.pdb.DBS().Writer, boil.Infer())
+	err = tc.teslaService.UpdateSubscriptionStatus(c.Context(), device, "inactive")
 	if err != nil {
-		logger.Err(err).Msg("Failed to update synthetic device status.")
-		unsubscribeTelemetryFailureCount.Inc()
-		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update synthetic device status.")
+		logger.Err(err).Msg("Failed to update subscription status.")
+		subscribeTelemetryFailureCount.Inc()
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update subscription status.")
 	}
 
 	logger.Info().Msgf(`Successfully unsubscribed vehicle %d from telemetry data.`, tokenID)
@@ -435,7 +440,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 // @Produce     json
 // @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to fetch vehicle details"
 // @Security    BearerAuth
-// @Success     200 {object} FleetDecisionResponse "Vehicle status details and next action"
+// @Success     200 {object} StatusDecisionResponse "Vehicle status details and next action"
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."

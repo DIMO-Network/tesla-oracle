@@ -677,17 +677,6 @@ func (v *VehicleController) GetMintStatusForVins(c *fiber.Ctx) error {
 	})
 }
 
-func (v *VehicleController) ClearOnboardingData(c *fiber.Ctx) error {
-	err := v.onboardingSvc.DeleteAll(c.Context())
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
-			"error": "Failed to delete onboarding data from Database",
-		})
-	}
-
-	return nil
-}
-
 type OnboardedVehicle struct {
 	Vin              string   `json:"vin"`
 	VehicleTokenID   *big.Int `json:"vehicleTokenId,omitempty" swaggertype:"integer"`

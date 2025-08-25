@@ -12,6 +12,7 @@ import (
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/rs/zerolog"
 	"github.com/volatiletech/null/v8"
+	"github.com/volatiletech/sqlboiler/v4/boil"
 	"regexp"
 	"strconv"
 )
@@ -96,7 +97,39 @@ func (ts *TeslaService) GetByVehicleTokenID(ctx context.Context, logger *zerolog
 	return sd, nil
 }
 
-func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.FleetDecisionResponse, error) {
+// UpdateSubscriptionStatus updates the subscription status of the given SyntheticDevice.
+func (ts *TeslaService) UpdateSubscriptionStatus(ctx context.Context, synthDevice *dbmodels.SyntheticDevice, status string) error {
+	tx, err := ts.pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		ts.logger.Error().Err(err).Msg("Failed to begin transaction for updating subscription status.")
+		return err
+	}
+	defer func() {
+		if err != nil {
+			if rbErr := tx.Rollback(); rbErr != nil {
+				ts.logger.Error().Err(rbErr).Msg("Failed to rollback transaction for updating subscription status.")
+			}
+		} else {
+			if cmErr := tx.Commit(); cmErr != nil {
+				ts.logger.Error().Err(cmErr).Msg("Failed to commit transaction for updating subscription status.")
+			}
+		}
+	}()
+
+	// Update subscription status
+	synthDevice.SubscriptionStatus = null.String{String: status, Valid: true}
+
+	// Save the changes to the database
+	_, err = synthDevice.Update(ctx, tx, boil.Infer())
+	if err != nil {
+		ts.logger.Error().Err(err).Msg("Failed to update synthetic device subscription status.")
+		return err
+	}
+
+	return nil
+}
+
+func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.StatusDecisionResponse, error) {
 	var action models.FleetDecisionAction
 	var message string
 	var next *models.NextAction
@@ -143,7 +176,7 @@ func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (
 		}
 	}
 
-	return &models.FleetDecisionResponse{
+	return &models.StatusDecisionResponse{
 		Action:  action,
 		Message: message,
 		Next:    next,
@@ -175,5 +208,5 @@ func IsFirmwareFleetTelemetryCapable(v string) (bool, error) {
 		return false, fmt.Errorf("couldn't parse week %q", m[2])
 	}
 
-	return year > 2025 || (year == 2025 && week >= 20) && week >= 26, nil
+	return year > 2025 || (year == 2025 && week >= 20), nil
 }

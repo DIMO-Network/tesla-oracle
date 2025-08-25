@@ -84,7 +84,7 @@ const (
 	ActionPromptToggle       FleetDecisionAction = "prompt_toggle"
 )
 
-type FleetDecisionResponse struct {
+type StatusDecisionResponse struct {
 	Action  FleetDecisionAction `json:"action"`
 	Message string              `json:"message"`
 	Next    *NextAction         `json:"next,omitempty"`
