@@ -642,7 +642,10 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			mockIdentitySvc.AssertExpectations(s.T())
 
 			// I need at the end to clear db
-			dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+			_, err = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+			if err != nil {
+				s.T().Errorf("Failed to delete dbVin: %v", err)
+			}
 		})
 	}
 }
@@ -794,24 +797,4 @@ func (s *TeslaControllerTestSuite) initMocks() (*test.MockTeslaFleetAPIService, 
 	mockTeslaService := new(test.MockTeslaFleetAPIService)
 	mockCredStore := new(test.MockCredStore)
 	return mockTeslaService, mockCredStore
-}
-
-func parseResponseToMap(resp *http.Response) (map[string]interface{}, error) {
-	bodyBytes, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
-	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			fmt.Printf("failed to close response body: %v\n", err)
-		}
-	}()
-
-	var result map[string]interface{}
-	err = json.Unmarshal(bodyBytes, &result)
-	if err != nil {
-		return nil, fmt.Errorf("error unmarshaling response to map: %w", err)
-	}
-
-	return result, nil
 }
