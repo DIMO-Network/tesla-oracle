@@ -149,7 +149,7 @@ func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (
 	} else {
 		meetsFirmware, err := IsFirmwareFleetTelemetryCapable(fleetStatus.FirmwareVersion)
 		if err != nil {
-			return nil, fmt.Errorf("unexpected firmware version format %q", fleetStatus.FirmwareVersion)
+			return nil, fmt.Errorf("unexpected firmware version format %q: %w", fleetStatus.FirmwareVersion, err)
 		}
 		if !meetsFirmware {
 			action = models.ActionUpdateFirmware
