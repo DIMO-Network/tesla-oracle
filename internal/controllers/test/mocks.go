@@ -120,8 +120,11 @@ func (m *MockTeslaFleetAPIService) WakeUpVehicle(ctx context.Context, token stri
 }
 
 func (m *MockTeslaFleetAPIService) VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*service.VehicleFleetStatus, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, token, vin)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.VehicleFleetStatus), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *MockTeslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error {
