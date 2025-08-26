@@ -17,7 +17,7 @@ import (
 )
 
 type WalletProvider interface {
-	GetAddress(index uint32) (common.Address, error)
+	GetAddress(ctx context.Context, index uint32) (common.Address, error)
 }
 
 func NewTeslaRPCService(
@@ -90,7 +90,7 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 
 	walletIndexBounded := uint32(walletIndex)
 
-	sdAddr, err := t.wp.GetAddress(walletIndexBounded)
+	sdAddr, err := t.wp.GetAddress(ctx, walletIndexBounded)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct synthetic wallet from index: %w", err)
 	}

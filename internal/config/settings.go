@@ -65,6 +65,8 @@ type Settings struct {
 	TeslaRequiredScopes         string  `yaml:"TESLA_REQUIRED_SCOPES"`
 	TeslaVirtualKeyURL          url.URL `yaml:"TESLA_VIRTUAL_KEY_URL"`
 
+	SyntheticWalletGRPCAddr string `yaml:"SYNTHETIC_WALLET_GRPC_ADDR"`
+
 	// Settings for the partners token
 	PartnersTeslaFleetURL string `json:"PARTNERS_FLEET_URL"`
 

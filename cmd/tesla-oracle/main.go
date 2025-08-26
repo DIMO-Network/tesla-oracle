@@ -86,8 +86,8 @@ func main() {
 	identityService := service.NewIdentityAPIService(&logger, &settings)
 	deviceDefinitionsService := service.NewDeviceDefinitionsAPIService(&logger, &settings)
 
-	walletService := service.NewSDWalletsService(ctx, logger, settings)
-	if walletService == nil {
+	walletService, err := service.NewSDWalletEnclaveClient(&logger, settings)
+	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to create SD Wallets service")
 	}
 

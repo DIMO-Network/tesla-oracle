@@ -212,7 +212,7 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 		return nil, err
 	}
 
-	sdAddress, err := w.ws.GetAddress(sdIndex.NextVal)
+	sdAddress, err := w.ws.GetAddress(ctx, sdIndex.NextVal)
 	if err != nil {
 		w.logger.Error().Err(err).Msg("Failed to get SD wallet address")
 		record.OnboardingStatus = OnboardingStatusMintFailure
@@ -228,7 +228,7 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 		return nil, err
 	}
 
-	sdSignature, err := w.ws.SignTypedData(*sdTypedData, sdIndex.NextVal)
+	sdSignature, err := w.ws.SignTypedData(ctx, *sdTypedData, sdIndex.NextVal)
 	if err != nil {
 		w.logger.Error().Err(err).Msg("Failed to sign SD typed data")
 		record.OnboardingStatus = OnboardingStatusMintFailure
@@ -326,7 +326,7 @@ func (w *OnboardingWorker) MintSDAndUpdate(ctx context.Context, record *dbmodels
 		return nil, err
 	}
 
-	sdAddress, err := w.ws.GetAddress(sdIndex.NextVal)
+	sdAddress, err := w.ws.GetAddress(ctx, sdIndex.NextVal)
 	if err != nil {
 		w.logger.Error().Err(err).Msg("Failed to get SD wallet address")
 		record.OnboardingStatus = OnboardingStatusMintFailure
@@ -342,7 +342,7 @@ func (w *OnboardingWorker) MintSDAndUpdate(ctx context.Context, record *dbmodels
 		return nil, err
 	}
 
-	sdSignature, err := w.ws.SignTypedData(*sdTypedData, sdIndex.NextVal)
+	sdSignature, err := w.ws.SignTypedData(ctx, *sdTypedData, sdIndex.NextVal)
 	if err != nil {
 		w.logger.Error().Err(err).Msg("Failed to sign SD typed data")
 		record.OnboardingStatus = OnboardingStatusMintFailure

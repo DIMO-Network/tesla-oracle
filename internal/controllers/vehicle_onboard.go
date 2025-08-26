@@ -772,7 +772,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 			if !ok {
 				continue
 			} else {
-				address, err := v.walletSvc.GetAddress(uint32(dbVin.WalletIndex.Int64))
+				address, err := v.walletSvc.GetAddress(c.Context(), uint32(dbVin.WalletIndex.Int64))
 				if err != nil {
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 						"error": "Failed to get SD address by child index",

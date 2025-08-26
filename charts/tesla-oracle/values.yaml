@@ -85,6 +85,7 @@ env:
     OUCdaWovmF+28PyAi4wCIQDXRKpYK+VMFyUR1GJVoV3gWezQcJmFswuWq+7M+XPb
     GQ==
     -----END CERTIFICATE-----
+  SYNTHETIC_WALLET_GRPC_ADDR: synthetic-wallet-instance-dev:8086
 service:
   type: ClusterIP
   ports:

@@ -56,7 +56,7 @@ func (s *VehicleControllerTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 	s.logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	s.pdb, s.container, s.settings = test.StartContainerDatabase(context.Background(), s.T(), migrationsDirRelPath)
-	s.ws = service.NewSDWalletsService(s.ctx, s.logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
+	s.ws = service.NewSDWalletsService(s.logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
 	s.onboardingSvc = service.NewOnboardingService(&s.pdb, &s.logger)
 
 	fmt.Println("Suite setup completed.")
