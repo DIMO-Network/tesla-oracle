@@ -209,7 +209,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
-		subscribeTelemetryFailureCount.Inc()
+		unsubscribeTelemetryFailureCount.Inc()
 		tc.logger.Err(err)
 		return err
 	}
