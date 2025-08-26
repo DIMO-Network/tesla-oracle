@@ -9,7 +9,9 @@ require (
 	github.com/DIMO-Network/model-garage v0.7.1
 	github.com/DIMO-Network/shared v1.0.7
 	github.com/IBM/sarama v1.43.3
-	github.com/aarondl/sqlboiler v3.7.1+incompatible
+	github.com/aarondl/null/v8 v8.1.3
+	github.com/aarondl/sqlboiler/v4 v4.19.5
+	github.com/aarondl/strmangle v0.0.9
 	github.com/aws/aws-sdk-go-v2/config v1.29.14
 	github.com/aws/aws-sdk-go-v2/service/kms v1.35.5
 	github.com/btcsuite/btcd v0.24.2
@@ -39,10 +41,7 @@ require (
 	github.com/stretchr/testify v1.10.0
 	github.com/swaggo/swag v1.16.4
 	github.com/testcontainers/testcontainers-go v0.38.0
-	github.com/testcontainers/testcontainers-go/modules/postgres v0.33.0
-	github.com/volatiletech/null/v8 v8.1.2
-	github.com/volatiletech/sqlboiler/v4 v4.19.1
-	github.com/volatiletech/strmangle v0.0.8
+	github.com/testcontainers/testcontainers-go/modules/postgres v0.38.0
 	golang.org/x/oauth2 v0.30.0
 	golang.org/x/sync v0.16.0
 	google.golang.org/grpc v1.74.2
@@ -51,6 +50,8 @@ require (
 )
 
 require (
+	github.com/aarondl/inflect v0.0.2 // indirect
+	github.com/aarondl/randomize v0.0.2 // indirect
 	github.com/containerd/errdefs v1.0.0 // indirect
 	github.com/containerd/errdefs/pkg v0.3.0 // indirect
 	github.com/crate-crypto/go-eth-kzg v1.3.0 // indirect
@@ -58,7 +59,6 @@ require (
 	github.com/ethereum/c-kzg-4844/v2 v2.1.0 // indirect
 	github.com/moby/go-archive v0.1.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.5 // indirect
-	github.com/volatiletech/sqlboiler v3.7.1+incompatible // indirect
 )
 
 require (
@@ -179,8 +179,6 @@ require (
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasthttp v1.55.0 // indirect
 	github.com/valyala/tcplisten v1.0.0 // indirect
-	github.com/volatiletech/inflect v0.0.1 // indirect
-	github.com/volatiletech/randomize v0.0.1 // indirect
 	github.com/yusufpapurcu/wmi v1.2.4 // indirect
 	go.opentelemetry.io/auto/sdk v1.1.0 // indirect
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0 // indirect

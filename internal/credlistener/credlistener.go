@@ -12,9 +12,9 @@ import (
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/sdtask"
 	"github.com/DIMO-Network/tesla-oracle/models"
-	"github.com/aarondl/sqlboiler/boil"
+	"github.com/aarondl/null/v8"
+	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/rs/zerolog"
-	"github.com/volatiletech/null/v8"
 )
 
 type Consumer struct {
