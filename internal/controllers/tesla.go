@@ -454,7 +454,6 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
-		subscribeTelemetryFailureCount.Inc()
 		tc.logger.Err(err)
 		return err
 	}
