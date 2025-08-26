@@ -26,7 +26,7 @@ NAME?="new"
 GOLANGCI_VERSION   = latest
 # Get binary versions from go.mod
 GOOSE_VERSION      =  $(shell go list -m -f '{{.Version}}' github.com/pressly/goose/v3)
-SQLBOILER_VERSION  =  $(shell go list -m -f '{{.Version}}' github.com/volatiletech/sqlboiler/v4)
+SQLBOILER_VERSION  =  $(shell go list -m -f '{{.Version}}' github.com/aarondl/sqlboiler/v4)
 
 APPS = tesla-oracle
 
@@ -117,7 +117,7 @@ tools-goose: ## Install goose dependency.
 
 tools-sqlboiler: ## Install sqlboiler dependency.
 	@mkdir -p $(PATHINSTBIN)
-	GOBIN=$(PATHINSTBIN) go install github.com/volatiletech/sqlboiler/v4@$(SQLBOILER_VERSION)
+	GOBIN=$(PATHINSTBIN) go install github.com/aarondl/sqlboiler/v4@$(SQLBOILER_VERSION)
 
 tools: tools-golangci-lint tools-gqlgen tools-goose tools-sqlboiler ## Install all tool dependencies.
 
