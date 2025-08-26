@@ -99,17 +99,9 @@ boil: ## Generate SQLBoiler models.
 	@sqlboiler --version
 	sqlboiler psql --no-tests --wipe
 
-gql: ## Generate gqlgen code.
-	@gqlgen version
-	gqlgen generate
-
 tools-golangci-lint: ## Install golangci-lint dependency.
 	@mkdir -p $(PATHINSTBIN)
 	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(PATHINSTBIN) $(GOLANGCI_VERSION)
-
-tools-gqlgen: ## Install gqlgen dependency.
-	@mkdir -p $(PATHINSTBIN)
-	GOBIN=$(PATHINSTBIN) go install github.com/99designs/gqlgen@$(GQLGEN_VERSION)
 
 tools-goose: ## Install goose dependency.
 	@mkdir -p $(PATHINSTBIN)
@@ -119,7 +111,7 @@ tools-sqlboiler: ## Install sqlboiler dependency.
 	@mkdir -p $(PATHINSTBIN)
 	GOBIN=$(PATHINSTBIN) go install github.com/aarondl/sqlboiler/v4@$(SQLBOILER_VERSION)
 
-tools: tools-golangci-lint tools-gqlgen tools-goose tools-sqlboiler ## Install all tool dependencies.
+tools: tools-golangci-lint tools-goose tools-sqlboiler ## Install all tool dependencies.
 
 proto:
 	protoc --go_out=. --go_opt=paths=source_relative --go-grpc_out=. --go-grpc_opt=paths=source_relative ./pkg/grpc/tesla_oracle.proto
