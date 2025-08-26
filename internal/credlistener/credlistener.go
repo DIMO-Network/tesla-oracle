@@ -12,6 +12,7 @@ import (
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/sdtask"
 	"github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/IBM/sarama"
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/rs/zerolog"
@@ -28,6 +29,19 @@ var credUpdateWhitelist = boil.Whitelist(
 	models.SyntheticDeviceColumns.RefreshToken,
 	models.SyntheticDeviceColumns.RefreshExpiresAt,
 )
+
+func (c *Consumer) Setup(_ sarama.ConsumerGroupSession) error   { return nil }
+func (c *Consumer) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }
+func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
+	for {
+		select {
+		case msg := <-claim.Messages():
+			err := c.Handle(session.Context(), msg.Value)
+		case <-session.Context().Done():
+			return nil
+		}
+	}
+}
 
 func (c *Consumer) Handle(ctx context.Context, msgValue []byte) error {
 	var ce cloudevent.CloudEvent[sdtask.CredentialData]

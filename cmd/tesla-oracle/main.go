@@ -149,6 +149,28 @@ func main() {
 		})
 	}
 
+	{
+		config := sarama.NewConfig()
+		config.Version = sarama.V3_6_0_0
+		logger.Info().Msgf("Starting gRPC server on port %d", settings.GRPCPort)
+		cGroup, err := sarama.NewConsumerGroup([]string{settings.KafkaBrokers}, "tesla-oracle", config)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("error creating consumer from client")
+		}
+
+		cGroup.Consume()
+
+		proc := consumer.New(pdb, settings.TopicContractEvent, &logger)
+
+		group.Go(func() error {
+			if err := StartContractEventConsumer(gCtx, proc, cGroup, settings.TopicContractEvent, &logger); err != nil {
+				return fmt.Errorf("error starting contract event consumer: %w", err)
+			}
+
+			return nil
+		})
+	}
+
 	group.Go(func() error {
 		if err := StartGRPCServer(server, settings.GRPCPort, &logger); err != nil {
 			return fmt.Errorf("error starting grpc server: %w", err)
