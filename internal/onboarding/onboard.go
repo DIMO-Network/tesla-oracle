@@ -16,6 +16,9 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/aarondl/null/v8"
+	"github.com/aarondl/sqlboiler/v4/boil"
+	"github.com/aarondl/sqlboiler/v4/queries"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -23,9 +26,6 @@ import (
 	"github.com/friendsofgo/errors"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
-	"github.com/volatiletech/null/v8"
-	"github.com/volatiletech/sqlboiler/v4/boil"
-	"github.com/volatiletech/sqlboiler/v4/queries"
 )
 
 func NewTransactionsClient(settings *config.Settings) (*transactions.Client, error) {

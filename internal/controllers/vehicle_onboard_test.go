@@ -19,6 +19,8 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/aarondl/null/v8"
+	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/ethereum/go-ethereum/common"
 	rd "github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
@@ -30,8 +32,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"github.com/volatiletech/null/v8"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 	"gotest.tools/v3/assert"
 )
 
