@@ -113,7 +113,11 @@ type partialTeslaClaims struct {
 
 // TelemetrySubscribe godoc
 // @Summary     Subscribe vehicle for Tesla Telemetry Data
-// @Description Subscribes a vehicle for telemetry data using the provided vehicle token ID in the request path. Change subscription status to active on success.
+// @Description Subscribes a vehicle for telemetry data using the provided vehicle token ID in the request path.
+//
+//	Validates the developer license, retrieves the synthetic device, and initiates telemetry streaming
+//	or polling based on the vehicle's status. Updates the subscription status to "active" upon success.
+//
 // @Tags        tesla,subscribe
 // @Accept      json
 // @Produce     json
@@ -121,8 +125,9 @@ type partialTeslaClaims struct {
 // @Security    BearerAuth
 // @Success     200 {object} map[string]string "Successfully subscribed to vehicle telemetry."
 // @Failure     400 {object} fiber.Error "Bad Request"
-// @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
+// @Failure     401 {object} fiber.Error "Unauthorized or invalid developer license."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by VIN."
+// @Failure     409 {object} fiber.Error "Vehicle is not ready for telemetry subscription."
 // @Failure     500 {object} fiber.Error "Internal server error, including decryption or telemetry subscription failures."
 // @Router      /v1/tesla/telemetry/subscribe/{vehicleTokenId} [post]
 func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
@@ -167,54 +172,57 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 }
 
 // StartDataFlow godoc
-// @Summary     Start Tesla Telemetry Data
-// @Description Subscribes a vehicle for telemetry data using the provided vehicle token ID in the request path. Do not change subscription status.
-// @Tags        tesla,subscribe
+// @Summary     Start data flow for Tesla vehicle
+// @Description Initiates the data flow for a Tesla vehicle using the provided vehicle token ID.
+//
+//	Validates vehicle ownership, checks credentials, and determines the appropriate action
+//	(streaming telemetry data or polling) based on the vehicle's status. If the vehicle is not ready
+//	for telemetry subscription, it provides instructions to the user to resolve the issue.
+//
+// @Tags        tesla,start
 // @Accept      json
 // @Produce     json
 // @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to fetch vehicle details"
 // @Security    BearerAuth
-// @Success     200 {object} map[string]string "Successfully subscribed to vehicle telemetry."
+// @Success     200 {object} map[string]string "Successfully started data flow for the vehicle."
 // @Failure     400 {object} fiber.Error "Bad Request"
-// @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
-// @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by VIN."
-// @Failure     500 {object} fiber.Error "Internal server error, including decryption or telemetry subscription failures."
+// @Failure     401 {object} fiber.Error "Unauthorized or vehicle does not belong to the authenticated user."
+// @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
+// @Failure     409 {object} fiber.Error "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps."
+// @Failure     500 {object} fiber.Error "Internal server error, including decryption or fleet status retrieval failures."
 // @Router      /v1/tesla/{vehicleTokenId}/start [post]
 func (tc *TeslaController) StartDataFlow(c *fiber.Ctx) error {
-	walletAddress := helpers.GetWallet(c)
+	logger := helpers.GetLogger(c, tc.logger).With().
+		Str("Name", "Telemetry/Start").
+		Logger()
+
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
 		return err
 	}
 
-	logger := helpers.GetLogger(c, tc.logger).With().
-		Str("Name", "Telemetry/Start").
-		Logger()
+	logger.Debug().Msgf("Received telemetry start request for %d.", tokenID)
 
-	logger.Debug().Msgf("Received telemetry subscribe request for %d.", tokenID)
-
-	// check if the user owns the vehicle
-	vehicle, err := tc.fetchVehicle(tokenID)
+	// Validate vehicle ownership
+	walletAddress := helpers.GetWallet(c)
+	err = tc.validateVehicleOwnership(tokenID, walletAddress)
 	if err != nil {
 		return err
 	}
 
-	if vehicle == nil || vehicle.Owner != walletAddress.Hex() {
-		return fiber.NewError(fiber.StatusUnauthorized, "Vehicle does not belong to the authenticated user.")
-	}
-
+	// Fetch synthetic device
 	sd, err := tc.teslaService.GetByVehicleTokenID(c.Context(), tc.logger, tc.pdb, tokenID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by VIN.")
+		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by token ID.")
 	}
 
-	err = tc.startStreamingOrPolling(c, sd, logger, tokenID)
-	if err != nil {
+	// Start streaming or polling
+	if err := tc.startStreamingOrPolling(c, sd, logger, tokenID); err != nil {
 		return err
 	}
 
-	logger.Info().Msgf("Successfully subscribed to telemetry vehicle: %d.", tokenID)
-	return c.JSON(fiber.Map{"message": "Successfully subscribed to vehicle telemetry."})
+	logger.Info().Msgf("Successfully started data flow for vehicle: %d.", tokenID)
+	return c.JSON(fiber.Map{"message": "Successfully started data flow for vehicle."})
 }
 
 // UnsubscribeTelemetry godoc
@@ -475,7 +483,6 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 // @Failure     500 {object} fiber.Error "Internal server error, including decryption or fleet status retrieval failures."
 // @Router      /v1/tesla/{vehicleTokenId}/status [get]
 func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
-	walletAddress := helpers.GetWallet(c)
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
 		tc.logger.Err(err)
@@ -489,13 +496,10 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	}
 
 	// check if the user owns the vehicle
-	vehicle, err := tc.fetchVehicle(tokenID)
+	walletAddress := helpers.GetWallet(c)
+	err = tc.validateVehicleOwnership(tokenID, walletAddress)
 	if err != nil {
 		return err
-	}
-
-	if vehicle == nil || vehicle.Owner != walletAddress.Hex() {
-		return fiber.NewError(fiber.StatusUnauthorized, "Vehicle does not belong to the authenticated user.")
 	}
 
 	// check if we have access token
@@ -687,6 +691,20 @@ func (tc *TeslaController) decideOnAction(c *fiber.Ctx, sd *dbmodels.SyntheticDe
 		return nil, fiber.NewError(fiber.StatusInternalServerError, fmt.Sprintf("Error determining fleet action: %s", err.Error()))
 	}
 	return resp, nil
+}
+
+// validateVehicleOwnership checks if the vehicle belongs to the authenticated user.
+func (tc *TeslaController) validateVehicleOwnership(tokenID int64, walletAddress common.Address) error {
+	vehicle, err := tc.fetchVehicle(tokenID)
+	if err != nil {
+		return err
+	}
+
+	if vehicle == nil || vehicle.Owner != walletAddress.Hex() {
+		return fiber.NewError(fiber.StatusUnauthorized, "Vehicle does not belong to the authenticated user.")
+	}
+
+	return nil
 }
 
 func extractVehicleTokenId(c *fiber.Ctx) (int64, error) {
