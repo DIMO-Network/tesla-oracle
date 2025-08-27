@@ -129,6 +129,36 @@ func (ts *TeslaService) UpdateSubscriptionStatus(ctx context.Context, synthDevic
 	return nil
 }
 
+// UpdateCreds stores the given credential for the given synthDevice.
+// This function encrypts the access and refresh tokens before saving them to the database.
+func (tc *TeslaService) UpdateCreds(c context.Context, synthDevice *dbmodels.SyntheticDevice, creds *Credential) error {
+
+	encryptedAccess, err := tc.Cipher.Encrypt(creds.AccessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+
+	encryptedRefresh, err := tc.Cipher.Encrypt(creds.RefreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt access token: %w", err)
+	}
+
+	// store encrypted credentials
+	synthDevice.AccessToken = null.String{String: encryptedAccess, Valid: true}
+	synthDevice.AccessExpiresAt = null.TimeFrom(creds.AccessExpiry)
+	synthDevice.RefreshToken = null.String{String: encryptedRefresh, Valid: true}
+	synthDevice.RefreshExpiresAt = null.TimeFrom(creds.RefreshExpiry)
+
+	// Save the changes to the database
+	// todo add transaction handling
+	_, err = synthDevice.Update(c, tc.pdb.DBS().Writer, boil.Infer())
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.StatusDecisionResponse, error) {
 	var action models.StatusDecisionAction
 	var message string

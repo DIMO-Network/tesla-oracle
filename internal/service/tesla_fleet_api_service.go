@@ -42,6 +42,7 @@ type TeslaFleetAPIService interface {
 	UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error
 	GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*VehicleTelemetryStatus, error)
 	GetPartnersToken(ctx context.Context) (*PartnersAccessTokenResponse, error)
+	RefreshToken(ctx context.Context, refreshToken string) (*RefreshTokenResp, error)
 }
 
 var teslaScopes = []string{"openid", "offline_access", "user_data", "vehicle_device_data", "vehicle_cmds", "vehicle_charging_cmds"}
@@ -148,11 +149,11 @@ type UnSubscribeFromTelemetryDataResponse struct {
 }
 
 type teslaFleetAPIService struct {
-	Settings           *config.Settings
-	HTTPClient         shttp.ClientWrapper
-	PartnersHTTPClient shttp.ClientWrapper
-	log                *zerolog.Logger
-	FleetBase          *url.URL
+	Settings        *config.Settings
+	HTTPClient      shttp.ClientWrapper
+	TokenHTTPClient shttp.ClientWrapper
+	log             *zerolog.Logger
+	FleetBase       *url.URL
 }
 
 func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) (TeslaFleetAPIService, error) {
@@ -188,11 +189,11 @@ func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) 
 	}
 
 	return &teslaFleetAPIService{
-		Settings:           settings,
-		HTTPClient:         client,
-		PartnersHTTPClient: partnersClient,
-		log:                logger,
-		FleetBase:          u,
+		Settings:        settings,
+		HTTPClient:      client,
+		TokenHTTPClient: partnersClient,
+		log:             logger,
+		FleetBase:       u,
 	}, nil
 }
 
@@ -248,7 +249,7 @@ func (t *teslaFleetAPIService) GetPartnersToken(ctx context.Context) (*PartnersA
 	data.Set("scope", strings.Join(teslaScopes, " "))
 
 	// we have baseUrl set as whole URI
-	resp, err := t.PartnersHTTPClient.ExecuteRequest("", http.MethodPost, []byte(data.Encode()))
+	resp, err := t.TokenHTTPClient.ExecuteRequest("", http.MethodPost, []byte(data.Encode()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to perform request: %w", err)
 	}
@@ -264,6 +265,40 @@ func (t *teslaFleetAPIService) GetPartnersToken(ctx context.Context) (*PartnersA
 	}
 
 	return &tokenResponse, nil
+}
+
+// RefreshTokenResp contains the fields we want from the OAuth2 refresh
+// token call. We can't use /x/oauth2's struct because they do some weird stuff
+// with expires_in.
+type RefreshTokenResp struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+func (t *teslaFleetAPIService) RefreshToken(ctx context.Context, refreshToken string) (*RefreshTokenResp, error) {
+	data := url.Values{}
+	data.Set("grant_type", "refresh_token")
+	data.Set("client_id", t.Settings.TeslaClientID)
+	data.Set("refresh_token", refreshToken)
+
+	// we have baseUrl set as whole URI
+	resp, err := t.TokenHTTPClient.ExecuteRequest("", http.MethodPost, []byte(data.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("failed to perform request: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
+	}
+
+	var refreshTokenResponse RefreshTokenResp
+	if errDecoding := json.NewDecoder(resp.Body).Decode(&refreshTokenResponse); errDecoding != nil {
+		return nil, fmt.Errorf("failed to parse response: %w", errDecoding)
+	}
+
+	return &refreshTokenResponse, nil
 }
 
 // GetVehicles calls Tesla Fleet API to get a list of vehicles using authorization token
