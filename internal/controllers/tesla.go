@@ -138,7 +138,6 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
 		subscribeTelemetryFailureCount.Inc()
-		tc.logger.Err(err)
 		return err
 	}
 
@@ -243,7 +242,6 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
 		unsubscribeTelemetryFailureCount.Inc()
-		tc.logger.Err(err)
 		return err
 	}
 
@@ -476,7 +474,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 // @Produce     json
 // @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to fetch vehicle details"
 // @Security    BearerAuth
-// @Success     200 {object} models.StatusDecisionResponse "Vehicle status details and next action"
+// @Success     200 {object} struct{Message string; Next *models.NextAction} "Vehicle status details and next action"
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
@@ -485,11 +483,8 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
-		tc.logger.Err(err)
 		return err
 	}
-
-	// earlier we used query by VIN, but now we have tokenID in path.
 	sd, err := tc.teslaService.GetByVehicleTokenID(c.Context(), tc.logger, tc.pdb, tokenID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by VIN.")
@@ -513,9 +508,18 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	}
 
 	// get status and decide on action
-	resp, err := tc.decideOnAction(c, sd, accessToken, tokenID)
+	statusDecision, err := tc.decideOnAction(c, sd, accessToken, tokenID)
 	if err != nil {
 		return err
+	}
+
+	// do not return internal action to client
+	resp := struct {
+		Message string             `json:"message"`
+		Next    *models.NextAction `json:"next,omitempty"`
+	}{
+		Message: statusDecision.Message,
+		Next:    statusDecision.Next,
 	}
 
 	return c.JSON(resp)
@@ -687,7 +691,7 @@ func (tc *TeslaController) startStreamingOrPolling(c *fiber.Ctx, sd *dbmodels.Sy
 
 // decideOnAction determines the next action for a Tesla vehicle based on its fleet status.
 // It retrieves the vehicle's connection status and evaluates the appropriate action using a decision tree.
-func (tc *TeslaController) decideOnAction(c *fiber.Ctx, sd *dbmodels.SyntheticDevice, accessToken string, tokenID int64) (*models.StatusDecisionResponse, error) {
+func (tc *TeslaController) decideOnAction(c *fiber.Ctx, sd *dbmodels.SyntheticDevice, accessToken string, tokenID int64) (*models.StatusDecision, error) {
 	// get vehicle status
 	connectionStatus, err := tc.fleetAPISvc.VirtualKeyConnectionStatus(c.Context(), accessToken, sd.Vin)
 	if err != nil {

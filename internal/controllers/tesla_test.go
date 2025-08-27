@@ -83,7 +83,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 	testCases := []struct {
 		name                       string
 		fleetStatus                *service.VehicleFleetStatus
-		expectedAction             mods.StatusDecisionAction
+		expectedAction             string
 		expectedStatusCode         int
 		expectedSubscriptionStatus string
 	}{
@@ -229,7 +229,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 	testCases := []struct {
 		name                       string
 		fleetStatus                *service.VehicleFleetStatus
-		expectedAction             mods.StatusDecisionAction
+		expectedAction             string
 		expectedStatusCode         int
 		expectedConfigLimitReached bool
 	}{
@@ -713,7 +713,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 	testCases := []struct {
 		name               string
 		fleetStatus        *service.VehicleFleetStatus
-		expectedResponse   *mods.StatusDecisionResponse
+		expectedResponse   *mods.StatusDecision
 		expectedStatusCode int
 	}{
 		{
@@ -722,9 +722,8 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      true,
 			},
-			expectedResponse: &mods.StatusDecisionResponse{
-				Action:  mods.ActionSetTelemetryConfig,
-				Message: "Vehicle stream compatible. Subscribe to telemetry to enable streaming.",
+			expectedResponse: &mods.StatusDecision{
+				Message: mods.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
 					Endpoint: "/v1/tesla/telemetry/subscribe/" + fmt.Sprint(vehicleTokenID),
@@ -738,9 +737,8 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      false,
 			},
-			expectedResponse: &mods.StatusDecisionResponse{
-				Action:  mods.ActionOpenTeslaDeeplink,
-				Message: "Virtual key not paired. Open Tesla app deeplink for pairing.",
+			expectedResponse: &mods.StatusDecision{
+				Message: mods.MessageVirtualKeyNotPaired,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -750,9 +748,8 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2023.10.14",
 			},
-			expectedResponse: &mods.StatusDecisionResponse{
-				Action:  mods.ActionUpdateFirmware,
-				Message: "Firmware too old. Please update to 2025.20 or higher.",
+			expectedResponse: &mods.StatusDecision{
+				Message: mods.MessageFirmwareTooOld,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -762,9 +759,8 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2025.21.11",
 			},
-			expectedResponse: &mods.StatusDecisionResponse{
-				Action:  mods.ActionStartPolling,
-				Message: "Streaming toggle not present. Start polling vehicle telemetry.",
+			expectedResponse: &mods.StatusDecision{
+				Message: mods.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
 					Endpoint: "/v1/tesla/telemetry/subscribe/" + fmt.Sprint(vehicleTokenID),
@@ -779,9 +775,8 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				SafetyScreenStreamingToggleEnabled: func(b bool) *bool { return &b }(false),
 				FirmwareVersion:                    "2025.21.11",
 			},
-			expectedResponse: &mods.StatusDecisionResponse{
-				Action:  mods.ActionPromptToggle,
-				Message: "Streaming toggle disabled. Prompt user to enable it.",
+			expectedResponse: &mods.StatusDecision{
+				Message: mods.MessageStreamingToggleDisabled,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -792,9 +787,8 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				SafetyScreenStreamingToggleEnabled: func(b bool) *bool { return &b }(true),
 				FirmwareVersion:                    "2025.21.11",
 			},
-			expectedResponse: &mods.StatusDecisionResponse{
-				Action:  mods.ActionSetTelemetryConfig,
-				Message: "Vehicle stream compatible. Subscribe to telemetry to enable streaming.",
+			expectedResponse: &mods.StatusDecision{
+				Message: mods.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
 					Endpoint: "/v1/tesla/telemetry/subscribe/" + fmt.Sprint(vehicleTokenID),
@@ -859,13 +853,12 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			s.Require().NoError(err)
 
 			// verify
-			var actualResponse mods.StatusDecisionResponse
+			var actualResponse mods.StatusDecision
 			err = parseResponse(resp, &actualResponse)
 			s.Require().NoError(err)
 
 			// Assert the response and status code
 			s.Equal(tc.expectedStatusCode, resp.StatusCode)
-			s.Equal(tc.expectedResponse.Action, actualResponse.Action)
 			s.Equal(tc.expectedResponse.Message, actualResponse.Message)
 			s.Equal(tc.expectedResponse.Next, actualResponse.Next)
 

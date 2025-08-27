@@ -74,21 +74,26 @@ type GraphQlData[T any] struct {
 	Data T `json:"data"`
 }
 
-type StatusDecisionAction string
-
 const (
-	ActionSetTelemetryConfig StatusDecisionAction = "set_telemetry_config"
-	ActionOpenTeslaDeeplink  StatusDecisionAction = "open_tesla_deeplink"
-	ActionUpdateFirmware     StatusDecisionAction = "update_firmware"
-	ActionStartPolling       StatusDecisionAction = "start_polling"
-	ActionPromptToggle       StatusDecisionAction = "prompt_toggle"
-	ActionDummy              StatusDecisionAction = "do_nothing"
+	ActionSetTelemetryConfig = "set_telemetry_config"
+	ActionOpenTeslaDeeplink  = "open_tesla_deeplink"
+	ActionUpdateFirmware     = "update_firmware"
+	ActionStartPolling       = "start_polling"
+	ActionPromptToggle       = "prompt_toggle"
+	ActionDummy              = "do_nothing"
 )
 
-type StatusDecisionResponse struct {
-	Action  StatusDecisionAction `json:"action"`
-	Message string               `json:"message"`
-	Next    *NextAction          `json:"next,omitempty"`
+const (
+	MessageReadyToStartDataFlow    = "Vehicle ready to start data flow. Call start data flow endpoint"
+	MessageVirtualKeyNotPaired     = "Virtual key not paired. Open Tesla app deeplink for pairing."
+	MessageFirmwareTooOld          = "Firmware too old. Please update to 2025.20 or higher."
+	MessageStreamingToggleDisabled = "Streaming toggle disabled. Prompt user to enable it."
+)
+
+type StatusDecision struct {
+	Action  string      `json:"action"`
+	Message string      `json:"message"`
+	Next    *NextAction `json:"next,omitempty"`
 }
 
 type NextAction struct {

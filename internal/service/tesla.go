@@ -90,8 +90,7 @@ func (ts *TeslaService) GetByVehicleTokenID(ctx context.Context, logger *zerolog
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrVehicleNotFound
 		}
-		logger.Error().Err(err).Msgf("Failed to check if vehicle %d has been processed", tokenID)
-		return nil, err
+		return nil, fmt.Errorf("failed to check if vehicle %d has been processed: %w", tokenID, err)
 	}
 
 	return sd, nil
@@ -159,22 +158,22 @@ func (tc *TeslaService) UpdateCreds(c context.Context, synthDevice *dbmodels.Syn
 	return nil
 }
 
-func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.StatusDecisionResponse, error) {
-	var action models.StatusDecisionAction
+func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.StatusDecision, error) {
+	var action string
 	var message string
 	var next *models.NextAction
 
 	if fleetStatus.VehicleCommandProtocolRequired {
 		if fleetStatus.KeyPaired {
 			action = models.ActionSetTelemetryConfig
-			message = "Vehicle stream compatible. Subscribe to telemetry to enable streaming."
+			message = models.MessageReadyToStartDataFlow
 			next = &models.NextAction{
 				Method:   "POST",
 				Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
 			}
 		} else {
 			action = models.ActionOpenTeslaDeeplink
-			message = "Virtual key not paired. Open Tesla app deeplink for pairing."
+			message = models.MessageVirtualKeyNotPaired
 		}
 	} else {
 		meetsFirmware, err := IsFirmwareFleetTelemetryCapable(fleetStatus.FirmwareVersion)
@@ -183,30 +182,30 @@ func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (
 		}
 		if !meetsFirmware {
 			action = models.ActionUpdateFirmware
-			message = "Firmware too old. Please update to 2025.20 or higher."
+			message = models.MessageFirmwareTooOld
 		} else {
 			if fleetStatus.SafetyScreenStreamingToggleEnabled == nil {
 				action = models.ActionStartPolling
-				message = "Streaming toggle not present. Start polling vehicle telemetry."
+				message = models.MessageReadyToStartDataFlow
 				next = &models.NextAction{
 					Method:   "POST",
 					Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
 				}
 			} else if *fleetStatus.SafetyScreenStreamingToggleEnabled {
 				action = models.ActionSetTelemetryConfig
-				message = "Vehicle stream compatible. Subscribe to telemetry to enable streaming."
+				message = models.MessageReadyToStartDataFlow
 				next = &models.NextAction{
 					Method:   "POST",
 					Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
 				}
 			} else {
 				action = models.ActionPromptToggle
-				message = "Streaming toggle disabled. Prompt user to enable it."
+				message = models.MessageStreamingToggleDisabled
 			}
 		}
 	}
 
-	return &models.StatusDecisionResponse{
+	return &models.StatusDecision{
 		Action:  action,
 		Message: message,
 		Next:    next,
