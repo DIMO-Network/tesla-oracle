@@ -150,7 +150,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	}
 	sd, err := tc.teslaService.GetByVehicleTokenID(c.Context(), tc.logger, tc.pdb, tokenID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by VIN.")
+		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by vehicle token id.")
 	}
 
 	err = tc.startStreamingOrPolling(c, sd, logger, tokenID)
@@ -488,7 +488,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	}
 	sd, err := tc.teslaService.GetByVehicleTokenID(c.Context(), tc.logger, tc.pdb, tokenID)
 	if err != nil {
-		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by VIN.")
+		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by vehicle token id.")
 	}
 
 	// check if the user owns the vehicle

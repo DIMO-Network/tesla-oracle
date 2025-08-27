@@ -35,64 +35,26 @@ func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, cipher c
 
 // GetVehicleByVIN retrieves a vehicle by its VIN.
 func (ts *TeslaService) GetVehicleByVIN(ctx context.Context, logger *zerolog.Logger, pdb *db.Store, vin string) (*dbmodels.SyntheticDevice, error) {
-	tx, err := pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %s", vin)
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				logger.Error().Err(rbErr).Msgf("GetVehicleByVIN: Failed to rollback transaction for vehicle %s", vin)
-			}
-		} else {
-			if cmErr := tx.Commit(); cmErr != nil {
-				logger.Error().Err(cmErr).Msgf("GetVehicleByVIN: Failed to commit transaction for vehicle %s", vin)
-			}
-		}
-	}()
-
-	sd, err := dbmodels.SyntheticDevices(
-		dbmodels.SyntheticDeviceWhere.Vin.EQ(vin)).One(ctx, tx)
+	sd, err := dbmodels.SyntheticDevices(dbmodels.SyntheticDeviceWhere.Vin.EQ(vin)).One(ctx, pdb.DBS().Reader)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrVehicleNotFound
 		}
-		logger.Error().Err(err).Msgf("Failed to check if vehicle %s has been processed", vin)
-		return nil, err
+		return nil, fmt.Errorf("failed to query vehicle with VIN %s: %w", vin, err)
 	}
-
 	return sd, nil
 }
 
 // GetByVehicleTokenID retrieves a vehicle by its VIN.
 func (ts *TeslaService) GetByVehicleTokenID(ctx context.Context, logger *zerolog.Logger, pdb *db.Store, tokenID int64) (*dbmodels.SyntheticDevice, error) {
-	tx, err := pdb.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %d", tokenID)
-		return nil, err
-	}
-	defer func() {
-		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				logger.Error().Err(rbErr).Msgf("GetVehicleByVIN: Failed to rollback transaction for vehicle %d", tokenID)
-			}
-		} else {
-			if cmErr := tx.Commit(); cmErr != nil {
-				logger.Error().Err(cmErr).Msgf("GetVehicleByVIN: Failed to commit transaction for vehicle %d", tokenID)
-			}
-		}
-	}()
-
 	sd, err := dbmodels.SyntheticDevices(
-		dbmodels.SyntheticDeviceWhere.VehicleTokenID.EQ(null.IntFrom(int(tokenID)))).One(ctx, tx)
+		dbmodels.SyntheticDeviceWhere.VehicleTokenID.EQ(null.IntFrom(int(tokenID)))).One(ctx, pdb.DBS().Reader)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrVehicleNotFound
 		}
-		return nil, fmt.Errorf("failed to check if vehicle %d has been processed: %w", tokenID, err)
+		return nil, fmt.Errorf("failed to check if vehicle with token ID %d has been processed: %w", tokenID, err)
 	}
-
 	return sd, nil
 }
 
