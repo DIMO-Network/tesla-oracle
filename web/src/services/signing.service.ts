@@ -39,6 +39,7 @@ export class SigningService {
         }
 
         this.messageService.sendMessage({type: 'sign-mint', data: {typedData}});
+        // artificially waits until user completes operation by listening to a message coming from host with below onMessage, which is registered in useMessageService
         return new Promise<SignatureMessageData>((resolve, reject) => {
             this.waitForSignatureTimeout = setTimeout(() => {
                 return reject('Signature timed out')

@@ -4,11 +4,14 @@ option go_package = "github.com/DIMO-Network/tesla-oracle/pkg/grpc";
 
 package tesla_oracle;
 
+import "google/protobuf/timestamp.proto";
+
 /*
   TeslaOracle replaces devices-api for Tesla synthetic device calls.
 */
 service TeslaOracle {
   rpc RegisterNewSyntheticDevice(RegisterNewSyntheticDeviceRequest) returns (RegisterNewSyntheticDeviceResponse);
+  rpc RegisterNewSyntheticDeviceV2(RegisterNewSyntheticDeviceV2Request) returns (RegisterNewSyntheticDeviceV2Response);
   rpc GetSyntheticDevicesByVIN(GetSyntheticDevicesByVINRequest) returns (GetSyntheticDevicesByVINResponse);
 }
 
@@ -19,6 +22,19 @@ message RegisterNewSyntheticDeviceRequest {
 }
 
 message RegisterNewSyntheticDeviceResponse {
+}
+
+message RegisterNewSyntheticDeviceV2Request {
+  string vin = 1;
+  string encrypted_access_token = 2;
+  string encrypted_refresh_token = 3;
+  google.protobuf.Timestamp access_token_expiry = 4;
+  google.protobuf.Timestamp refresh_token_expiry = 5;
+}
+
+message RegisterNewSyntheticDeviceV2Response {
+  bytes synthetic_device_address = 1;
+  uint32 wallet_child_num = 2;
 }
 
 

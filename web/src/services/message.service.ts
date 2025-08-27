@@ -1,3 +1,5 @@
+// types of messages to be sent to mobile app host. It needs to know how to interpret these. sign-mint includes SACD.
+// Some of these are sent from us to the host, others are received from the host. Any changes here must be done in mobile app too.
 export type MessageType = 'message' | 'sign' | 'sign-mint' | 'signature' | 'onboarded' | 'open';
 
 export interface Message {
@@ -7,6 +9,7 @@ export interface Message {
 
 export type MessageHandler = (message: Message) => void
 
+// handles communication between mobile Host and the web UI
 export class MessageService {
     private static instance: MessageService;
 
@@ -33,6 +36,7 @@ export class MessageService {
         return MessageService.instance;
     }
 
+    // this can be used to register your own listeners
     public registerHandler(type: MessageType, handler: MessageHandler) {
         this.handlers[type].push(handler);
     }
@@ -62,7 +66,7 @@ export class MessageService {
         }
 
         const message = JSON.parse(event.data) as Message;
-        if (!message.type || !['message', 'signature', 'signature-mint', 'open'].includes(message.type)) {
+        if (!message.type || !['message', 'signature', 'open'].includes(message.type)) {
             return;
         }
 

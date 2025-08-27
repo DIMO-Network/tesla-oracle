@@ -19,6 +19,8 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/aarondl/null/v8"
+	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/ethereum/go-ethereum/common"
 	rd "github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
@@ -30,8 +32,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
-	"github.com/volatiletech/null/v8"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 	"gotest.tools/v3/assert"
 )
 
@@ -56,7 +56,7 @@ func (s *VehicleControllerTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 	s.logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	s.pdb, s.container, s.settings = test.StartContainerDatabase(context.Background(), s.T(), migrationsDirRelPath)
-	s.ws = service.NewSDWalletsService(s.ctx, s.logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
+	s.ws = service.NewSDWalletsService(s.logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
 	s.onboardingSvc = service.NewOnboardingService(&s.pdb, &s.logger)
 
 	fmt.Println("Suite setup completed.")

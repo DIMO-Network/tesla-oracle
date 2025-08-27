@@ -19,6 +19,8 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/aarondl/null/v8"
+	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	signer "github.com/ethereum/go-ethereum/signer/core/apitypes"
@@ -27,8 +29,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
-	"github.com/volatiletech/null/v8"
-	"github.com/volatiletech/sqlboiler/v4/boil"
 )
 
 var vinRegexp, _ = regexp.Compile("^[A-HJ-NPR-Z0-9]{17}$")
@@ -142,6 +142,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 	statuses := make([]VinStatus, 0, len(validVins))
 
 	if len(validVins) > 0 {
+		// fetch all the onboarding records that could still be moved forward. Eg. also onboardings that need to be retried.
 		dbVins, err := v.onboardingSvc.GetVehiclesByVinsAndOnboardingStatusRange(
 			c.Context(),
 			validVins,
@@ -760,7 +761,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 			if !ok {
 				continue
 			} else {
-				address, err := v.walletSvc.GetAddress(uint32(dbVin.WalletIndex.Int64))
+				address, err := v.walletSvc.GetAddress(c.Context(), uint32(dbVin.WalletIndex.Int64))
 				if err != nil {
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
 						"error": "Failed to get SD address by child index",

@@ -74,6 +74,7 @@ export interface FinalizeResponse {
     vehicles: OnboardedVehicle[]
 }
 
+// base class for other elements that will need to do onboarding operations, mostly copied from fleet-onboarding
 export class BaseOnboardingElement extends LitElement {
 
     @property({attribute: false})
@@ -157,6 +158,7 @@ export class BaseOnboardingElement extends LitElement {
         const result: VinMintData[] = [];
         for (const d of mintingData) {
             if (d.typedData) {
+                // blocks until the operation completes by the user
                 const signatureData = await this.signingService.signMintTypedData(d.typedData);
 
                 if (!signatureData) {
@@ -166,7 +168,7 @@ export class BaseOnboardingElement extends LitElement {
                 result.push({
                     ...d,
                     signature: signatureData.signature,
-                    sacd: signatureData.sacd,
+                    sacd: signatureData.sacd, // this is provided from the mobile app, or whatever signer is wrapping
                 })
             } else {
                 result.push(d)
@@ -180,7 +182,7 @@ export class BaseOnboardingElement extends LitElement {
         const payload: {vinMintingData: VinMintData[]} = {
             vinMintingData: mintingData,
         }
-
+        // submit the river job
         const mintResponse = await this.api.callApi('POST', '/v1/vehicle/mint', payload, true);
         if (!mintResponse.success || !mintResponse.data) {
             return false;
@@ -190,6 +192,7 @@ export class BaseOnboardingElement extends LitElement {
         for (const attempt of range(30)) {
             success = true
             const query = qs.stringify({vins: mintingData.map(m => m.vin).join(',')}, {arrayFormat: 'comma'});
+            // poll for the river job status, looking for Success
             const status = await this.api.callApi<VinsOnboardingResult>('GET', `/v1/vehicle/mint/status?${query}`, null, true);
 
             if (!status.success || !status.data) {
@@ -209,7 +212,7 @@ export class BaseOnboardingElement extends LitElement {
                 break;
             }
 
-            if (attempt < 19) {
+            if (attempt < 29) {
                 await delay(5000);
             }
         }
@@ -223,6 +226,7 @@ export class BaseOnboardingElement extends LitElement {
 
     // this does the minting of vehicle and synthetic. borrowed from fleet web app
     async onboardVINs(vehicles: VehicleOnboardingData[]): Promise<FinalizeResponse | null> {
+        // check vin validity
         let allVinsValid = true;
         for (const vehicle of vehicles) {
             const validVin = vehicle.vin.length === 17
@@ -238,28 +242,29 @@ export class BaseOnboardingElement extends LitElement {
             this.displayFailure("Some of the VINs are not valid");
             return null;
         }
-
+        // calls backend to make sure vehicle meets conditions. if a vehicle token id was passed in, verifies various things and updates record.
         const verified = await this.verifyVehicles(vehicles);
         if (!verified) {
             this.displayFailure("Failed to verify vehicles");
             return null;
         }
-
+        // get the typed data to be signed.
         const vins = vehicles.map((v) => v.vin);
         const mintData = await this.getMintingData(vins);
         if (mintData.length === 0) {
             this.displayFailure("Failed to fetch minting data");
             return null
         }
-
+        // web3 operation to sign the passed in data, but signing is not done by the browser but instead by the host eg. mobile app
         const signedMintData = await this.signMintingData(mintData);
+        // this step actually does the minting. Can do both Vehicle and Synthetic. Submits a River Job.
         const minted = await this.submitMintingData(signedMintData);
 
         if (!minted) {
             this.displayFailure("Failed to onboard at least one VIN");
             return null;
         }
-
+        // unique step for tesla. Creates record in the main oracle table, synthetic devices, and then deletes the onboarding record: Migrates the data.
         const finalized = await this.finalize(vins);
         if (!finalized.success || !finalized.data) {
             return null;

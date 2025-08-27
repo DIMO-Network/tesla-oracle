@@ -24,7 +24,7 @@ type SDWalletsServiceTestSuite struct {
 func (s *SDWalletsServiceTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	s.ws = NewSDWalletsService(s.ctx, logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
+	s.ws = NewSDWalletsService(logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
 }
 
 func TestSDWalletsServiceTestSuite(t *testing.T) {
@@ -43,7 +43,7 @@ func (s *SDWalletsServiceTestSuite) TestGetAddress() {
 	// Generate 5 sets of addresses
 	for i := 0; i < 1000; i++ {
 		arrayIndex := i % 5
-		address, err := s.ws.GetAddress(uint32(arrayIndex))
+		address, err := s.ws.GetAddress(s.T().Context(), uint32(arrayIndex))
 		s.Require().NoError(err)
 		addresses[arrayIndex] = append(addresses[arrayIndex], address)
 	}
@@ -78,7 +78,7 @@ func (s *SDWalletsServiceTestSuite) TestHashSign() {
 
 	// Generate addresses
 	for i := 0; i < 5; i++ {
-		address, err := s.ws.GetAddress(uint32(i))
+		address, err := s.ws.GetAddress(s.T().Context(), uint32(i))
 		s.Require().NoError(err)
 		addresses[i] = address
 	}
@@ -89,13 +89,13 @@ func (s *SDWalletsServiceTestSuite) TestHashSign() {
 		message := fmt.Sprintf("test message %d", i)
 		hash := crypto.Keccak256([]byte(message))
 		hashes[arrayIndex] = append(hashes[arrayIndex], common.BytesToHash(hash))
-		signature, err := s.ws.SignHash(hash, uint32(arrayIndex))
+		signature, err := s.ws.SignHash(s.T().Context(), hash, uint32(arrayIndex))
 		s.Require().NoError(err)
 		signatures[arrayIndex] = append(signatures[arrayIndex], signature)
 	}
 
 	for i := 0; i < 5; i++ {
-		address, err := s.ws.GetAddress(uint32(i))
+		address, err := s.ws.GetAddress(s.T().Context(), uint32(i))
 		s.Require().NoError(err)
 		s.Require().Equal(addresses[i], address)
 		s.Require().Len(hashes[i], 200)

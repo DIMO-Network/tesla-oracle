@@ -15,19 +15,17 @@ import (
 )
 
 type SDWalletsAPI interface {
-	GetAddress(index uint32) (common.Address, error)
-	SignHash(hash []byte, index uint32) ([]byte, error)
-	SignTypedData(data signer.TypedData, index uint32) ([]byte, error)
+	GetAddress(ctx context.Context, index uint32) (common.Address, error)
+	SignHash(ctx context.Context, hash []byte, index uint32) ([]byte, error)
+	SignTypedData(ctx context.Context, data signer.TypedData, index uint32) ([]byte, error)
 }
 
 type SDWalletsService struct {
-	ctx    context.Context
 	logger zerolog.Logger
 	key    *hdkeychain.ExtendedKey
 }
 
-func NewSDWalletsService(ctx context.Context, logger zerolog.Logger, settings config.Settings) *SDWalletsService {
-
+func NewSDWalletsService(logger zerolog.Logger, settings config.Settings) *SDWalletsService {
 	seed := common.FromHex(settings.SDWalletsSeed)
 
 	if len(seed) != hdkeychain.RecommendedSeedLen {
@@ -42,13 +40,12 @@ func NewSDWalletsService(ctx context.Context, logger zerolog.Logger, settings co
 	}
 
 	return &SDWalletsService{
-		ctx:    ctx,
 		logger: logger,
 		key:    key,
 	}
 }
 
-func (s *SDWalletsService) GetAddress(index uint32) (common.Address, error) {
+func (s *SDWalletsService) GetAddress(ctx context.Context, index uint32) (common.Address, error) {
 	pk, err := s.getPrivateKey(index)
 	if err != nil {
 		return common.Address{}, err
@@ -57,7 +54,7 @@ func (s *SDWalletsService) GetAddress(index uint32) (common.Address, error) {
 	return crypto.PubkeyToAddress(pk.PublicKey), nil
 }
 
-func (s *SDWalletsService) SignHash(hash []byte, index uint32) ([]byte, error) {
+func (s *SDWalletsService) SignHash(ctx context.Context, hash []byte, index uint32) ([]byte, error) {
 	pk, err := s.getPrivateKey(index)
 	if err != nil {
 		return nil, err
@@ -73,13 +70,13 @@ func (s *SDWalletsService) SignHash(hash []byte, index uint32) ([]byte, error) {
 	return sig, nil
 }
 
-func (s *SDWalletsService) SignTypedData(data signer.TypedData, index uint32) ([]byte, error) {
+func (s *SDWalletsService) SignTypedData(ctx context.Context, data signer.TypedData, index uint32) ([]byte, error) {
 	hash, _, err := signer.TypedDataAndHash(data)
 	if err != nil {
 		return nil, err
 	}
 
-	return s.SignHash(hash, index)
+	return s.SignHash(ctx, hash, index)
 }
 
 func (s *SDWalletsService) getPrivateKey(index uint32) (*ecdsa.PrivateKey, error) {

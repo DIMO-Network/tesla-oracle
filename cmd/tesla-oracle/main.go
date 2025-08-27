@@ -86,8 +86,8 @@ func main() {
 	identityService := service.NewIdentityAPIService(&logger, &settings)
 	deviceDefinitionsService := service.NewDeviceDefinitionsAPIService(&logger, &settings)
 
-	walletService := service.NewSDWalletsService(ctx, logger, settings)
-	if walletService == nil {
+	walletService, err := service.NewSDWalletEnclaveClient(&logger, settings)
+	if err != nil {
 		logger.Fatal().Err(err).Msg("Failed to create SD Wallets service")
 	}
 
@@ -114,7 +114,7 @@ func main() {
 	logger.Info().Str("port", strconv.Itoa(settings.WebPort)).Msgf("Starting web server %d", settings.WebPort)
 	StartFiberApp(gCtx, webApp, ":"+strconv.Itoa(settings.WebPort), group, &logger, useLocalTLS)
 
-	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &logger)
+	teslaSvc := rpc.NewTeslaRPCService(pdb.DBS, &logger, walletService)
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(grpc_middleware.ChainUnaryServer(
 			mdw.MetricsMiddleware(),
