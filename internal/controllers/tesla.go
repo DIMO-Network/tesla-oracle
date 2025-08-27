@@ -155,6 +155,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 
 	err = tc.startStreamingOrPolling(c, sd, logger, tokenID)
 	if err != nil {
+		subscribeTelemetryFailureCount.Inc()
 		return err
 	}
 
@@ -298,7 +299,7 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	err = tc.teslaService.UpdateSubscriptionStatus(c.Context(), device, "inactive")
 	if err != nil {
 		logger.Err(err).Msg("Failed to update subscription status.")
-		subscribeTelemetryFailureCount.Inc()
+		unsubscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update subscription status.")
 	}
 
@@ -664,7 +665,6 @@ func (tc *TeslaController) startStreamingOrPolling(c *fiber.Ctx, sd *dbmodels.Sy
 		subStatus, err := tc.fleetAPISvc.GetTelemetrySubscriptionStatus(c.Context(), accessToken, sd.Vin)
 		if err != nil {
 			logger.Err(err).Msg("Error checking telemetry subscription status")
-			//subscribeTelemetryFailureCount.Inc()
 			return fiber.NewError(fiber.StatusInternalServerError, "Failed to check telemetry subscription status.")
 		}
 		if subStatus.LimitReached {
@@ -673,7 +673,6 @@ func (tc *TeslaController) startStreamingOrPolling(c *fiber.Ctx, sd *dbmodels.Sy
 
 		if err := tc.fleetAPISvc.SubscribeForTelemetryData(c.Context(), accessToken, sd.Vin); err != nil {
 			logger.Err(err).Msg("Error registering for telemetry")
-			subscribeTelemetryFailureCount.Inc()
 			return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
 		}
 	} else if resp.Action == models.ActionStartPolling {
