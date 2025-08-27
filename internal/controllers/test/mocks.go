@@ -138,8 +138,11 @@ func (m *MockTeslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Cont
 }
 
 func (m *MockTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*service.VehicleTelemetryStatus, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, token, vin)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.VehicleTelemetryStatus), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *MockTeslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context, accessToken, vin string) error {

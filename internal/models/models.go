@@ -82,6 +82,7 @@ const (
 	ActionUpdateFirmware     StatusDecisionAction = "update_firmware"
 	ActionStartPolling       StatusDecisionAction = "start_polling"
 	ActionPromptToggle       StatusDecisionAction = "prompt_toggle"
+	ActionDummy              StatusDecisionAction = "do_nothing"
 )
 
 type StatusDecisionResponse struct {

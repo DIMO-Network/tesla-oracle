@@ -138,6 +138,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 			if tc.expectedAction == mods.ActionSetTelemetryConfig {
 				mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
+				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: false}, nil)
 			} else if tc.expectedAction == mods.ActionStartPolling {
 				mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
 			}
@@ -223,12 +224,14 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 		})
 	}
 }
+
 func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 	testCases := []struct {
-		name               string
-		fleetStatus        *service.VehicleFleetStatus
-		expectedAction     mods.StatusDecisionAction
-		expectedStatusCode int
+		name                       string
+		fleetStatus                *service.VehicleFleetStatus
+		expectedAction             mods.StatusDecisionAction
+		expectedStatusCode         int
+		expectedConfigLimitReached bool
 	}{
 		{
 			name: "Start Streaming",
@@ -236,8 +239,9 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      true,
 			},
-			expectedAction:     mods.ActionSetTelemetryConfig,
-			expectedStatusCode: fiber.StatusOK,
+			expectedAction:             mods.ActionSetTelemetryConfig,
+			expectedStatusCode:         fiber.StatusOK,
+			expectedConfigLimitReached: false,
 		},
 		{
 			name: "Start Polling",
@@ -245,8 +249,9 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2025.21.11",
 			},
-			expectedAction:     mods.ActionStartPolling,
-			expectedStatusCode: fiber.StatusOK,
+			expectedAction:             mods.ActionStartPolling,
+			expectedStatusCode:         fiber.StatusOK,
+			expectedConfigLimitReached: false,
 		},
 		{
 			name: "Vehicle Not Ready",
@@ -254,8 +259,19 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      false,
 			},
-			expectedAction:     mods.ActionOpenTeslaDeeplink,
-			expectedStatusCode: fiber.StatusConflict,
+			expectedAction:             mods.ActionOpenTeslaDeeplink,
+			expectedStatusCode:         fiber.StatusConflict,
+			expectedConfigLimitReached: false,
+		},
+		{
+			name: "Telemetry subscription limit reached",
+			fleetStatus: &service.VehicleFleetStatus{
+				VehicleCommandProtocolRequired: true,
+				KeyPaired:                      true,
+			},
+			expectedAction:             mods.ActionDummy,
+			expectedStatusCode:         fiber.StatusConflict,
+			expectedConfigLimitReached: true,
 		},
 	}
 
@@ -269,8 +285,11 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 
 			if tc.expectedAction == mods.ActionSetTelemetryConfig {
 				mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
+				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: tc.expectedConfigLimitReached}, nil)
 			} else if tc.expectedAction == mods.ActionStartPolling {
 				mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
+			} else if tc.expectedAction == mods.ActionDummy {
+				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: tc.expectedConfigLimitReached}, nil)
 			}
 
 			mockTeslaService.On("VirtualKeyConnectionStatus", mock.Anything, "mockAccessToken", vin).Return(tc.fleetStatus, nil)

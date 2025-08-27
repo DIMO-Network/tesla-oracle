@@ -659,6 +659,16 @@ func (tc *TeslaController) startStreamingOrPolling(c *fiber.Ctx, sd *dbmodels.Sy
 
 	// call appropriate action
 	if resp.Action == models.ActionSetTelemetryConfig {
+		subStatus, err := tc.fleetAPISvc.GetTelemetrySubscriptionStatus(c.Context(), accessToken, sd.Vin)
+		if err != nil {
+			logger.Err(err).Msg("Error checking telemetry subscription status")
+			//subscribeTelemetryFailureCount.Inc()
+			return fiber.NewError(fiber.StatusInternalServerError, "Failed to check telemetry subscription status.")
+		}
+		if subStatus.LimitReached {
+			return fiber.NewError(fiber.StatusConflict, "Telemetry subscription limit reached. Vehicle has reached max supported applications and new fleet telemetry requests cannot be added to the vehicle.")
+		}
+
 		if err := tc.fleetAPISvc.SubscribeForTelemetryData(c.Context(), accessToken, sd.Vin); err != nil {
 			logger.Err(err).Msg("Error registering for telemetry")
 			subscribeTelemetryFailureCount.Inc()
