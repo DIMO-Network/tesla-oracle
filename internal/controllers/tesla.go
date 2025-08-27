@@ -16,12 +16,12 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/aarondl/null/v8"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/friendsofgo/errors"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
-	"github.com/volatiletech/null/v8"
 )
 
 type CredStore interface {
