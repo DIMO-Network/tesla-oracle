@@ -362,9 +362,10 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			assert.NoError(s.T(), err)
 			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
 
-			if tc.expectedAction == mods.ActionSetTelemetryConfig {
+			switch tc.expectedAction {
+			case mods.ActionSetTelemetryConfig:
 				mockTeslaService.AssertCalled(s.T(), "SubscribeForTelemetryData", mock.Anything, mock.Anything, vin)
-			} else if tc.expectedAction == mods.ActionStartPolling {
+			case mods.ActionStartPolling:
 				mockDevicesService.AssertCalled(s.T(), "StartTeslaTask", mock.Anything, int64(vehicleTokenID))
 			}
 

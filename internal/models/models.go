@@ -100,3 +100,8 @@ type NextAction struct {
 	Method   string `json:"method"`
 	Endpoint string `json:"endpoint"`
 }
+
+type VehicleStatusResponse struct {
+	Message string      `json:"message"`
+	Next    *NextAction `json:"next"`
+}

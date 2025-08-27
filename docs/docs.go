@@ -396,7 +396,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Vehicle status details and next action",
                         "schema": {
-                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionResponse"
+                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VehicleStatusResponse"
                         }
                     },
                     "400": {
@@ -803,29 +803,9 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionAction": {
-            "type": "string",
-            "enum": [
-                "set_telemetry_config",
-                "open_tesla_deeplink",
-                "update_firmware",
-                "start_polling",
-                "prompt_toggle"
-            ],
-            "x-enum-varnames": [
-                "ActionSetTelemetryConfig",
-                "ActionOpenTeslaDeeplink",
-                "ActionUpdateFirmware",
-                "ActionStartPolling",
-                "ActionPromptToggle"
-            ]
-        },
-        "github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionResponse": {
+        "github_com_DIMO-Network_tesla-oracle_internal_models.VehicleStatusResponse": {
             "type": "object",
             "properties": {
-                "action": {
-                    "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.StatusDecisionAction"
-                },
                 "message": {
                     "type": "string"
                 },

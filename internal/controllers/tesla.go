@@ -475,7 +475,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 // @Produce     json
 // @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to fetch vehicle details"
 // @Security    BearerAuth
-// @Success     200 {object} struct{Message string; Next *models.NextAction} "Vehicle status details and next action"
+// @Success 200 {object} models.VehicleStatusResponse "Vehicle status details and next action"
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
@@ -515,10 +515,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	}
 
 	// do not return internal action to client
-	resp := struct {
-		Message string             `json:"message"`
-		Next    *models.NextAction `json:"next,omitempty"`
-	}{
+	resp := &models.VehicleStatusResponse{
 		Message: statusDecision.Message,
 		Next:    statusDecision.Next,
 	}
