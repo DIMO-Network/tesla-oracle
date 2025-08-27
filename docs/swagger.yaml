@@ -211,6 +211,57 @@ info:
   title: DIMO Tesla Oracle API
   version: "1.0"
 paths:
+  /v1/tesla/{vehicleTokenId}/start:
+    post:
+      consumes:
+      - application/json
+      description: Initiates the data flow for a Tesla vehicle using the provided
+        vehicle token ID.
+      parameters:
+      - description: Vehicle token ID that must be set in the request path to fetch
+          vehicle details
+        in: path
+        name: vehicleTokenId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Successfully started data flow for the vehicle.
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized or vehicle does not belong to the authenticated
+            user.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "404":
+          description: Vehicle not found or failed to get vehicle by token ID.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "409":
+          description: Vehicle is not ready for telemetry subscription. Call GetStatus
+            endpoint to determine next steps.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error, including decryption or fleet status
+            retrieval failures.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Start data flow for Tesla vehicle
+      tags:
+      - tesla
+      - start
   /v1/tesla/{vehicleTokenId}/status:
     get:
       consumes:
@@ -296,11 +347,15 @@ paths:
           schema:
             $ref: '#/definitions/fiber.Error'
         "401":
-          description: Unauthorized or no credentials found for the vehicle.
+          description: Unauthorized or invalid developer license.
           schema:
             $ref: '#/definitions/fiber.Error'
         "404":
           description: Vehicle not found or failed to get vehicle by VIN.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "409":
+          description: Vehicle is not ready for telemetry subscription.
           schema:
             $ref: '#/definitions/fiber.Error'
         "500":

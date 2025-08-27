@@ -8,6 +8,6 @@ Run `make help` to see commands
 
 ## Swagger
 
-``
+`make generate-swagger`
 
 We use https://github.com/swaggo/swag with the fiber support. 
