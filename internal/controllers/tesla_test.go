@@ -136,10 +136,11 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			mockTeslaService := new(test.MockTeslaFleetAPIService)
 			mockDevicesService := new(test.MockDevicesGRPCService)
 
-			if tc.expectedAction == mods.ActionSetTelemetryConfig {
+			switch tc.expectedAction {
+			case mods.ActionSetTelemetryConfig:
 				mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
 				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: false}, nil)
-			} else if tc.expectedAction == mods.ActionStartPolling {
+			case mods.ActionStartPolling:
 				mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
 			}
 
@@ -198,9 +199,10 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			assert.NoError(s.T(), err)
 			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
 
-			if tc.expectedAction == mods.ActionSetTelemetryConfig {
+			switch tc.expectedAction {
+			case mods.ActionSetTelemetryConfig:
 				mockTeslaService.AssertCalled(s.T(), "SubscribeForTelemetryData", mock.Anything, mock.Anything, vin)
-			} else if tc.expectedAction == mods.ActionStartPolling {
+			case mods.ActionStartPolling:
 				mockDevicesService.AssertCalled(s.T(), "StartTeslaTask", mock.Anything, int64(vehicleTokenID))
 			}
 
@@ -283,12 +285,13 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			mockTeslaService := new(test.MockTeslaFleetAPIService)
 			mockDevicesService := new(test.MockDevicesGRPCService)
 
-			if tc.expectedAction == mods.ActionSetTelemetryConfig {
+			switch tc.expectedAction {
+			case mods.ActionSetTelemetryConfig:
 				mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
 				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: tc.expectedConfigLimitReached}, nil)
-			} else if tc.expectedAction == mods.ActionStartPolling {
+			case mods.ActionStartPolling:
 				mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
-			} else if tc.expectedAction == mods.ActionDummy {
+			case mods.ActionDummy:
 				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: tc.expectedConfigLimitReached}, nil)
 			}
 

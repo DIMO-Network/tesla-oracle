@@ -632,7 +632,7 @@ func (tc *TeslaController) getOrRefreshAccessToken(c *fiber.Ctx, sd *dbmodels.Sy
 			}
 			errUpdate := tc.teslaService.UpdateCreds(c.Context(), sd, &creds)
 			if errUpdate != nil {
-				logger.Warn().Err(err).Msg("Failed to update credentials after refresh.")
+				logger.Warn().Err(errUpdate).Msg("Failed to update credentials after refresh.")
 			}
 			return tokens.AccessToken, nil
 		} else {
@@ -661,7 +661,8 @@ func (tc *TeslaController) startStreamingOrPolling(c *fiber.Ctx, sd *dbmodels.Sy
 	}
 
 	// call appropriate action
-	if resp.Action == models.ActionSetTelemetryConfig {
+	switch resp.Action {
+	case models.ActionSetTelemetryConfig:
 		subStatus, err := tc.fleetAPISvc.GetTelemetrySubscriptionStatus(c.Context(), accessToken, sd.Vin)
 		if err != nil {
 			logger.Err(err).Msg("Error checking telemetry subscription status")
@@ -675,12 +676,14 @@ func (tc *TeslaController) startStreamingOrPolling(c *fiber.Ctx, sd *dbmodels.Sy
 			logger.Err(err).Msg("Error registering for telemetry")
 			return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
 		}
-	} else if resp.Action == models.ActionStartPolling {
+
+	case models.ActionStartPolling:
 		startErr := tc.devicesService.StartTeslaTask(c.Context(), tokenID)
 		if startErr != nil {
 			logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
 		}
-	} else {
+
+	default:
 		return fiber.NewError(fiber.StatusConflict, "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps.")
 	}
 	return nil
