@@ -610,9 +610,7 @@ func (tc *TeslaController) getOrRefreshAccessToken(c *fiber.Ctx, sd *dbmodels.Sy
 	if err != nil {
 		return "", fiber.NewError(fiber.StatusInternalServerError, "Failed to decrypt access token.")
 	}
-	res := time.Now().After(sd.AccessExpiresAt.Time)
-	fmt.Printf("Now: %v, Expiry: %v, After: %v\n", time.Now(), sd.AccessExpiresAt.Time, res)
-	fmt.Println(res)
+
 	if !sd.AccessExpiresAt.IsZero() && time.Now().After(sd.AccessExpiresAt.Time) {
 		refreshToken, err := tc.teslaService.Cipher.Decrypt(sd.RefreshToken.String)
 		if err != nil {
