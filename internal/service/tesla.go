@@ -139,7 +139,7 @@ func (tc *TeslaService) UpdateCreds(c context.Context, synthDevice *dbmodels.Syn
 
 	encryptedRefresh, err := tc.Cipher.Encrypt(creds.RefreshToken)
 	if err != nil {
-		return fmt.Errorf("failed to encrypt access token: %w", err)
+		return fmt.Errorf("failed to encrypt refresh token: %w", err)
 	}
 
 	// store encrypted credentials
