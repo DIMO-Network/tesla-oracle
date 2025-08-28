@@ -2,9 +2,7 @@ package credlistener
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"time"
 
@@ -14,7 +12,6 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/IBM/sarama"
 	"github.com/aarondl/null/v8"
-	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/rs/zerolog"
 )
 
@@ -23,12 +20,9 @@ type Consumer struct {
 	logger *zerolog.Logger
 }
 
-var credUpdateWhitelist = boil.Whitelist(
-	models.SyntheticDeviceColumns.AccessToken,
-	models.SyntheticDeviceColumns.AccessExpiresAt,
-	models.SyntheticDeviceColumns.RefreshToken,
-	models.SyntheticDeviceColumns.RefreshExpiresAt,
-)
+func New(dbs db.Store, logger *zerolog.Logger) *Consumer {
+	return &Consumer{dbs: dbs, logger: logger}
+}
 
 func (c *Consumer) Setup(_ sarama.ConsumerGroupSession) error   { return nil }
 func (c *Consumer) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }
@@ -36,19 +30,28 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 	for {
 		select {
 		case msg := <-claim.Messages():
-			err := c.Handle(session.Context(), msg.Value)
+			err := c.Handle(session.Context(), msg)
+			if err != nil {
+				c.logger.Err(err).Msg("Credential consumer error.")
+				// We're just going to keep going for now. See you in 8 hours?
+				// TODO(elffjs): Proper retry behavior. Never give up.
+			}
+			if session.Context().Err() != nil {
+				return nil
+			}
 		case <-session.Context().Done():
 			return nil
 		}
 	}
 }
 
-func (c *Consumer) Handle(ctx context.Context, msgValue []byte) error {
+func (c *Consumer) Handle(ctx context.Context, msg *sarama.ConsumerMessage) error {
 	var ce cloudevent.CloudEvent[sdtask.CredentialData]
 
-	err := json.Unmarshal(msgValue, &ce)
+	err := json.Unmarshal(msg.Value, &ce)
 	if err != nil {
-		return fmt.Errorf("couldn't deserialize credentials")
+		c.logger.Warn().Err(err).Msgf("Couldn't parse credential message.")
+		return nil
 	}
 
 	cd := ce.Data
@@ -61,27 +64,25 @@ func (c *Consumer) Handle(ctx context.Context, msgValue []byte) error {
 
 	if sd.IntegrationTokenID != 2 {
 		// Don't expect this to be possible right now, but let's see.
+		// This is an outdated identifier, obviously.
 		return nil
 	}
 
-	sdm, err := models.SyntheticDevices(models.SyntheticDeviceWhere.TokenID.EQ(null.IntFrom(sd.TokenID))).One(ctx, c.dbs.DBS().Reader)
+	cols := models.SyntheticDeviceColumns
+
+	// Tokens are encrypted
+	rowCount, err := models.SyntheticDevices(models.SyntheticDeviceWhere.TokenID.EQ(null.IntFrom(sd.TokenID))).UpdateAll(ctx, c.dbs.DBS().Writer, models.M{
+		cols.AccessToken:      null.StringFrom(cd.AccessToken),
+		cols.AccessExpiresAt:  null.TimeFrom(cd.Expiry),
+		cols.RefreshToken:     null.StringFrom(cd.RefreshToken),
+		cols.RefreshExpiresAt: null.TimeFrom(cd.Expiry.Add(-8*time.Hour + 3*30*24*time.Hour)),
+	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			c.logger.Warn().Int("sdId", sd.TokenID).Msg("Got a credential message for a synthetic device we don't know.")
-			return nil
-		}
-		return err
+		return fmt.Errorf("failed to update credentials in database: %w", err)
 	}
 
-	sdm.AccessToken = null.StringFrom(cd.AccessToken)
-	sdm.AccessExpiresAt = null.TimeFrom(cd.Expiry)
-	sdm.RefreshToken = null.StringFrom(cd.RefreshToken)
-	sdm.RefreshExpiresAt = null.TimeFrom(cd.Expiry.Add(-8*time.Hour + 3*30*24*time.Hour))
-
-	// TODO(elffjs): Probably ought to check this row count.
-	_, err = sdm.Update(ctx, c.dbs.DBS().Writer, credUpdateWhitelist)
-	if err != nil {
-		return err
+	if rowCount == 0 {
+		c.logger.Warn().Int("sdId", sd.TokenID).Msgf("Could not find synthetic device to update.")
 	}
 
 	return nil

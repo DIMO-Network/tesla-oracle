@@ -16,6 +16,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/app"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
+	"github.com/DIMO-Network/tesla-oracle/internal/credlistener"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
@@ -158,17 +159,20 @@ func main() {
 			logger.Fatal().Err(err).Msg("error creating consumer from client")
 		}
 
-		cGroup.Consume()
-
-		proc := consumer.New(pdb, settings.TopicContractEvent, &logger)
+		cl := credlistener.New(pdb, &logger)
 
 		group.Go(func() error {
-			if err := StartContractEventConsumer(gCtx, proc, cGroup, settings.TopicContractEvent, &logger); err != nil {
-				return fmt.Errorf("error starting contract event consumer: %w", err)
+			for {
+				err := cGroup.Consume(gCtx, []string{settings.CredentialKTable}, cl)
+				if err != nil {
+					logger.Warn().Err(err).Msg("Credential consumer error.")
+				}
+				if gCtx.Err() != nil {
+					return nil
+				}
 			}
-
-			return nil
 		})
+
 	}
 
 	group.Go(func() error {

@@ -86,6 +86,7 @@ env:
     GQ==
     -----END CERTIFICATE-----
   SYNTHETIC_WALLET_GRPC_ADDR: synthetic-wallet-instance-dev:8086
+  CREDENTIAL_KTABLE: table.task.credential
 service:
   type: ClusterIP
   ports:
