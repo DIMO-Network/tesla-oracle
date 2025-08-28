@@ -730,7 +730,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				Message: mods.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
-					Endpoint: "/v1/tesla/telemetry/subscribe/" + fmt.Sprint(vehicleTokenID),
+					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
 				},
 			},
 			expectedStatusCode: fiber.StatusOK,
@@ -767,7 +767,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				Message: mods.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
-					Endpoint: "/v1/tesla/telemetry/subscribe/" + fmt.Sprint(vehicleTokenID),
+					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
 				},
 			},
 			expectedStatusCode: fiber.StatusOK,
@@ -795,7 +795,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				Message: mods.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
-					Endpoint: "/v1/tesla/telemetry/subscribe/" + fmt.Sprint(vehicleTokenID),
+					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
 				},
 			},
 			expectedStatusCode: fiber.StatusOK,
