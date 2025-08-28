@@ -91,7 +91,6 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			}
 
 			session.MarkMessage(msg, "")
-
 		}
 	}
 }

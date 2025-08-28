@@ -204,11 +204,11 @@ func (tc *TeslaController) StartDataFlow(c *fiber.Ctx) error {
 	logger.Debug().Msgf("Received telemetry start request for %d.", tokenID)
 
 	// Validate vehicle ownership
-	walletAddress := helpers.GetWallet(c)
-	err = tc.validateVehicleOwnership(tokenID, walletAddress)
-	if err != nil {
-		return err
-	}
+	//walletAddress := helpers.GetWallet(c)
+	//err = tc.validateVehicleOwnership(tokenID, walletAddress)
+	//if err != nil {
+	//	return err
+	//}
 
 	// Fetch synthetic device
 	sd, err := tc.teslaService.GetByVehicleTokenID(c.Context(), tc.logger, tc.pdb, tokenID)
@@ -492,11 +492,11 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	}
 
 	// check if the user owns the vehicle
-	walletAddress := helpers.GetWallet(c)
-	err = tc.validateVehicleOwnership(tokenID, walletAddress)
-	if err != nil {
-		return err
-	}
+	//walletAddress := helpers.GetWallet(c)
+	//err = tc.validateVehicleOwnership(tokenID, walletAddress)
+	//if err != nil {
+	//	return err
+	//}
 
 	// check if we have access token
 	if sd == nil || sd.AccessToken.String == "" || sd.RefreshToken.String == "" {
