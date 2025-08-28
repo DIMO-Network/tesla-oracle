@@ -16,6 +16,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/app"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
+	"github.com/DIMO-Network/tesla-oracle/internal/credlistener"
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
@@ -146,6 +147,30 @@ func main() {
 			}
 
 			return nil
+		})
+	}
+
+	{
+		config := sarama.NewConfig()
+		config.Version = sarama.V3_6_0_0
+		logger.Info().Msgf("Starting gRPC server on port %d", settings.GRPCPort)
+		cGroup, err := sarama.NewConsumerGroup([]string{settings.KafkaBrokers}, "tesla-oracle", config)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("error creating consumer from client")
+		}
+
+		cl := credlistener.New(pdb, &logger)
+
+		group.Go(func() error {
+			for {
+				err := cGroup.Consume(gCtx, []string{settings.CredentialKTable}, cl)
+				if err != nil {
+					logger.Warn().Err(err).Msg("Credential consumer error.")
+				}
+				if gCtx.Err() != nil {
+					return nil
+				}
+			}
 		})
 	}
 
