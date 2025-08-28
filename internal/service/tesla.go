@@ -131,7 +131,7 @@ func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (
 			message = models.MessageReadyToStartDataFlow
 			next = &models.NextAction{
 				Method:   "POST",
-				Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
+				Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
 			}
 		} else {
 			action = models.ActionOpenTeslaDeeplink
@@ -151,14 +151,14 @@ func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (
 				message = models.MessageReadyToStartDataFlow
 				next = &models.NextAction{
 					Method:   "POST",
-					Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
+					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
 				}
 			} else if *fleetStatus.SafetyScreenStreamingToggleEnabled {
 				action = models.ActionSetTelemetryConfig
 				message = models.MessageReadyToStartDataFlow
 				next = &models.NextAction{
 					Method:   "POST",
-					Endpoint: fmt.Sprintf("/v1/tesla/telemetry/subscribe/%d", vehicleTokenID),
+					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
 				}
 			} else {
 				action = models.ActionPromptToggle
