@@ -172,7 +172,6 @@ func main() {
 				}
 			}
 		})
-
 	}
 
 	group.Go(func() error {
