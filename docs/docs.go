@@ -52,8 +52,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "tesla",
-                    "subscribe"
+                    "telemetry"
                 ],
                 "summary": "Subscribe vehicle for Tesla Telemetry Data",
                 "parameters": [
@@ -123,8 +122,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "tesla",
-                    "unsubscribe"
+                    "telemetry"
                 ],
                 "summary": "Unsubscribe vehicle from Tesla Telemetry Data",
                 "parameters": [
@@ -188,8 +186,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "tesla",
-                    "vehicles"
+                    "tesla"
                 ],
                 "summary": "Get user vehicles",
                 "parameters": [
@@ -252,8 +249,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "tesla",
-                    "virtual-key"
+                    "tesla"
                 ],
                 "summary": "Get virtual key status",
                 "parameters": [
@@ -308,8 +304,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "tesla",
-                    "start"
+                    "tesla"
                 ],
                 "summary": "Start data flow for Tesla vehicle",
                 "parameters": [
@@ -379,8 +374,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "tesla",
-                    "fleet"
+                    "tesla"
                 ],
                 "summary": "Get vehicle status",
                 "parameters": [
