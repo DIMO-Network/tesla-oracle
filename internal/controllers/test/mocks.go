@@ -85,6 +85,11 @@ type MockTeslaFleetAPIService struct {
 	mock.Mock
 }
 
+func (m *MockTeslaFleetAPIService) RefreshToken(ctx context.Context, refreshToken string) (*service.RefreshTokenResp, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *MockTeslaFleetAPIService) GetPartnersToken(ctx context.Context) (*service.PartnersAccessTokenResponse, error) {
 	args := m.Called(ctx)
 	if args.Get(0) != nil {
@@ -120,8 +125,11 @@ func (m *MockTeslaFleetAPIService) WakeUpVehicle(ctx context.Context, token stri
 }
 
 func (m *MockTeslaFleetAPIService) VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*service.VehicleFleetStatus, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, token, vin)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.VehicleFleetStatus), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *MockTeslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error {
@@ -130,8 +138,11 @@ func (m *MockTeslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Cont
 }
 
 func (m *MockTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*service.VehicleTelemetryStatus, error) {
-	//TODO implement me
-	panic("implement me")
+	args := m.Called(ctx, token, vin)
+	if args.Get(0) != nil {
+		return args.Get(0).(*service.VehicleTelemetryStatus), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *MockTeslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context, accessToken, vin string) error {

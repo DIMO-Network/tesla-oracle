@@ -116,12 +116,14 @@ func App(
 		}
 		logger.Info().Msg("Using redis CredStore implementation.")
 	}
+	// todo put teslaFleetAPISvc as member of teslaService
 	teslaFleetAPISvc, err := service.NewTeslaFleetAPIService(settings, logger)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Error constructing Tesla Fleet API client.")
 	}
 
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, credStore, onboardingSvc, pdb)
+	teslaService := *service.NewTeslaService(settings, logger, cip, pdb)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, credStore, onboardingSvc, teslaService, pdb)
 	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr, pdb, credStore)
 
 	jwtAuth := jwtware.New(jwtware.Config{
@@ -138,6 +140,8 @@ func App(
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
 	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
+	teslaGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
+	teslaGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
 
 	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
 	vehicleGroup.Post("/verify", onboardCtrl.VerifyVins)
@@ -145,8 +149,6 @@ func App(
 	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
 	vehicleGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
-	// TODO: temporary, remove when finished
-	//vehicleGroup.Post("/clear", onboardCtrl.ClearOnboardingData)
 
 	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
 	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
