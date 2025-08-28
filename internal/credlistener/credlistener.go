@@ -39,6 +39,7 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 			if session.Context().Err() != nil {
 				return nil
 			}
+			session.MarkMessage(msg, "")
 		case <-session.Context().Done():
 			return nil
 		}
