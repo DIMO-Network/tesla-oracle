@@ -245,7 +245,6 @@ paths:
       summary: Start data flow for Tesla vehicle
       tags:
       - tesla
-      - start
   /v1/tesla/{vehicleTokenId}/status:
     get:
       consumes:
@@ -290,7 +289,6 @@ paths:
       summary: Get vehicle status
       tags:
       - tesla
-      - fleet
   /v1/tesla/settings:
     get:
       description: Get config params for frontend app
@@ -351,8 +349,7 @@ paths:
       - BearerAuth: []
       summary: Subscribe vehicle for Tesla Telemetry Data
       tags:
-      - tesla
-      - subscribe
+      - telemetry
   /v1/tesla/telemetry/unsubscribe/{vehicleTokenId}:
     post:
       consumes:
@@ -394,8 +391,7 @@ paths:
       - BearerAuth: []
       summary: Unsubscribe vehicle from Tesla Telemetry Data
       tags:
-      - tesla
-      - unsubscribe
+      - telemetry
   /v1/tesla/vehicles:
     post:
       consumes:
@@ -437,7 +433,6 @@ paths:
       summary: Get user vehicles
       tags:
       - tesla
-      - vehicles
   /v1/tesla/virtual-key:
     get:
       consumes:
@@ -473,7 +468,6 @@ paths:
       summary: Get virtual key status
       tags:
       - tesla
-      - virtual-key
   /v1/vehicle/finalize:
     post:
       consumes:
