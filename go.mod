@@ -6,7 +6,6 @@ require (
 	github.com/DIMO-Network/devices-api v1.40.2
 	github.com/DIMO-Network/go-transactions v0.3.4
 	github.com/DIMO-Network/go-zerodev v0.4.2
-	github.com/DIMO-Network/model-garage v0.7.1
 	github.com/DIMO-Network/shared v1.0.7
 	github.com/IBM/sarama v1.43.3
 	github.com/aarondl/null/v8 v8.1.3

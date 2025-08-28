@@ -16,8 +16,6 @@ github.com/DIMO-Network/go-transactions v0.3.4 h1:Sia+vdsyzwSw3HsNSkL0IVGQKmm5nD
 github.com/DIMO-Network/go-transactions v0.3.4/go.mod h1:U02LY27YEceF1gR9rr9hA0IcEUbpPnt4jX4CTrLIzfg=
 github.com/DIMO-Network/go-zerodev v0.4.2 h1:3sQgND3cIeVzMkgO/opbFRZKHcaLdTfm1C+k1f59U5M=
 github.com/DIMO-Network/go-zerodev v0.4.2/go.mod h1:tHy71nqd4Z1QRPgHu7KQlm3/SCuU5sZZ6qGMADOobjI=
-github.com/DIMO-Network/model-garage v0.7.1 h1:tXghHGVEkqtFuzXWj3VLjK7L0YpYbKzimPPN9PHn9fQ=
-github.com/DIMO-Network/model-garage v0.7.1/go.mod h1:D9Dz+6+lh1k/z1oUQ9W6S60al9d4yKCide37nOQnznc=
 github.com/DIMO-Network/shared v1.0.7 h1:LfSgsqJ6R7EUyfo2GTfuhrCpoDcweJqe7eVOa4j7Xbo=
 github.com/DIMO-Network/shared v1.0.7/go.mod h1:lDHUKwwT2LW6Zvd42Nb33dXklRNTmfyOlbUNx2dQfGY=
 github.com/DIMO-Network/synthetic-wallet-instance v0.0.0-20250520010101-f9981f12cbe6 h1:kr2AOLbLgwU3lAjrOxBZ9qOi/Pnx4SeH2wDDIrBPsmg=
