@@ -118,7 +118,7 @@ type partialTeslaClaims struct {
 //	Validates the developer license, retrieves the synthetic device, and initiates telemetry streaming
 //	or polling based on the vehicle's status. Updates the subscription status to "active" upon success.
 //
-// @Tags        tesla,subscribe
+// @Tags        telemetry
 // @Accept      json
 // @Produce     json
 // @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to fetch vehicle details"
@@ -179,7 +179,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 //	(streaming telemetry data or polling) based on the vehicle's status. If the vehicle is not ready
 //	for telemetry subscription, it provides instructions to the user to resolve the issue.
 //
-// @Tags        tesla,start
+// @Tags        tesla
 // @Accept      json
 // @Produce     json
 // @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to fetch vehicle details"
@@ -228,7 +228,7 @@ func (tc *TeslaController) StartDataFlow(c *fiber.Ctx) error {
 // UnsubscribeTelemetry godoc
 // @Summary     Unsubscribe vehicle from Tesla Telemetry Data
 // @Description Unsubscribes a vehicle from telemetry data using the provided vehicle token ID.
-// @Tags        tesla,unsubscribe
+// @Tags        telemetry
 // @Accept      json
 // @Produce     json
 // @Param       vehicleTokenId path string true "OnboardingService Token ID"
@@ -313,7 +313,7 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 // ListVehicles godoc
 // @Summary     Get user vehicles
 // @Description Gets Tesla vehicles owned by the user. Creates initial onboarding records for all of them.
-// @Tags        tesla,vehicles
+// @Tags        tesla
 // @Accept      json
 // @Produce     json
 // @Param       payload body controllers.CompleteOAuthExchangeRequest true "Authorization details"
@@ -423,7 +423,7 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 // GetVirtualKeyStatus godoc
 // @Summary     Get virtual key status
 // @Description Gets information about Tesla virtual key.
-// @Tags        tesla,virtual-key
+// @Tags        tesla
 // @Accept      json
 // @Produce     json
 // @Param       vin	query string true "Vehicle VIN"
@@ -470,7 +470,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 // GetStatus godoc
 // @Summary     Get vehicle status
 // @Description Get vehicle status and determines the next action for a Tesla vehicle based on its fleet status, including telemetry compatibility, virtual key pairing, firmware version, and streaming toggle settings. Provides appropriate instructions or actions for the user to enable telemetry or resolve issues.
-// @Tags        tesla,fleet
+// @Tags        tesla
 // @Accept      json
 // @Produce     json
 // @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to fetch vehicle details"
