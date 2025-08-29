@@ -169,7 +169,16 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			}
 
 			require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
-			controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, nil, nil, *teslaSvc)
+
+			vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+			onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+			mockCredStore := new(test.MockCredStore)
+			repos := &repository.Repositories{
+				Vehicle:    vehicleRepo,
+				Credential: mockCredStore,
+				Onboarding: onboardingRepo,
+			}
+			controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, repos, nil, *teslaSvc)
 			controller.devicesService = mockDevicesService
 
 			app := fiber.New()
@@ -332,7 +341,16 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
 
 			require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
-			controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, nil, nil, *teslaSvc)
+
+			vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+			onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+			mockCredStore := new(test.MockCredStore)
+			repos := &repository.Repositories{
+				Vehicle:    vehicleRepo,
+				Credential: mockCredStore,
+				Onboarding: onboardingRepo,
+			}
+			controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, repos, nil, *teslaSvc)
 			controller.devicesService = mockDevicesService
 
 			app := fiber.New()
@@ -438,7 +456,17 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	settings := config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher))
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, *teslaSvc)
+
+	// Create repositories
+	vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+	onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+	repos := &repository.Repositories{
+		Vehicle:    vehicleRepo,
+		Credential: mockCredStore,
+		Onboarding: onboardingRepo,
+	}
+
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, repos, nil, *teslaSvc)
 	controller.devicesService = mockDevicesService
 
 	// Set up the Fiber app
@@ -592,9 +620,18 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	// then
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	ons := service.NewOnboardingService(&s.pdb, &logger)
+	ons := service.NewOnboardingService(&logger)
 	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher))
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, mockDDService, mockIdentitySvc, &credStore, ons, *teslaSvc)
+	// Create repositories
+	vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+	onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+	repos := &repository.Repositories{
+		Vehicle:    vehicleRepo,
+		Credential: &credStore,
+		Onboarding: onboardingRepo,
+	}
+
+	controller := NewTeslaController(&settings, &logger, mockTeslaService, mockDDService, mockIdentitySvc, repos, ons, *teslaSvc)
 
 	// Set up the Fiber app
 	app := fiber.New()
@@ -680,7 +717,16 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher))
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, mockCredStore, nil, *teslaSvc)
+	controller := func() *TeslaController {
+		vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+		onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+		repos := &repository.Repositories{
+			Vehicle:    vehicleRepo,
+			Credential: mockCredStore,
+			Onboarding: onboardingRepo,
+		}
+		return NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, repos, nil, *teslaSvc)
+	}()
 
 	// Set up the Fiber app
 	app := s.setupFiberApp("/v1/tesla/virtual-key", "GET", controller.GetVirtualKeyStatus)
@@ -839,7 +885,16 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			mockTeslaService.On("VirtualKeyConnectionStatus", mock.Anything, "mockAccessToken", vin).Return(tc.fleetStatus, nil)
 
 			// Setup Fiber app and request
-			controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, *teslaSvc)
+			controller := func() *TeslaController {
+				vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+				onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+				repos := &repository.Repositories{
+					Vehicle:    vehicleRepo,
+					Credential: mockCredStore,
+					Onboarding: onboardingRepo,
+				}
+				return NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, repos, nil, *teslaSvc)
+			}()
 			app := fiber.New()
 			app.Use(func(c *fiber.Ctx) error {
 				token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
@@ -897,7 +952,16 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher))
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, mockCredStore, nil, *teslaSvc)
+	controller := func() *TeslaController {
+		vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+		onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+		repos := &repository.Repositories{
+			Vehicle:    vehicleRepo,
+			Credential: mockCredStore,
+			Onboarding: onboardingRepo,
+		}
+		return NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, repos, nil, *teslaSvc)
+	}()
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	dbVin := models.SyntheticDevice{
 		Address:           synthDeviceAddress.Bytes(),

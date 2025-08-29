@@ -12,7 +12,6 @@ import (
 	"github.com/DIMO-Network/go-transactions"
 	registry "github.com/DIMO-Network/go-transactions/contracts"
 	"github.com/DIMO-Network/go-zerodev"
-	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
@@ -21,7 +20,6 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
-	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	signer "github.com/ethereum/go-ethereum/signer/core/apitypes"
@@ -43,7 +41,6 @@ type VehicleController struct {
 	walletSvc     service.SDWalletsAPI
 	transactions  *transactions.Client
 	repositories  *repository.Repositories
-	pdb           *db.Store // Temporary until all services are refactored
 }
 
 func NewVehicleOnboardController(
@@ -55,7 +52,6 @@ func NewVehicleOnboardController(
 	walletSvc service.SDWalletsAPI,
 	transactions *transactions.Client,
 	repositories *repository.Repositories,
-	pdb *db.Store,
 ) *VehicleController {
 	return &VehicleController{
 		settings:      settings,
@@ -66,7 +62,6 @@ func NewVehicleOnboardController(
 		walletSvc:     walletSvc,
 		transactions:  transactions,
 		repositories:  repositories,
-		pdb:           pdb,
 	}
 }
 
@@ -797,7 +792,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					RefreshExpiresAt:  null.TimeFrom(encryptedCreds.RefreshExpiry),
 				}
 
-				errIns := sdRecord.Insert(c.Context(), v.pdb.DBS().Writer, boil.Infer())
+				errIns := v.repositories.Vehicle.InsertSyntheticDevice(c.Context(), sdRecord)
 				if errIns != nil {
 					localLog.Error().Err(errIns).Msg("Failed to insert Synthetic Device")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

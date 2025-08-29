@@ -23,6 +23,7 @@ type VehicleRepository interface {
 	GetSyntheticDeviceByAddress(ctx context.Context, address common.Address) (*dbmodels.SyntheticDevice, error)
 	UpdateSyntheticDeviceSubscriptionStatus(ctx context.Context, device *dbmodels.SyntheticDevice, status string) error
 	UpdateSyntheticDeviceCredentials(ctx context.Context, device *dbmodels.SyntheticDevice, creds *Credential) error
+	InsertSyntheticDevice(ctx context.Context, device *dbmodels.SyntheticDevice) error
 }
 
 // OnboardingRepository handles onboarding data operations (moved from OnboardingService)

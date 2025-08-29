@@ -128,3 +128,13 @@ func (r *vehicleRepository) UpdateSyntheticDeviceCredentials(ctx context.Context
 
 	return nil
 }
+
+// InsertSyntheticDevice inserts a new synthetic device record into the database
+func (r *vehicleRepository) InsertSyntheticDevice(ctx context.Context, device *dbmodels.SyntheticDevice) error {
+	err := device.Insert(ctx, r.db.DBS().Writer, boil.Infer())
+	if err != nil {
+		r.logger.Error().Err(err).Msg("Failed to insert synthetic device")
+		return fmt.Errorf("failed to insert synthetic device: %w", err)
+	}
+	return nil
+}
