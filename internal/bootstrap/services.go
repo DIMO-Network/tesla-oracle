@@ -132,15 +132,11 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 
 // initializeRepositories creates and initializes all repository implementations
 func initializeRepositories(pdb *db.Store, settings *config.Settings, logger *zerolog.Logger) *repository.Repositories {
-	// Initialize vehicle repository
-	vehicleRepo := repository.NewVehicleRepository(pdb)
 
-	// Initialize credential store (moved from app.go)
-	credStore := createCredentialStore(settings, logger)
-	credentialRepo := repository.NewCredentialRepository(credStore)
+	// Initialize credential repository directly
+	credentialRepo := createCredentialStore(settings, logger)
 
 	return &repository.Repositories{
-		Vehicle:    vehicleRepo,
 		Credential: credentialRepo,
 	}
 }
@@ -156,7 +152,7 @@ func createCipher(settings *config.Settings, logger *zerolog.Logger) cipher.Ciph
 }
 
 // createCredentialStore creates the appropriate credential store implementation
-func createCredentialStore(settings *config.Settings, logger *zerolog.Logger) repository.CredStore {
+func createCredentialStore(settings *config.Settings, logger *zerolog.Logger) repository.CredentialRepository {
 	cip := createCipher(settings, logger)
 
 	// Create cache service
