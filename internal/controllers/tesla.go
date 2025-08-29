@@ -368,15 +368,15 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
 		}
 
-		record, err := tc.onboarding.GetVehicleByVin(c.Context(), v.VIN)
+		record, err := tc.repositories.Onboarding.GetVehicleByVin(c.Context(), v.VIN)
 		if err != nil {
-			if !errors.Is(err, service.ErrVehicleNotFound) {
+			if !errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
 				logger.Err(err).Str("vin", v.VIN).Msg("Failed to fetch record.")
 			}
 		}
 
 		if record == nil {
-			err = tc.onboarding.InsertVinToDB(c.Context(), &dbmodels.Onboarding{
+			err = tc.repositories.Onboarding.InsertVinToDB(c.Context(), &dbmodels.Onboarding{
 				Vin:                v.VIN,
 				DeviceDefinitionID: null.String{String: ddRes.DeviceDefinitionID, Valid: true},
 				OnboardingStatus:   onboarding.OnboardingStatusVendorValidationSuccess,

@@ -51,7 +51,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	}
 
 	// Initialize services
-	onboardingService := service.NewOnboardingService(&pdb, logger)
+	onboardingService := service.NewOnboardingService(logger)
 	identityService := service.NewIdentityAPIService(logger, settings)
 	deviceDefinitionsService := service.NewDeviceDefinitionsAPIService(logger, settings)
 
@@ -138,9 +138,13 @@ func initializeRepositories(pdb *db.Store, settings *config.Settings, logger *ze
 	// Initialize credential repository directly
 	credentialRepo := createCredentialStore(settings, logger)
 
+	// Initialize onboarding repository
+	onboardingRepo := repository.NewOnboardingRepository(pdb, logger)
+
 	return &repository.Repositories{
 		Vehicle:    vehicleRepo,
 		Credential: credentialRepo,
+		Onboarding: onboardingRepo,
 	}
 }
 
