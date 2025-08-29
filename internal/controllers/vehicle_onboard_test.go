@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"io"
 	"os"
 	"testing"
@@ -57,7 +58,7 @@ func (s *VehicleControllerTestSuite) SetupSuite() {
 	s.logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	s.pdb, s.container, s.settings = test.StartContainerDatabase(context.Background(), s.T(), migrationsDirRelPath)
 	s.ws = service.NewSDWalletsService(s.logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
-	s.onboardingSvc = service.NewOnboardingService(&s.pdb, &s.logger)
+	s.onboardingSvc = service.NewOnboardingService(&s.logger)
 
 	fmt.Println("Suite setup completed.")
 }
@@ -85,7 +86,7 @@ func TestVehicleControllerTestSuite(t *testing.T) {
 type deps struct {
 	logger     zerolog.Logger
 	identity   service.IdentityAPIService
-	credsStore CredStore
+	credsStore repository.CredentialRepository
 }
 
 const vehicleTokenIDnoSDValidDD = 100
@@ -167,6 +168,15 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 	t := s.T()
 	mockDeps := createMockDependencies(t)
 
+	// Create repositories struct
+	vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &mockDeps.logger)
+	onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &mockDeps.logger)
+	repos := &repository.Repositories{
+		Vehicle:    vehicleRepo,
+		Credential: mockDeps.credsStore,
+		Onboarding: onboardingRepo,
+	}
+
 	c := NewVehicleOnboardController(
 		&config.Settings{Port: 3000},
 		&mockDeps.logger,
@@ -175,8 +185,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		s.river,
 		nil,
 		nil,
-		&s.pdb,
-		mockDeps.credsStore,
+		repos,
 	)
 	app := fiber.New(fiber.Config{
 		EnableSplittingOnParsers: true,
@@ -523,9 +532,18 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		KeyPrefix: "tesla-oracle",
 	})
 
-	credStore := service.TempCredsStore{
+	credStore := repository.TempCredsStore{
 		Cache:  cacheService,
 		Cipher: new(cipher.ROT13Cipher), // Example cipher
+	}
+
+	// Create repositories struct
+	vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &mockDeps.logger)
+	onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &mockDeps.logger)
+	repos := &repository.Repositories{
+		Vehicle:    vehicleRepo,
+		Credential: &credStore,
+		Onboarding: onboardingRepo,
 	}
 
 	controller := NewVehicleOnboardController(
@@ -536,8 +554,7 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		s.river,
 		s.ws,
 		nil,
-		&s.pdb,
-		&credStore,
+		repos,
 	)
 
 	app := fiber.New(fiber.Config{
@@ -598,13 +615,13 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 
 		// insert to cache
 		user := common.HexToAddress(ownerAdd)
-		creds := &service.Credential{
+		creds := &repository.Credential{
 			AccessToken:   "access_token",
 			RefreshToken:  "refresh_token",
 			AccessExpiry:  time.Now().Add(1 * time.Hour),
 			RefreshExpiry: time.Now().Add(24 * time.Hour),
 		}
-		if err := controller.credentials.Store(s.ctx, user, creds); err != nil {
+		if err := controller.repositories.Credential.Store(s.ctx, user, creds); err != nil {
 			s.T().Fatalf("failed to store credentials: %v", err)
 		}
 
@@ -623,7 +640,7 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		assert.Equal(t, string(body), expectedBody)
 
 		// Verify that the cache no longer contains the credentials
-		retrievedCreds, _ := controller.credentials.Retrieve(s.ctx, user)
+		retrievedCreds, _ := controller.repositories.Credential.Retrieve(s.ctx, user)
 		require.Nil(t, retrievedCreds)
 	})
 }
