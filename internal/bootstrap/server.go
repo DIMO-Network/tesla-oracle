@@ -57,6 +57,9 @@ func (sm *ServerManager) Initialize() error {
 		sm.services.RiverClient,
 		sm.services.WalletService,
 		sm.services.TransactionsClient,
+		sm.services.Repositories,
+		sm.services.TeslaFleetAPIService,
+		sm.services.TeslaService,
 		sm.services.DB,
 	)
 

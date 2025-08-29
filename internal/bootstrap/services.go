@@ -3,14 +3,21 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/DIMO-Network/go-transactions"
+	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/patrickmn/go-cache"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/rs/zerolog"
@@ -26,6 +33,9 @@ type Services struct {
 	WalletService            service.SDWalletsAPI
 	RiverClient              *river.Client[pgx.Tx]
 	DBPool                   *pgxpool.Pool
+	Repositories             *repository.Repositories
+	TeslaFleetAPIService     service.TeslaFleetAPIService
+	TeslaService             *service.TeslaService
 }
 
 // InitializeServices creates and initializes all application services
@@ -51,11 +61,26 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		return nil, fmt.Errorf("failed to create SD Wallets service: %w", err)
 	}
 
+	// Initialize Tesla Fleet API service
+	teslaFleetAPIService, err := service.NewTeslaFleetAPIService(settings, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Tesla Fleet API service: %w", err)
+	}
+
+	// Initialize cipher for services that need encryption
+	cip := createCipher(settings, logger)
+
+	// Initialize Tesla service
+	teslaService := service.NewTeslaService(settings, logger, cip, &pdb)
+
 	// Initialize River client with workers
 	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create river client: %w", err)
 	}
+
+	// Initialize repositories
+	repositories := initializeRepositories(&pdb, settings, logger)
 
 	return &Services{
 		DB:                       &pdb,
@@ -66,6 +91,9 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		WalletService:            walletService,
 		RiverClient:              riverClient,
 		DBPool:                   dbPool,
+		Repositories:             repositories,
+		TeslaFleetAPIService:     teslaFleetAPIService,
+		TeslaService:             teslaService,
 	}, nil
 }
 
@@ -100,6 +128,73 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 
 	return riverClient, dbPool, nil
+}
+
+// initializeRepositories creates and initializes all repository implementations
+func initializeRepositories(pdb *db.Store, settings *config.Settings, logger *zerolog.Logger) *repository.Repositories {
+	// Initialize vehicle repository
+	vehicleRepo := repository.NewVehicleRepository(pdb)
+
+	// Initialize credential store (moved from app.go)
+	credStore := createCredentialStore(settings, logger)
+	credentialRepo := repository.NewCredentialRepository(credStore)
+
+	return &repository.Repositories{
+		Vehicle:    vehicleRepo,
+		Credential: credentialRepo,
+	}
+}
+
+// createCipher creates the appropriate cipher based on environment
+func createCipher(settings *config.Settings, logger *zerolog.Logger) cipher.Cipher {
+	if settings.Environment == "dev" || settings.IsProduction() {
+		return createKMS(settings, logger)
+	} else {
+		logger.Warn().Msg("Using ROT13 encrypter. Only use this for local testing!")
+		return new(cipher.ROT13Cipher)
+	}
+}
+
+// createCredentialStore creates the appropriate credential store implementation
+func createCredentialStore(settings *config.Settings, logger *zerolog.Logger) repository.CredStore {
+	cip := createCipher(settings, logger)
+
+	// Create cache service
+	cacheService := redis.NewRedisCacheService(settings.IsProduction(), redis.Settings{
+		URL:       settings.RedisURL,
+		Password:  settings.RedisPassword,
+		TLS:       settings.RedisTLS,
+		KeyPrefix: "tesla-oracle",
+	})
+
+	// Return appropriate credential store implementation
+	if settings.EnableLocalCache {
+		logger.Info().Msg("Using LocalCache for CredStore.")
+		return &service.TempCredsLocalStore{
+			Cache:  cache.New(5*time.Minute, 10*time.Minute),
+			Cipher: cip,
+		}
+	} else {
+		logger.Info().Msg("Using redis CredStore implementation.")
+		return &service.TempCredsStore{
+			Cache:  cacheService,
+			Cipher: cip,
+		}
+	}
+}
+
+// createKMS creates a KMS cipher for encryption
+func createKMS(settings *config.Settings, logger *zerolog.Logger) cipher.Cipher {
+	// Need AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY to be set.
+	awscfg, err := awsconfig.LoadDefaultConfig(context.Background(), awsconfig.WithRegion(settings.AWSRegion))
+	if err != nil {
+		logger.Fatal().Err(err).Msg("Couldn't create AWS config.")
+	}
+
+	return &cipher.KMSCipher{
+		KeyID:  settings.KMSKeyID,
+		Client: kms.NewFromConfig(awscfg),
+	}
 }
 
 // Cleanup properly closes all services

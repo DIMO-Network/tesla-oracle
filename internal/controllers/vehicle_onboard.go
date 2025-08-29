@@ -17,6 +17,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
@@ -41,8 +42,8 @@ type VehicleController struct {
 	riverClient   *river.Client[pgx.Tx]
 	walletSvc     service.SDWalletsAPI
 	transactions  *transactions.Client
-	pdb           *db.Store
-	credentials   CredStore
+	repositories  *repository.Repositories
+	pdb           *db.Store // Temporary until all services are refactored
 }
 
 func NewVehicleOnboardController(
@@ -53,8 +54,8 @@ func NewVehicleOnboardController(
 	riverClient *river.Client[pgx.Tx],
 	walletSvc service.SDWalletsAPI,
 	transactions *transactions.Client,
+	repositories *repository.Repositories,
 	pdb *db.Store,
-	credentials CredStore,
 ) *VehicleController {
 	return &VehicleController{
 		settings:      settings,
@@ -64,8 +65,8 @@ func NewVehicleOnboardController(
 		riverClient:   riverClient,
 		walletSvc:     walletSvc,
 		transactions:  transactions,
+		repositories:  repositories,
 		pdb:           pdb,
-		credentials:   credentials,
 	}
 }
 
@@ -768,7 +769,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					})
 				}
 
-				creds, err := v.credentials.RetrieveAndDelete(c.Context(), walletAddress)
+				creds, err := v.repositories.Credential.RetrieveAndDelete(c.Context(), walletAddress)
 				if err != nil {
 					localLog.Error().Err(err).Msg("Failed to retrieve credentials")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -776,7 +777,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					})
 				}
 
-				encryptedCreds, err := v.credentials.EncryptTokens(creds)
+				encryptedCreds, err := v.repositories.Credential.EncryptTokens(creds)
 				if err != nil {
 					localLog.Error().Err(err).Msg("Failed to encrypt credentials")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{

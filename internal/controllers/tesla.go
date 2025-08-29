@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strconv"
@@ -14,6 +13,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
@@ -24,14 +24,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type CredStore interface {
-	Store(ctx context.Context, user common.Address, cred *service.Credential) error
-	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
-	RetrieveAndDelete(_ context.Context, user common.Address) (*service.Credential, error)
-	RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*service.Credential, error)
-	EncryptTokens(cred *service.Credential) (*service.Credential, error)
-}
-
 type TeslaController struct {
 	settings       *config.Settings
 	logger         *zerolog.Logger
@@ -39,14 +31,14 @@ type TeslaController struct {
 	ddSvc          service.DeviceDefinitionsAPIService
 	identitySvc    service.IdentityAPIService
 	requiredScopes []string
-	credStore      CredStore
+	repositories   *repository.Repositories
 	onboarding     *service.OnboardingService
-	pdb            *db.Store
 	devicesService service.DevicesGRPCService
 	teslaService   service.TeslaService
+	pdb            *db.Store // Temporary until TeslaService is refactored
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, teslaService service.TeslaService, pdb *db.Store) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, repositories *repository.Repositories, onboardingSvc *service.OnboardingService, teslaService service.TeslaService, pdb *db.Store) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -70,11 +62,11 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		ddSvc:          ddSvc,
 		identitySvc:    identitySvc,
 		requiredScopes: requiredScopes,
-		credStore:      store,
+		repositories:   repositories,
 		onboarding:     onboardingSvc,
-		pdb:            pdb,
 		devicesService: devicesService,
 		teslaService:   teslaService,
+		pdb:            pdb,
 	}
 }
 
@@ -351,7 +343,7 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	}
 
 	// Save tesla oauth credentials in cache
-	if err := tc.credStore.Store(c.Context(), walletAddress, &service.Credential{
+	if err := tc.repositories.Credential.Store(c.Context(), walletAddress, &service.Credential{
 		AccessToken:   teslaAuth.AccessToken,
 		RefreshToken:  teslaAuth.RefreshToken,
 		AccessExpiry:  teslaAuth.Expiry,
@@ -442,7 +434,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse request URL params")
 	}
 
-	teslaAuth, err := tc.credStore.Retrieve(c.Context(), walletAddress)
+	teslaAuth, err := tc.repositories.Credential.Retrieve(c.Context(), walletAddress)
 	if err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
