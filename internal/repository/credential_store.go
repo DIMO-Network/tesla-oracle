@@ -1,4 +1,4 @@
-package service
+package repository
 
 import (
 	"context"
@@ -24,6 +24,7 @@ var (
 	ErrNotFound = errors.New("no credentials found for user")
 )
 
+// TempCredsStore implements CredentialRepository using Redis
 type TempCredsStore struct {
 	Cache  redis.CacheService
 	Cipher cipher.Cipher
@@ -182,7 +183,8 @@ func (s *TempCredsStore) EncryptTokens(cred *Credential) (*Credential, error) {
 	}, nil
 }
 
-// TempCredsLocalStore For local development, we use a different store implementation
+// TempCredsLocalStore implements CredentialRepository using local cache
+// For local development, we use a different store implementation
 type TempCredsLocalStore struct {
 	Cache  *cache.Cache
 	Cipher cipher.Cipher

@@ -9,6 +9,7 @@ import (
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
@@ -92,7 +93,7 @@ func (ts *TeslaService) UpdateSubscriptionStatus(ctx context.Context, synthDevic
 
 // UpdateCreds stores the given credential for the given synthDevice.
 // This function encrypts the access and refresh tokens before saving them to the database.
-func (tc *TeslaService) UpdateCreds(c context.Context, synthDevice *dbmodels.SyntheticDevice, creds *Credential) error {
+func (tc *TeslaService) UpdateCreds(c context.Context, synthDevice *dbmodels.SyntheticDevice, creds *repository.Credential) error {
 
 	encryptedAccess, err := tc.Cipher.Encrypt(creds.AccessToken)
 	if err != nil {

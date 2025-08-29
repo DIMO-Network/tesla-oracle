@@ -166,13 +166,13 @@ func createCredentialStore(settings *config.Settings, logger *zerolog.Logger) re
 	// Return appropriate credential store implementation
 	if settings.EnableLocalCache {
 		logger.Info().Msg("Using LocalCache for CredStore.")
-		return &service.TempCredsLocalStore{
+		return &repository.TempCredsLocalStore{
 			Cache:  cache.New(5*time.Minute, 10*time.Minute),
 			Cipher: cip,
 		}
 	} else {
 		logger.Info().Msg("Using redis CredStore implementation.")
-		return &service.TempCredsStore{
+		return &repository.TempCredsStore{
 			Cache:  cacheService,
 			Cipher: cip,
 		}

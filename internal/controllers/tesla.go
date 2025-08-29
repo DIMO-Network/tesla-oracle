@@ -343,7 +343,7 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	}
 
 	// Save tesla oauth credentials in cache
-	if err := tc.repositories.Credential.Store(c.Context(), walletAddress, &service.Credential{
+	if err := tc.repositories.Credential.Store(c.Context(), walletAddress, &repository.Credential{
 		AccessToken:   teslaAuth.AccessToken,
 		RefreshToken:  teslaAuth.RefreshToken,
 		AccessExpiry:  teslaAuth.Expiry,
@@ -612,7 +612,7 @@ func (tc *TeslaController) getOrRefreshAccessToken(c *fiber.Ctx, sd *dbmodels.Sy
 				return "", fiber.NewError(fiber.StatusInternalServerError, "Failed to refresh access token.")
 			}
 			expiryTime := time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second)
-			creds := service.Credential{
+			creds := repository.Credential{
 				AccessToken:   tokens.AccessToken,
 				RefreshToken:  tokens.RefreshToken,
 				AccessExpiry:  expiryTime,
