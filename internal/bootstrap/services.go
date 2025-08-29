@@ -71,7 +71,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	cip := createCipher(settings, logger)
 
 	// Initialize Tesla service
-	teslaService := service.NewTeslaService(settings, logger, cip, &pdb)
+	teslaService := service.NewTeslaService(settings, logger, cip)
 
 	// Initialize River client with workers
 	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService)
@@ -80,7 +80,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	}
 
 	// Initialize repositories
-	repositories := initializeRepositories(&pdb, settings, logger)
+	repositories := initializeRepositories(&pdb, settings, logger, cip)
 
 	return &Services{
 		DB:                       &pdb,
@@ -131,12 +131,15 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 }
 
 // initializeRepositories creates and initializes all repository implementations
-func initializeRepositories(pdb *db.Store, settings *config.Settings, logger *zerolog.Logger) *repository.Repositories {
+func initializeRepositories(pdb *db.Store, settings *config.Settings, logger *zerolog.Logger, cip cipher.Cipher) *repository.Repositories {
+	// Initialize vehicle repository
+	vehicleRepo := repository.NewVehicleRepository(pdb, cip, logger)
 
 	// Initialize credential repository directly
 	credentialRepo := createCredentialStore(settings, logger)
 
 	return &repository.Repositories{
+		Vehicle:    vehicleRepo,
 		Credential: credentialRepo,
 	}
 }
