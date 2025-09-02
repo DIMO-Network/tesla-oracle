@@ -70,17 +70,28 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	// Initialize cipher for services that need encryption
 	cip := createCipher(settings, logger)
 
-	// Initialize Tesla service
-	teslaService := service.NewTeslaService(settings, logger, cip)
+	// Initialize repositories (moved before Tesla service since it depends on them)
+	repositories := initializeRepositories(&pdb, settings, logger, cip)
+
+	// Initialize devices GRPC service
+	var devicesService service.DevicesGRPCService
+	if !settings.DisableDevicesGRPC {
+		devicesService, err = service.NewDevicesGRPCService(settings, logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize DevicesGRPCService: %w", err)
+		}
+	} else {
+		logger.Warn().Msgf("Devices GRPC is DISABLED")
+	}
+
+	// Initialize Tesla service with all dependencies
+	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService)
 
 	// Initialize River client with workers
 	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create river client: %w", err)
 	}
-
-	// Initialize repositories
-	repositories := initializeRepositories(&pdb, settings, logger, cip)
 
 	return &Services{
 		DB:                       &pdb,

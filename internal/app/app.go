@@ -84,7 +84,7 @@ func App(
 	app.Get("/health", healthCheck)
 
 	// Initialize controllers with services
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, repositories, onboardingSvc, *teslaService)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, repositories, onboardingSvc, teslaService)
 	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr, repositories)
 
 	jwtAuth := jwtware.New(jwtware.Config{
