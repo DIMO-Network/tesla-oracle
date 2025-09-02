@@ -506,6 +506,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	resp := &models.VehicleStatusResponse{
 		Message: statusDecision.Message,
 		Next:    statusDecision.Next,
+		Action:  statusDecision.Action,
 	}
 
 	return c.JSON(resp)
