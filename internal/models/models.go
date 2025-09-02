@@ -76,22 +76,6 @@ type GraphQlData[T any] struct {
 	Data T `json:"data"`
 }
 
-const (
-	ActionSetTelemetryConfig = "set_telemetry_config"
-	ActionOpenTeslaDeeplink  = "open_tesla_deeplink"
-	ActionUpdateFirmware     = "update_firmware"
-	ActionStartPolling       = "start_polling"
-	ActionPromptToggle       = "prompt_toggle"
-	ActionDummy              = "do_nothing"
-)
-
-const (
-	MessageReadyToStartDataFlow    = "Vehicle ready to start data flow. Call start data flow endpoint"
-	MessageVirtualKeyNotPaired     = "Virtual key not paired. Open Tesla app deeplink for pairing."
-	MessageFirmwareTooOld          = "Firmware too old. Please update to 2025.20 or higher."
-	MessageStreamingToggleDisabled = "Streaming toggle disabled. Prompt user to enable it."
-)
-
 type StatusDecision struct {
 	Action  string      `json:"action"`
 	Message string      `json:"message"`
@@ -114,6 +98,7 @@ type TeslaVehicleRes struct {
 	Definition DeviceDefinition1 `json:"definition"`
 }
 
+// TODO remove DeviceDefinition1 and use DeviceDefinition from above?
 // DeviceDefinition1 represents vehicle device definition
 type DeviceDefinition1 struct {
 	Make               string `json:"make"`

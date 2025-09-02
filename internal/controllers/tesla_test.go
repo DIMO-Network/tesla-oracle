@@ -94,7 +94,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      true,
 			},
-			expectedAction:             mods.ActionSetTelemetryConfig,
+			expectedAction:             service.ActionSetTelemetryConfig,
 			expectedStatusCode:         fiber.StatusOK,
 			expectedSubscriptionStatus: "active",
 		},
@@ -104,7 +104,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2025.21.11",
 			},
-			expectedAction:             mods.ActionStartPolling,
+			expectedAction:             service.ActionStartPolling,
 			expectedStatusCode:         fiber.StatusOK,
 			expectedSubscriptionStatus: "active",
 		},
@@ -114,7 +114,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      false,
 			},
-			expectedAction:             mods.ActionOpenTeslaDeeplink,
+			expectedAction:             service.ActionOpenTeslaDeeplink,
 			expectedStatusCode:         fiber.StatusConflict,
 			expectedSubscriptionStatus: "pending",
 		},
@@ -124,7 +124,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2023.10.5",
 			},
-			expectedAction:             mods.ActionUpdateFirmware,
+			expectedAction:             service.ActionUpdateFirmware,
 			expectedStatusCode:         fiber.StatusConflict,
 			expectedSubscriptionStatus: "pending",
 		},
@@ -138,10 +138,10 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			mockDevicesService := new(test.MockDevicesGRPCService)
 
 			switch tc.expectedAction {
-			case mods.ActionSetTelemetryConfig:
+			case service.ActionSetTelemetryConfig:
 				mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
 				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: false}, nil)
-			case mods.ActionStartPolling:
+			case service.ActionStartPolling:
 				mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
 			}
 
@@ -179,7 +179,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 			require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
-			controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, repos, nil, teslaSvc)
+			controller := NewTeslaController(&settings, &logger, teslaSvc)
 
 			app := fiber.New()
 			app.Use(func(c *fiber.Ctx) error {
@@ -210,9 +210,9 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
 
 			switch tc.expectedAction {
-			case mods.ActionSetTelemetryConfig:
+			case service.ActionSetTelemetryConfig:
 				mockTeslaService.AssertCalled(s.T(), "SubscribeForTelemetryData", mock.Anything, mock.Anything, vin)
-			case mods.ActionStartPolling:
+			case service.ActionStartPolling:
 				mockDevicesService.AssertCalled(s.T(), "StartTeslaTask", mock.Anything, int64(vehicleTokenID))
 			}
 
@@ -251,7 +251,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      true,
 			},
-			expectedAction:             mods.ActionSetTelemetryConfig,
+			expectedAction:             service.ActionSetTelemetryConfig,
 			expectedStatusCode:         fiber.StatusOK,
 			expectedConfigLimitReached: false,
 		},
@@ -261,7 +261,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2025.21.11",
 			},
-			expectedAction:             mods.ActionStartPolling,
+			expectedAction:             service.ActionStartPolling,
 			expectedStatusCode:         fiber.StatusOK,
 			expectedConfigLimitReached: false,
 		},
@@ -271,7 +271,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      false,
 			},
-			expectedAction:             mods.ActionOpenTeslaDeeplink,
+			expectedAction:             service.ActionOpenTeslaDeeplink,
 			expectedStatusCode:         fiber.StatusConflict,
 			expectedConfigLimitReached: false,
 		},
@@ -281,7 +281,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      true,
 			},
-			expectedAction:             mods.ActionDummy,
+			expectedAction:             service.ActionDummy,
 			expectedStatusCode:         fiber.StatusConflict,
 			expectedConfigLimitReached: true,
 		},
@@ -296,12 +296,12 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			mockDevicesService := new(test.MockDevicesGRPCService)
 
 			switch tc.expectedAction {
-			case mods.ActionSetTelemetryConfig:
+			case service.ActionSetTelemetryConfig:
 				mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
 				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: tc.expectedConfigLimitReached}, nil)
-			case mods.ActionStartPolling:
+			case service.ActionStartPolling:
 				mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
-			case mods.ActionDummy:
+			case service.ActionDummy:
 				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{LimitReached: tc.expectedConfigLimitReached}, nil)
 			}
 
@@ -350,7 +350,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			}
 
 			require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
-			controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, repos, nil, teslaSvc)
+			controller := NewTeslaController(&settings, &logger, teslaSvc)
 
 			app := fiber.New()
 			app.Use(func(c *fiber.Ctx) error {
@@ -381,9 +381,9 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
 
 			switch tc.expectedAction {
-			case mods.ActionSetTelemetryConfig:
+			case service.ActionSetTelemetryConfig:
 				mockTeslaService.AssertCalled(s.T(), "SubscribeForTelemetryData", mock.Anything, mock.Anything, vin)
-			case mods.ActionStartPolling:
+			case service.ActionStartPolling:
 				mockDevicesService.AssertCalled(s.T(), "StartTeslaTask", mock.Anything, int64(vehicleTokenID))
 			}
 
@@ -467,7 +467,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 
 	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService)
 
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, repos, nil, teslaSvc)
+	controller := NewTeslaController(&settings, &logger, teslaSvc)
 
 	// Set up the Fiber app
 	app := fiber.New()
@@ -620,7 +620,6 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	// then
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	ons := service.NewOnboardingService(&logger)
 
 	// Create repositories
 	vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
@@ -633,7 +632,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 
 	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, mockDDService, nil)
 
-	controller := NewTeslaController(&settings, &logger, mockTeslaService, mockDDService, mockIdentitySvc, repos, ons, teslaSvc)
+	controller := NewTeslaController(&settings, &logger, teslaSvc)
 
 	// Set up the Fiber app
 	app := fiber.New()
@@ -729,7 +728,7 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), repos, mockTeslaService, nil, nil, nil)
 
 	controller := func() *TeslaController {
-		return NewTeslaController(&settings, &logger, mockTeslaService, nil, nil, repos, nil, teslaSvc)
+		return NewTeslaController(&settings, &logger, teslaSvc)
 	}()
 
 	// Set up the Fiber app
@@ -778,7 +777,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				KeyPaired:                      true,
 			},
 			expectedResponse: &mods.StatusDecision{
-				Message: mods.MessageReadyToStartDataFlow,
+				Message: service.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
 					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
@@ -793,7 +792,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				KeyPaired:                      false,
 			},
 			expectedResponse: &mods.StatusDecision{
-				Message: mods.MessageVirtualKeyNotPaired,
+				Message: service.MessageVirtualKeyNotPaired,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -804,7 +803,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				FirmwareVersion:                "2023.10.14",
 			},
 			expectedResponse: &mods.StatusDecision{
-				Message: mods.MessageFirmwareTooOld,
+				Message: service.MessageFirmwareTooOld,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -815,7 +814,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				FirmwareVersion:                "2025.21.11",
 			},
 			expectedResponse: &mods.StatusDecision{
-				Message: mods.MessageReadyToStartDataFlow,
+				Message: service.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
 					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
@@ -831,7 +830,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				FirmwareVersion:                    "2025.21.11",
 			},
 			expectedResponse: &mods.StatusDecision{
-				Message: mods.MessageStreamingToggleDisabled,
+				Message: service.MessageStreamingToggleDisabled,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -843,7 +842,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				FirmwareVersion:                    "2025.21.11",
 			},
 			expectedResponse: &mods.StatusDecision{
-				Message: mods.MessageReadyToStartDataFlow,
+				Message: service.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
 					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
@@ -900,7 +899,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 
 			// Setup Fiber app and request
 			controller := func() *TeslaController {
-				return NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, repos, nil, teslaSvc)
+				return NewTeslaController(&settings, &logger, teslaSvc)
 			}()
 			app := fiber.New()
 			app.Use(func(c *fiber.Ctx) error {
@@ -969,7 +968,7 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, nil)
 
 	controller := func() *TeslaController {
-		return NewTeslaController(&settings, &logger, mockTeslaService, nil, mockIdentitySvc, repos, nil, teslaSvc)
+		return NewTeslaController(&settings, &logger, teslaSvc)
 	}()
 	synthDeviceAddress := common.HexToAddress(synthDeviceAddressStr)
 	dbVin := models.SyntheticDevice{

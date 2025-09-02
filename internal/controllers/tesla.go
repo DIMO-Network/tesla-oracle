@@ -1,35 +1,26 @@
 package controllers
 
 import (
-	"fmt"
-	"slices"
 	"strings"
 	"time"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
-	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	"github.com/friendsofgo/errors"
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
 )
 
 type TeslaController struct {
 	settings       *config.Settings
 	logger         *zerolog.Logger
-	fleetAPISvc    service.TeslaFleetAPIService
-	ddSvc          service.DeviceDefinitionsAPIService
-	identitySvc    service.IdentityAPIService
 	requiredScopes []string
-	repositories   *repository.Repositories
-	onboarding     *service.OnboardingService
 	teslaService   *service.TeslaService
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, repositories *repository.Repositories, onboardingSvc *service.OnboardingService, teslaService *service.TeslaService) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaService *service.TeslaService) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -38,12 +29,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 	return &TeslaController{
 		settings:       settings,
 		logger:         logger,
-		fleetAPISvc:    teslaFleetAPISvc,
-		ddSvc:          ddSvc,
-		identitySvc:    identitySvc,
 		requiredScopes: requiredScopes,
-		repositories:   repositories,
-		onboarding:     onboardingSvc,
 		teslaService:   teslaService,
 	}
 }
@@ -71,14 +57,6 @@ type TeslaSettingsResponse struct {
 	TeslaClientID    string `json:"clientId"`
 	TeslaRedirectURI string `json:"redirectUri"`
 	VirtualKeyURL    string `json:"virtualKeyUrl"`
-}
-
-type partialTeslaClaims struct {
-	jwt.RegisteredClaims
-	Scopes []string `json:"scp"`
-
-	// For debugging.
-	OUCode string `json:"ou_code"`
 }
 
 // TelemetrySubscribe godoc
@@ -117,7 +95,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	err = tc.teslaService.SubscribeToTelemetry(c.Context(), tokenID, walletAddress)
 	if err != nil {
 		subscribeTelemetryFailureCount.Inc()
-		return err
+		return tc.translateServiceError(err)
 	}
 
 	logger.Info().Msgf("Successfully subscribed to telemetry vehicle: %d.", tokenID)
@@ -160,7 +138,7 @@ func (tc *TeslaController) StartDataFlow(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
 	err = tc.teslaService.StartVehicleDataFlow(c.Context(), tokenID, walletAddress)
 	if err != nil {
-		return err
+		return tc.translateServiceError(err)
 	}
 
 	logger.Info().Msgf("Successfully started data flow for vehicle: %d.", tokenID)
@@ -198,7 +176,7 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	err = tc.teslaService.UnsubscribeFromTelemetry(c.Context(), tokenID, walletAddress)
 	if err != nil {
 		unsubscribeTelemetryFailureCount.Inc()
-		return err
+		return tc.translateServiceError(err)
 	}
 
 	logger.Info().Msgf(`Successfully unsubscribed vehicle %d from telemetry data.`, tokenID)
@@ -231,29 +209,12 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 		return err
 	}
 
-	var claims partialTeslaClaims
-	_, _, err = jwt.NewParser().ParseUnverified(teslaAuth.AccessToken, &claims)
-	if err != nil {
-		return fiber.NewError(fiber.StatusBadRequest, "Code exchange returned an unparseable access token.")
-	}
-
-	var missingScopes []string
-	for _, scope := range tc.requiredScopes {
-		if !slices.Contains(claims.Scopes, scope) {
-			missingScopes = append(missingScopes, scope)
-		}
-	}
-
-	if len(missingScopes) != 0 {
-		return fiber.NewError(fiber.StatusBadRequest, fmt.Sprintf("Missing scopes %s.", strings.Join(missingScopes, ", ")))
-	}
-
 	decodeStart := time.Now()
 	response, err := tc.teslaService.CompleteOAuthFlow(c.Context(), walletAddress, teslaAuth)
 	if err != nil {
-		logger.Err(err).Str("subject", claims.Subject).Str("ouCode", claims.OUCode).Interface("audience", claims.Audience).Msg("Error completing OAuth flow.")
+		logger.Err(err).Msg("Error completing OAuth flow.")
 		teslaCodeFailureCount.WithLabelValues("oauth_flow").Inc()
-		return err
+		return tc.translateServiceError(err)
 	}
 	logger.Info().Msgf("Took %s to complete OAuth flow and decode %d Tesla VINs.", time.Since(decodeStart), len(response))
 
@@ -272,7 +233,7 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 // @Produce     json
 // @Param       vin	query string true "Vehicle VIN"
 // @Security    BearerAuth
-// @Success     200 {object} service.VirtualKeyStatusResponse
+// @Success     200 {object} models.VirtualKeyStatusResponse
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
 // @Failure     500 {object} fiber.Error "Internal server error"
@@ -288,7 +249,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 
 	response, err := tc.teslaService.GetVirtualKeyStatus(c.Context(), params.VIN, walletAddress)
 	if err != nil {
-		return err
+		return tc.translateServiceError(err)
 	}
 
 	return c.JSON(response)
@@ -317,7 +278,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
 	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, walletAddress)
 	if err != nil {
-		return err
+		return tc.translateServiceError(err)
 	}
 
 	// do not return internal action to client
@@ -347,18 +308,12 @@ func (tc *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeR
 		return nil, fiber.NewError(fiber.StatusBadRequest, "No redirect URI provided.")
 	}
 
-	teslaAuth, err := tc.fleetAPISvc.CompleteTeslaAuthCodeExchange(c.Context(), reqBody.AuthorizationCode, reqBody.RedirectURI)
+	// Process complete auth code exchange and validation in service
+	teslaAuth, err := tc.teslaService.ProcessAuthCodeExchange(c.Context(), reqBody.AuthorizationCode, reqBody.RedirectURI, tc.requiredScopes)
 	if err != nil {
-		if errors.Is(err, service.ErrInvalidAuthCode) {
-			teslaCodeFailureCount.WithLabelValues("auth_code").Inc()
-			return nil, fiber.NewError(fiber.StatusBadRequest, "Authorization code invalid, expired, or revoked. Retry login.")
-		}
-		return nil, fiber.NewError(fiber.StatusInternalServerError, "failed to get tesla authCode:"+err.Error())
+		return nil, tc.translateServiceError(err)
 	}
 
-	if teslaAuth.RefreshToken == "" {
-		return nil, fiber.NewError(fiber.StatusBadRequest, "Code exchange did not return a refresh token. Make sure you've granted offline_access.")
-	}
 	return teslaAuth, nil
 }
 
@@ -373,4 +328,58 @@ func extractVehicleTokenId(c *fiber.Ctx) (int64, error) {
 		return 0, fiber.NewError(fiber.StatusBadRequest, "Invalid vehicle token ID format.")
 	}
 	return tokenID, nil
+}
+
+// translateServiceError converts domain errors to appropriate Fiber HTTP errors
+func (tc *TeslaController) translateServiceError(err error) error {
+	switch {
+	case errors.Is(err, service.ErrUnauthorized):
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+	case errors.Is(err, service.ErrDevLicenseNotAllowed):
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+	case errors.Is(err, service.ErrVehicleNotFound):
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrSyntheticDeviceNotFound):
+		return fiber.NewError(fiber.StatusNotFound, err.Error())
+	case errors.Is(err, service.ErrVehicleOwnershipMismatch):
+		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
+	case errors.Is(err, service.ErrNoCredentials):
+		return fiber.NewError(fiber.StatusUnauthorized, "No credentials found for vehicle. Please reauthenticate.")
+	case errors.Is(err, service.ErrTokenExpired):
+		return fiber.NewError(fiber.StatusUnauthorized, "Refresh token has expired. Please reauthenticate.")
+	case errors.Is(err, service.ErrTelemetryLimitReached):
+		return fiber.NewError(fiber.StatusConflict, "Telemetry subscription limit reached. Vehicle has reached max supported applications and new fleet telemetry requests cannot be added to the vehicle.")
+	case errors.Is(err, service.ErrTelemetryNotReady):
+		return fiber.NewError(fiber.StatusConflict, "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps.")
+	case errors.Is(err, service.ErrVINDecoding):
+		return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
+	case errors.Is(err, service.ErrOAuthVehiclesFetch):
+		if strings.Contains(err.Error(), "region detection failed") {
+			return fiber.NewError(fiber.StatusInternalServerError, "Region detection failed. Waiting on a fix from Tesla.")
+		}
+		return fiber.NewError(fiber.StatusInternalServerError, "Couldn't fetch vehicles from Tesla.")
+	case errors.Is(err, service.ErrCredentialDecryption):
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to decrypt credentials.")
+	case errors.Is(err, service.ErrTokenRefreshFailed):
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to refresh access token.")
+	case errors.Is(err, service.ErrFleetStatusCheck):
+		return fiber.NewError(fiber.StatusInternalServerError, "Error checking fleet status.")
+	case errors.Is(err, service.ErrTelemetryConfigFailed):
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
+	case errors.Is(err, service.ErrSubscriptionStatusUpdate):
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update subscription status.")
+	case errors.Is(err, service.ErrPartnersToken):
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get partners token.")
+	case errors.Is(err, service.ErrTelemetryUnsubscribe):
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data.")
+	case errors.Is(err, service.ErrCredentialStore):
+		return fiber.NewError(fiber.StatusInternalServerError, "Error persisting credentials.")
+	case errors.Is(err, service.ErrOnboardingRecordCreation):
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to create onboarding record.")
+	case errors.Is(err, service.ErrDeviceDefinitionNotFound):
+		return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
+	default:
+		// For unknown errors
+		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error")
+	}
 }
