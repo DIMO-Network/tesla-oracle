@@ -16,7 +16,7 @@ type CredentialRepository interface {
 	EncryptTokens(cred *Credential) (*Credential, error)
 }
 
-// VehicleRepository handles SyntheticDevice data operations (moved from TeslaService)
+// VehicleRepository handles SyntheticDevice data operations
 type VehicleRepository interface {
 	GetSyntheticDeviceByVin(ctx context.Context, vin string) (*dbmodels.SyntheticDevice, error)
 	GetSyntheticDeviceByTokenID(ctx context.Context, tokenID int64) (*dbmodels.SyntheticDevice, error)
@@ -26,7 +26,7 @@ type VehicleRepository interface {
 	InsertSyntheticDevice(ctx context.Context, device *dbmodels.SyntheticDevice) error
 }
 
-// OnboardingRepository handles onboarding data operations (moved from OnboardingService)
+// OnboardingRepository handles onboarding data operations
 type OnboardingRepository interface {
 	GetOnboardingByVin(ctx context.Context, vin string) (*dbmodels.Onboarding, error)
 	GetOnboardingsByVins(ctx context.Context, vins []string) (dbmodels.OnboardingSlice, error)

@@ -244,7 +244,7 @@ func (r *onboardingRepository) InsertOrUpdateOnboarding(ctx context.Context, vin
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("InsertOnboarding: Failed to rollback transaction for vehicle %s", vin.Vin)
+				r.logger.Error().Err(rbErr).Msgf("InsertOrUpdateOnboarding: Failed to rollback transaction for vehicle %s", vin.Vin)
 			}
 		}
 	}()
@@ -311,14 +311,14 @@ func (r *onboardingRepository) DeleteOnboarding(ctx context.Context, record *dbm
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("InsertOnboarding: Failed to rollback transaction for vehicle %s", record.Vin)
+				r.logger.Error().Err(rbErr).Msgf("DeleteOnboarding: Failed to rollback transaction for vehicle %s", record.Vin)
 			}
 		}
 	}()
 
 	_, err = record.Delete(ctx, tx)
 	if err != nil {
-		return fmt.Errorf("failed to insert VIN record: %v", err)
+		return fmt.Errorf("failed to delete VIN record: %v", err)
 	}
 
 	if err := tx.Commit(); err != nil {
