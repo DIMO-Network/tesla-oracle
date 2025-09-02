@@ -800,6 +800,9 @@ const docTemplate = `{
         "github_com_DIMO-Network_tesla-oracle_internal_models.VehicleStatusResponse": {
             "type": "object",
             "properties": {
+                "action": {
+                    "type": "string"
+                },
                 "message": {
                     "type": "string"
                 },
