@@ -102,6 +102,7 @@ type NextAction struct {
 }
 
 type VehicleStatusResponse struct {
+	Action  string      `json:"action"`
 	Message string      `json:"message"`
 	Next    *NextAction `json:"next"`
 }
