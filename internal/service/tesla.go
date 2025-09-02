@@ -70,52 +70,6 @@ func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, cipher c
 	}
 }
 
-// FetchVehicle retrieves a vehicle from identity-api by its token ID.
-func (ts *TeslaService) FetchVehicle(vehicleTokenId int64) (*models.Vehicle, error) {
-	vehicle, err := ts.identitySvc.FetchVehicleByTokenID(vehicleTokenId)
-	if err != nil {
-		ts.logger.Err(err).Msg("Failed to fetch vehicle by token ID.")
-		return nil, fmt.Errorf("%w: %s", ErrVehicleNotFound, err.Error())
-	}
-
-	if vehicle == nil || vehicle.Owner == "" || vehicle.SyntheticDevice.Address == "" {
-		ts.logger.Warn().Msg("Vehicle not found or owner information or synthetic device address is missing.")
-		return nil, ErrVehicleNotFound
-	}
-	return vehicle, nil
-}
-
-// DecodeTeslaVIN decodes a Tesla VIN to get device definition information.
-func (ts *TeslaService) DecodeTeslaVIN(vin string) (*models.DeviceDefinition, error) {
-	decodeVIN, err := ts.ddSvc.DecodeVin(vin, "USA")
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrVINDecoding, err.Error())
-	}
-
-	dd, err := ts.getOrWaitForDeviceDefinition(decodeVIN.DeviceDefinitionID)
-	if err != nil {
-		return nil, err
-	}
-
-	return dd, nil
-}
-
-// getOrWaitForDeviceDefinition waits for a device definition to become available.
-func (ts *TeslaService) getOrWaitForDeviceDefinition(deviceDefinitionID string) (*models.DeviceDefinition, error) {
-	ts.logger.Debug().Str(logfields.DefinitionID, deviceDefinitionID).Msg("Waiting for device definition")
-	for i := 0; i < 12; i++ {
-		definition, err := ts.identitySvc.FetchDeviceDefinitionByID(deviceDefinitionID)
-		if err != nil || definition == nil || definition.DeviceDefinitionID == "" {
-			time.Sleep(5 * time.Second)
-			ts.logger.Debug().Str(logfields.DefinitionID, deviceDefinitionID).Msgf("Still waiting, retry %d", i+1)
-			continue
-		}
-		return definition, nil
-	}
-
-	return nil, ErrDeviceDefinitionNotFound
-}
-
 // GetOrRefreshAccessToken checks if the access token for the given synthetic device has expired.
 // If the access token is expired and the refresh token is still valid, it attempts to refresh the access token.
 // If the refresh token is expired, it returns an unauthorized error.
@@ -155,86 +109,6 @@ func (ts *TeslaService) GetOrRefreshAccessToken(ctx context.Context, sd *dbmodel
 	return accessToken, nil
 }
 
-// StartStreamingOrPolling determines whether to start streaming telemetry data or polling for a Tesla vehicle.
-// It checks if the vehicle has valid credentials, refreshes the access token if necessary, and decides the next action.
-func (ts *TeslaService) StartStreamingOrPolling(ctx context.Context, sd *dbmodels.SyntheticDevice, tokenID int64) error {
-	// check if we have access token
-	if sd == nil || sd.AccessToken.String == "" || sd.RefreshToken.String == "" {
-		return ErrNoCredentials
-	}
-
-	accessToken, err := ts.GetOrRefreshAccessToken(ctx, sd)
-	if err != nil {
-		return err
-	}
-
-	resp, err := ts.DecideOnAction(ctx, sd, accessToken, tokenID)
-	if err != nil {
-		return err
-	}
-
-	// call appropriate action
-	switch resp.Action {
-	case ActionSetTelemetryConfig:
-		subStatus, err := ts.fleetAPISvc.GetTelemetrySubscriptionStatus(ctx, accessToken, sd.Vin)
-		if err != nil {
-			ts.logger.Err(err).Msg("Error checking telemetry subscription status")
-			return fmt.Errorf("%w: %s", ErrTelemetryConfigFailed, err.Error())
-		}
-		if subStatus.LimitReached {
-			return ErrTelemetryLimitReached
-		}
-
-		if err := ts.fleetAPISvc.SubscribeForTelemetryData(ctx, accessToken, sd.Vin); err != nil {
-			ts.logger.Err(err).Msg("Error registering for telemetry")
-			return fmt.Errorf("%w: %s", ErrTelemetryConfigFailed, err.Error())
-		}
-
-	case ActionStartPolling:
-		startErr := ts.devicesSvc.StartTeslaTask(ctx, tokenID)
-		if startErr != nil {
-			ts.logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
-		}
-
-	default:
-		return ErrTelemetryNotReady
-	}
-
-	return nil
-}
-
-// DecideOnAction determines the next action for a Tesla vehicle based on its fleet status.
-// It retrieves the vehicle's connection status and evaluates the appropriate action using a decision tree.
-func (ts *TeslaService) DecideOnAction(ctx context.Context, sd *dbmodels.SyntheticDevice, accessToken string, tokenID int64) (*models.StatusDecision, error) {
-	// get vehicle status
-	connectionStatus, err := ts.fleetAPISvc.VirtualKeyConnectionStatus(ctx, accessToken, sd.Vin)
-	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrFleetStatusCheck, err.Error())
-	}
-
-	// determine action based on status
-	resp, err := DecisionTreeAction(connectionStatus, tokenID)
-	if err != nil {
-		ts.logger.Err(err)
-		return nil, fmt.Errorf("error determining fleet action: %w", err)
-	}
-	return resp, nil
-}
-
-// ValidateVehicleOwnership checks if the vehicle belongs to the authenticated user.
-func (ts *TeslaService) ValidateVehicleOwnership(tokenID int64, walletAddress common.Address) error {
-	vehicle, err := ts.FetchVehicle(tokenID)
-	if err != nil {
-		return err
-	}
-
-	if vehicle == nil || vehicle.Owner != walletAddress.Hex() {
-		return ErrVehicleOwnershipMismatch
-	}
-
-	return nil
-}
-
 // StopTeslaTask stops Tesla task for the given vehicle token ID.
 func (ts *TeslaService) StopTeslaTask(ctx context.Context, tokenID int64) error {
 	if ts.devicesSvc == nil {
@@ -258,7 +132,7 @@ func (ts *TeslaService) SubscribeToTelemetry(ctx context.Context, tokenID int64,
 	}
 
 	// Start streaming or polling
-	err = ts.StartStreamingOrPolling(ctx, sd, tokenID)
+	err = ts.startStreamingOrPolling(ctx, sd, tokenID)
 	if err != nil {
 		return err
 	}
@@ -276,7 +150,7 @@ func (ts *TeslaService) SubscribeToTelemetry(ctx context.Context, tokenID int64,
 // StartVehicleDataFlow handles the complete data flow startup workflow
 func (ts *TeslaService) StartVehicleDataFlow(ctx context.Context, tokenID int64, walletAddress common.Address) error {
 	// Validate vehicle ownership
-	err := ts.ValidateVehicleOwnership(tokenID, walletAddress)
+	err := ts.validateVehicleOwnership(tokenID, walletAddress)
 	if err != nil {
 		return err
 	}
@@ -288,7 +162,7 @@ func (ts *TeslaService) StartVehicleDataFlow(ctx context.Context, tokenID int64,
 	}
 
 	// Start streaming or polling
-	return ts.StartStreamingOrPolling(ctx, sd, tokenID)
+	return ts.startStreamingOrPolling(ctx, sd, tokenID)
 }
 
 // UnsubscribeFromTelemetry handles the complete telemetry unsubscription workflow
@@ -310,7 +184,7 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 	}
 
 	// Fetch vehicle
-	vehicle, err := ts.FetchVehicle(tokenID)
+	vehicle, err := ts.fetchVehicle(tokenID)
 	if err != nil {
 		return err
 	}
@@ -345,49 +219,6 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 	return nil
 }
 
-// CompleteTeslaAuthCodeExchange handles Tesla OAuth authorization code exchange
-func (ts *TeslaService) CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*TeslaAuthCodeResponse, error) {
-	teslaAuth, err := ts.fleetAPISvc.CompleteTeslaAuthCodeExchange(ctx, authCode, redirectURI)
-	if err != nil {
-		return nil, err
-	}
-	return teslaAuth, nil
-}
-
-// ValidateAccessTokenWithScopes validates Tesla access token and required scopes
-func (ts *TeslaService) ValidateAccessTokenWithScopes(accessToken string, requiredScopes []string) error {
-	var claims struct {
-		jwt.RegisteredClaims
-		Scopes []string `json:"scp"`
-		OUCode string   `json:"ou_code"`
-	}
-
-	_, _, err := jwt.NewParser().ParseUnverified(accessToken, &claims)
-	if err != nil {
-		return fmt.Errorf("access token is unparseable: %w", err)
-	}
-
-	var missingScopes []string
-	for _, scope := range requiredScopes {
-		found := false
-		for _, claimScope := range claims.Scopes {
-			if claimScope == scope {
-				found = true
-				break
-			}
-		}
-		if !found {
-			missingScopes = append(missingScopes, scope)
-		}
-	}
-
-	if len(missingScopes) > 0 {
-		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
-	}
-
-	return nil
-}
-
 // ProcessAuthCodeExchange handles complete auth code exchange and validation flow
 func (ts *TeslaService) ProcessAuthCodeExchange(ctx context.Context, authCode, redirectURI string, requiredScopes []string) (*TeslaAuthCodeResponse, error) {
 	// Exchange auth code for tokens
@@ -402,7 +233,7 @@ func (ts *TeslaService) ProcessAuthCodeExchange(ctx context.Context, authCode, r
 	}
 
 	// Validate token has required scopes
-	if err := ts.ValidateAccessTokenWithScopes(teslaAuth.AccessToken, requiredScopes); err != nil {
+	if err := ts.validateAccessTokenWithScopes(teslaAuth.AccessToken, requiredScopes); err != nil {
 		return nil, err
 	}
 
@@ -434,7 +265,7 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 	response := make([]models.TeslaVehicleRes, 0, len(vehicles))
 	for _, v := range vehicles {
 		// Decode VIN
-		ddRes, err := ts.DecodeTeslaVIN(v.VIN)
+		ddRes, err := ts.decodeTeslaVIN(v.VIN)
 		if err != nil {
 			ts.logger.Err(err).Str("vin", v.VIN).Msg("Failed to decode Tesla VIN.")
 			return nil, err
@@ -479,7 +310,7 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 // GetVehicleStatus handles the complete vehicle status check workflow
 func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, walletAddress common.Address) (*models.StatusDecision, error) {
 	// Validate vehicle ownership
-	err := ts.ValidateVehicleOwnership(tokenID, walletAddress)
+	err := ts.validateVehicleOwnership(tokenID, walletAddress)
 	if err != nil {
 		return nil, err
 	}
@@ -502,7 +333,7 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, wal
 	}
 
 	// Get status and decide on action
-	return ts.DecideOnAction(ctx, sd, accessToken, tokenID)
+	return ts.decideOnAction(ctx, sd, accessToken, tokenID)
 }
 
 // GetVirtualKeyStatus handles virtual key status check workflow
@@ -532,4 +363,164 @@ func (ts *TeslaService) GetVirtualKeyStatus(ctx context.Context, vin string, wal
 	}
 
 	return &response, nil
+}
+
+// fetchVehicle retrieves a vehicle from identity-api by its token ID.
+func (ts *TeslaService) fetchVehicle(vehicleTokenId int64) (*models.Vehicle, error) {
+	vehicle, err := ts.identitySvc.FetchVehicleByTokenID(vehicleTokenId)
+	if err != nil {
+		ts.logger.Err(err).Msg("Failed to fetch vehicle by token ID.")
+		return nil, fmt.Errorf("%w: %s", ErrVehicleNotFound, err.Error())
+	}
+
+	if vehicle == nil || vehicle.Owner == "" || vehicle.SyntheticDevice.Address == "" {
+		ts.logger.Warn().Msg("Vehicle not found or owner information or synthetic device address is missing.")
+		return nil, ErrVehicleNotFound
+	}
+	return vehicle, nil
+}
+
+// validateAccessTokenWithScopes validates Tesla access token and required scopes
+func (ts *TeslaService) validateAccessTokenWithScopes(accessToken string, requiredScopes []string) error {
+	var claims struct {
+		jwt.RegisteredClaims
+		Scopes []string `json:"scp"`
+		OUCode string   `json:"ou_code"`
+	}
+
+	_, _, err := jwt.NewParser().ParseUnverified(accessToken, &claims)
+	if err != nil {
+		return fmt.Errorf("access token is unparseable: %w", err)
+	}
+
+	var missingScopes []string
+	for _, scope := range requiredScopes {
+		found := false
+		for _, claimScope := range claims.Scopes {
+			if claimScope == scope {
+				found = true
+				break
+			}
+		}
+		if !found {
+			missingScopes = append(missingScopes, scope)
+		}
+	}
+
+	if len(missingScopes) > 0 {
+		return fmt.Errorf("missing required scopes: %s", strings.Join(missingScopes, ", "))
+	}
+
+	return nil
+}
+
+// validateVehicleOwnership checks if the vehicle belongs to the authenticated user.
+func (ts *TeslaService) validateVehicleOwnership(tokenID int64, walletAddress common.Address) error {
+	vehicle, err := ts.fetchVehicle(tokenID)
+	if err != nil {
+		return err
+	}
+
+	if vehicle == nil || vehicle.Owner != walletAddress.Hex() {
+		return ErrVehicleOwnershipMismatch
+	}
+
+	return nil
+}
+
+// decodeTeslaVIN decodes a Tesla VIN to get device definition information.
+func (ts *TeslaService) decodeTeslaVIN(vin string) (*models.DeviceDefinition, error) {
+	decodeVIN, err := ts.ddSvc.DecodeVin(vin, "USA")
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrVINDecoding, err.Error())
+	}
+
+	dd, err := ts.getOrWaitForDeviceDefinition(decodeVIN.DeviceDefinitionID)
+	if err != nil {
+		return nil, err
+	}
+
+	return dd, nil
+}
+
+// getOrWaitForDeviceDefinition waits for a device definition to become available.
+func (ts *TeslaService) getOrWaitForDeviceDefinition(deviceDefinitionID string) (*models.DeviceDefinition, error) {
+	ts.logger.Debug().Str(logfields.DefinitionID, deviceDefinitionID).Msg("Waiting for device definition")
+	for i := 0; i < 12; i++ {
+		definition, err := ts.identitySvc.FetchDeviceDefinitionByID(deviceDefinitionID)
+		if err != nil || definition == nil || definition.DeviceDefinitionID == "" {
+			time.Sleep(5 * time.Second)
+			ts.logger.Debug().Str(logfields.DefinitionID, deviceDefinitionID).Msgf("Still waiting, retry %d", i+1)
+			continue
+		}
+		return definition, nil
+	}
+
+	return nil, ErrDeviceDefinitionNotFound
+}
+
+// startStreamingOrPolling determines whether to start streaming telemetry data or polling for a Tesla vehicle.
+// It checks if the vehicle has valid credentials, refreshes the access token if necessary, and decides the next action.
+func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodels.SyntheticDevice, tokenID int64) error {
+	// check if we have access token
+	if sd == nil || sd.AccessToken.String == "" || sd.RefreshToken.String == "" {
+		return ErrNoCredentials
+	}
+
+	accessToken, err := ts.GetOrRefreshAccessToken(ctx, sd)
+	if err != nil {
+		return err
+	}
+
+	resp, err := ts.decideOnAction(ctx, sd, accessToken, tokenID)
+	if err != nil {
+		return err
+	}
+
+	// call appropriate action
+	switch resp.Action {
+	case ActionSetTelemetryConfig:
+		subStatus, err := ts.fleetAPISvc.GetTelemetrySubscriptionStatus(ctx, accessToken, sd.Vin)
+		if err != nil {
+			ts.logger.Err(err).Msg("Error checking telemetry subscription status")
+			return fmt.Errorf("%w: %s", ErrTelemetryConfigFailed, err.Error())
+		}
+		if subStatus.LimitReached {
+			return ErrTelemetryLimitReached
+		}
+
+		if err := ts.fleetAPISvc.SubscribeForTelemetryData(ctx, accessToken, sd.Vin); err != nil {
+			ts.logger.Err(err).Msg("Error registering for telemetry")
+			return fmt.Errorf("%w: %s", ErrTelemetryConfigFailed, err.Error())
+		}
+
+	case ActionStartPolling:
+		startErr := ts.devicesSvc.StartTeslaTask(ctx, tokenID)
+		if startErr != nil {
+			ts.logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
+		}
+
+	default:
+		return ErrTelemetryNotReady
+	}
+
+	return nil
+}
+
+// decideOnAction determines the next action for a Tesla vehicle based on its fleet status.
+// It retrieves the vehicle's connection status and evaluates the appropriate action using a decision tree.
+func (ts *TeslaService) decideOnAction(ctx context.Context, sd *dbmodels.SyntheticDevice, accessToken string, tokenID int64) (*models.StatusDecision, error) {
+	// get vehicle status
+	connectionStatus, err := ts.fleetAPISvc.VirtualKeyConnectionStatus(ctx, accessToken, sd.Vin)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrFleetStatusCheck, err.Error())
+	}
+
+	// determine action based on status
+	resp, err := DecisionTreeAction(connectionStatus, tokenID)
+	if err != nil {
+		ts.logger.Err(err)
+		return nil, fmt.Errorf("error determining fleet action: %w", err)
+	}
+	return resp, nil
 }
