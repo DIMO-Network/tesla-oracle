@@ -1,5 +1,7 @@
 package models
 
+import "fmt"
+
 type GraphQLRequest struct {
 	Query string `json:"query"`
 }
@@ -104,4 +106,61 @@ type NextAction struct {
 type VehicleStatusResponse struct {
 	Message string      `json:"message"`
 	Next    *NextAction `json:"next"`
+}
+
+type TeslaVehicleRes struct {
+	ExternalID string            `json:"externalId"`
+	VIN        string            `json:"vin"`
+	Definition DeviceDefinition1 `json:"definition"`
+}
+
+// DeviceDefinition1 represents vehicle device definition
+type DeviceDefinition1 struct {
+	Make               string `json:"make"`
+	Model              string `json:"model"`
+	Year               int    `json:"year"`
+	DeviceDefinitionID string `json:"id"`
+}
+
+type VirtualKeyStatus int
+
+const (
+	Incapable VirtualKeyStatus = iota
+	Paired
+	Unpaired
+)
+
+type VirtualKeyStatusResponse struct {
+	Added  bool             `json:"added"`
+	Status VirtualKeyStatus `json:"status" swaggertype:"string"`
+}
+
+func (s VirtualKeyStatus) String() string {
+	switch s {
+	case Incapable:
+		return "Incapable"
+	case Paired:
+		return "Paired"
+	case Unpaired:
+		return "Unpaired"
+	}
+	return ""
+}
+
+func (s VirtualKeyStatus) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
+}
+
+func (s *VirtualKeyStatus) UnmarshalText(text []byte) error {
+	switch str := string(text); str {
+	case "Incapable":
+		*s = Incapable
+	case "Paired":
+		*s = Paired
+	case "Unpaired":
+		*s = Unpaired
+	default:
+		return fmt.Errorf("unrecognized status %q", str)
+	}
+	return nil
 }
