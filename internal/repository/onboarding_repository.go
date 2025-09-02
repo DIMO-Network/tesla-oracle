@@ -30,8 +30,8 @@ func NewOnboardingRepository(db *db.Store, logger *zerolog.Logger) OnboardingRep
 	}
 }
 
-// GetVehicleByVin retrieves a vehicle by its VIN.
-func (r *onboardingRepository) GetVehicleByVin(ctx context.Context, vehicleID string) (*dbmodels.Onboarding, error) {
+// GetOnboardingByVin retrieves a vehicle by its VIN.
+func (r *onboardingRepository) GetOnboardingByVin(ctx context.Context, vehicleID string) (*dbmodels.Onboarding, error) {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		r.logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %s", vehicleID)
@@ -40,11 +40,11 @@ func (r *onboardingRepository) GetVehicleByVin(ctx context.Context, vehicleID st
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("GetVehicleByVin: Failed to rollback transaction for vehicle %s", vehicleID)
+				r.logger.Error().Err(rbErr).Msgf("GetOnboardingByVin: Failed to rollback transaction for vehicle %s", vehicleID)
 			}
 		} else {
 			if cmErr := tx.Commit(); cmErr != nil {
-				r.logger.Error().Err(cmErr).Msgf("GetVehicleByVin: Failed to commit transaction for vehicle %s", vehicleID)
+				r.logger.Error().Err(cmErr).Msgf("GetOnboardingByVin: Failed to commit transaction for vehicle %s", vehicleID)
 			}
 		}
 	}()
@@ -61,21 +61,21 @@ func (r *onboardingRepository) GetVehicleByVin(ctx context.Context, vehicleID st
 	return vin, nil
 }
 
-// GetVehiclesByVins retrieves vehicles by their VINs.
-func (r *onboardingRepository) GetVehiclesByVins(ctx context.Context, vehicleIDs []string) (dbmodels.OnboardingSlice, error) {
+// GetOnboardingsByVins retrieves vehicles by their VINs.
+func (r *onboardingRepository) GetOnboardingsByVins(ctx context.Context, vehicleIDs []string) (dbmodels.OnboardingSlice, error) {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		r.logger.Error().Err(err).Msg("GetVehiclesByVins: Failed to begin transaction for vehicles")
+		r.logger.Error().Err(err).Msg("GetOnboardingsByVins: Failed to begin transaction for vehicles")
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("GetVehiclesByVins: Failed to rollback transaction for vehicles")
+				r.logger.Error().Err(rbErr).Msgf("GetOnboardingsByVins: Failed to rollback transaction for vehicles")
 			}
 		} else {
 			if cmErr := tx.Commit(); cmErr != nil {
-				r.logger.Error().Err(cmErr).Msgf("GetVehiclesByVins: Failed to commit transaction for vehicles")
+				r.logger.Error().Err(cmErr).Msgf("GetOnboardingsByVins: Failed to commit transaction for vehicles")
 			}
 		}
 	}()
@@ -85,28 +85,28 @@ func (r *onboardingRepository) GetVehiclesByVins(ctx context.Context, vehicleIDs
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrOnboardingVehicleNotFound
 		}
-		r.logger.Error().Err(err).Msgf("GetVehiclesByVins: Failed to check if vehicles have been processed")
+		r.logger.Error().Err(err).Msgf("GetOnboardingsByVins: Failed to check if vehicles have been processed")
 		return nil, err
 	}
 
 	return vins, nil
 }
 
-// GetVehiclesByVinsAndOnboardingStatus retrieves vehicles available for minting SD (or vehicle + SD) by their VINs.
-func (r *onboardingRepository) GetVehiclesByVinsAndOnboardingStatus(ctx context.Context, vehicleIDs []string, status int) (dbmodels.OnboardingSlice, error) {
+// GetOnboardingsByVinsAndStatus retrieves vehicles available for minting SD (or vehicle + SD) by their VINs.
+func (r *onboardingRepository) GetOnboardingsByVinsAndStatus(ctx context.Context, vehicleIDs []string, status int) (dbmodels.OnboardingSlice, error) {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		r.logger.Error().Err(err).Msg("GetVehiclesByVins: Failed to begin transaction for vehicles")
+		r.logger.Error().Err(err).Msg("GetOnboardingsByVins: Failed to begin transaction for vehicles")
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("GetVehiclesByVins: Failed to rollback transaction for vehicles")
+				r.logger.Error().Err(rbErr).Msgf("GetOnboardingsByVins: Failed to rollback transaction for vehicles")
 			}
 		} else {
 			if cmErr := tx.Commit(); cmErr != nil {
-				r.logger.Error().Err(cmErr).Msgf("GetVehiclesByVins: Failed to commit transaction for vehicles")
+				r.logger.Error().Err(cmErr).Msgf("GetOnboardingsByVins: Failed to commit transaction for vehicles")
 			}
 		}
 	}()
@@ -119,27 +119,27 @@ func (r *onboardingRepository) GetVehiclesByVinsAndOnboardingStatus(ctx context.
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrOnboardingVehicleNotFound
 		}
-		r.logger.Error().Err(err).Msgf("GetVehiclesByVins: Failed to check if vehicles have been processed")
+		r.logger.Error().Err(err).Msgf("GetOnboardingsByVins: Failed to check if vehicles have been processed")
 		return nil, err
 	}
 
 	return vins, nil
 }
 
-func (r *onboardingRepository) GetVehiclesByVinsAndOnboardingStatusRange(ctx context.Context, vehicleIDs []string, minStatus, maxStatus int, additionalStatuses []int) (dbmodels.OnboardingSlice, error) {
+func (r *onboardingRepository) GetOnboardingsByVinsAndStatusRange(ctx context.Context, vehicleIDs []string, minStatus, maxStatus int, additionalStatuses []int) (dbmodels.OnboardingSlice, error) {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
-		r.logger.Error().Err(err).Msg("GetVehiclesByVins: Failed to begin transaction for vehicles")
+		r.logger.Error().Err(err).Msg("GetOnboardingsByVins: Failed to begin transaction for vehicles")
 		return nil, err
 	}
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("GetVehiclesByVins: Failed to rollback transaction for vehicles")
+				r.logger.Error().Err(rbErr).Msgf("GetOnboardingsByVins: Failed to rollback transaction for vehicles")
 			}
 		} else {
 			if cmErr := tx.Commit(); cmErr != nil {
-				r.logger.Error().Err(cmErr).Msgf("GetVehiclesByVins: Failed to commit transaction for vehicles")
+				r.logger.Error().Err(cmErr).Msgf("GetOnboardingsByVins: Failed to commit transaction for vehicles")
 			}
 		}
 	}()
@@ -166,15 +166,15 @@ func (r *onboardingRepository) GetVehiclesByVinsAndOnboardingStatusRange(ctx con
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrOnboardingVehicleNotFound
 		}
-		r.logger.Error().Err(err).Msgf("GetVehiclesByVinsAndOnboardingStatusRange: Failed to fetch vehicles")
+		r.logger.Error().Err(err).Msgf("GetOnboardingsByVinsAndStatusRange: Failed to fetch vehicles")
 		return nil, err
 	}
 
 	return vins, nil
 }
 
-// GetVehicleByExternalID retrieves a vehicle by its external ID.
-func (r *onboardingRepository) GetVehicleByExternalID(ctx context.Context, externalID string) (*dbmodels.Onboarding, error) {
+// GetOnboardingByExternalID retrieves a vehicle by its external ID.
+func (r *onboardingRepository) GetOnboardingByExternalID(ctx context.Context, externalID string) (*dbmodels.Onboarding, error) {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		r.logger.Error().Err(err).Msgf("Failed to begin transaction for external ID %s", externalID)
@@ -206,8 +206,8 @@ func (r *onboardingRepository) GetVehicleByExternalID(ctx context.Context, exter
 	return vin, nil
 }
 
-// InsertVinToDB inserts a new VIN record into the database.
-func (r *onboardingRepository) InsertVinToDB(ctx context.Context, vin *dbmodels.Onboarding) error {
+// InsertOnboarding inserts a new VIN record into the database.
+func (r *onboardingRepository) InsertOnboarding(ctx context.Context, vin *dbmodels.Onboarding) error {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		r.logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %s", vin.Vin)
@@ -216,7 +216,7 @@ func (r *onboardingRepository) InsertVinToDB(ctx context.Context, vin *dbmodels.
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("InsertVinToDB: Failed to rollback transaction for vehicle %s", vin.Vin)
+				r.logger.Error().Err(rbErr).Msgf("InsertOnboarding: Failed to rollback transaction for vehicle %s", vin.Vin)
 			}
 		}
 	}()
@@ -234,8 +234,8 @@ func (r *onboardingRepository) InsertVinToDB(ctx context.Context, vin *dbmodels.
 	return nil
 }
 
-// InsertOrUpdateVin inserts a new VIN record into the database.
-func (r *onboardingRepository) InsertOrUpdateVin(ctx context.Context, vin *dbmodels.Onboarding) error {
+// InsertOrUpdateOnboarding inserts a new VIN record into the database.
+func (r *onboardingRepository) InsertOrUpdateOnboarding(ctx context.Context, vin *dbmodels.Onboarding) error {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		r.logger.Error().Err(err).Msgf("Failed to begin transaction for vehicle %s", vin.Vin)
@@ -244,7 +244,7 @@ func (r *onboardingRepository) InsertOrUpdateVin(ctx context.Context, vin *dbmod
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("InsertVinToDB: Failed to rollback transaction for vehicle %s", vin.Vin)
+				r.logger.Error().Err(rbErr).Msgf("InsertOnboarding: Failed to rollback transaction for vehicle %s", vin.Vin)
 			}
 		}
 	}()
@@ -262,8 +262,8 @@ func (r *onboardingRepository) InsertOrUpdateVin(ctx context.Context, vin *dbmod
 	return nil
 }
 
-// GetVinsByTokenIDs retrieves VINs where VehicleTokenID is in the provided token IDs.
-func (r *onboardingRepository) GetVinsByTokenIDs(ctx context.Context, tokenIDsToCheck []int64) (dbmodels.OnboardingSlice, error) {
+// GetOnboardingsByTokenIDs retrieves VINs where VehicleTokenID is in the provided token IDs.
+func (r *onboardingRepository) GetOnboardingsByTokenIDs(ctx context.Context, tokenIDsToCheck []int64) (dbmodels.OnboardingSlice, error) {
 	vins, err := dbmodels.Onboardings(dbmodels.OnboardingWhere.VehicleTokenID.IN(tokenIDsToCheck)).All(ctx, r.db.DBS().Reader)
 	if err != nil {
 		r.logger.Error().Err(err).Msg("Failed to get VINs by token IDs")
@@ -272,8 +272,8 @@ func (r *onboardingRepository) GetVinsByTokenIDs(ctx context.Context, tokenIDsTo
 	return vins, nil
 }
 
-// GetVehiclesFromDB retrieves all VINs from the database.
-func (r *onboardingRepository) GetVehiclesFromDB(ctx context.Context) (dbmodels.OnboardingSlice, error) {
+// GetOnboardings retrieves all VINs from the database.
+func (r *onboardingRepository) GetOnboardings(ctx context.Context) (dbmodels.OnboardingSlice, error) {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		r.logger.Error().Err(err).Msg("Failed to begin transaction")
@@ -311,7 +311,7 @@ func (r *onboardingRepository) DeleteOnboarding(ctx context.Context, record *dbm
 	defer func() {
 		if err != nil {
 			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msgf("InsertVinToDB: Failed to rollback transaction for vehicle %s", record.Vin)
+				r.logger.Error().Err(rbErr).Msgf("InsertOnboarding: Failed to rollback transaction for vehicle %s", record.Vin)
 			}
 		}
 	}()
@@ -329,8 +329,8 @@ func (r *onboardingRepository) DeleteOnboarding(ctx context.Context, record *dbm
 	return nil
 }
 
-// DeleteAll deletes all onboarding records.
-func (r *onboardingRepository) DeleteAll(ctx context.Context) error {
+// DeleteAllOnboardings deletes all onboarding records.
+func (r *onboardingRepository) DeleteAllOnboardings(ctx context.Context) error {
 	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
 	if err != nil {
 		r.logger.Error().Err(err).Msg("Failed to begin transaction")

@@ -18,7 +18,7 @@ type CredentialRepository interface {
 
 // VehicleRepository handles SyntheticDevice data operations (moved from TeslaService)
 type VehicleRepository interface {
-	GetSyntheticDeviceByVIN(ctx context.Context, vin string) (*dbmodels.SyntheticDevice, error)
+	GetSyntheticDeviceByVin(ctx context.Context, vin string) (*dbmodels.SyntheticDevice, error)
 	GetSyntheticDeviceByTokenID(ctx context.Context, tokenID int64) (*dbmodels.SyntheticDevice, error)
 	GetSyntheticDeviceByAddress(ctx context.Context, address common.Address) (*dbmodels.SyntheticDevice, error)
 	UpdateSyntheticDeviceSubscriptionStatus(ctx context.Context, device *dbmodels.SyntheticDevice, status string) error
@@ -28,17 +28,17 @@ type VehicleRepository interface {
 
 // OnboardingRepository handles onboarding data operations (moved from OnboardingService)
 type OnboardingRepository interface {
-	GetVehicleByVin(ctx context.Context, vin string) (*dbmodels.Onboarding, error)
-	GetVehiclesByVins(ctx context.Context, vins []string) (dbmodels.OnboardingSlice, error)
-	GetVehiclesByVinsAndOnboardingStatus(ctx context.Context, vins []string, status int) (dbmodels.OnboardingSlice, error)
-	GetVehiclesByVinsAndOnboardingStatusRange(ctx context.Context, vins []string, minStatus, maxStatus int, additionalStatuses []int) (dbmodels.OnboardingSlice, error)
-	GetVehicleByExternalID(ctx context.Context, externalID string) (*dbmodels.Onboarding, error)
-	InsertVinToDB(ctx context.Context, vin *dbmodels.Onboarding) error
-	InsertOrUpdateVin(ctx context.Context, vin *dbmodels.Onboarding) error
-	GetVinsByTokenIDs(ctx context.Context, tokenIDs []int64) (dbmodels.OnboardingSlice, error)
-	GetVehiclesFromDB(ctx context.Context) (dbmodels.OnboardingSlice, error)
+	GetOnboardingByVin(ctx context.Context, vin string) (*dbmodels.Onboarding, error)
+	GetOnboardingsByVins(ctx context.Context, vins []string) (dbmodels.OnboardingSlice, error)
+	GetOnboardingsByVinsAndStatus(ctx context.Context, vins []string, status int) (dbmodels.OnboardingSlice, error)
+	GetOnboardingsByVinsAndStatusRange(ctx context.Context, vins []string, minStatus, maxStatus int, additionalStatuses []int) (dbmodels.OnboardingSlice, error)
+	GetOnboardingByExternalID(ctx context.Context, externalID string) (*dbmodels.Onboarding, error)
+	InsertOnboarding(ctx context.Context, vin *dbmodels.Onboarding) error
+	InsertOrUpdateOnboarding(ctx context.Context, vin *dbmodels.Onboarding) error
+	GetOnboardingsByTokenIDs(ctx context.Context, tokenIDs []int64) (dbmodels.OnboardingSlice, error)
+	GetOnboardings(ctx context.Context) (dbmodels.OnboardingSlice, error)
 	DeleteOnboarding(ctx context.Context, record *dbmodels.Onboarding) error
-	DeleteAll(ctx context.Context) error
+	DeleteAllOnboardings(ctx context.Context) error
 }
 
 // Repositories aggregates all repository interfaces

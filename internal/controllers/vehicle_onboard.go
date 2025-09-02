@@ -139,7 +139,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 
 	if len(validVins) > 0 {
 		// fetch all the onboarding records that could still be moved forward. Eg. also onboardings that need to be retried.
-		dbVins, err := v.repositories.Onboarding.GetVehiclesByVinsAndOnboardingStatusRange(
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVinsAndStatusRange(
 			c.Context(),
 			validVins,
 			onboarding.OnboardingStatusVendorValidationSuccess,
@@ -193,7 +193,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 					} else {
 						// Looks legit, let's update onboarding record with the provided vehicle token id
 						dbVin.VehicleTokenID = null.Int64From(vehicle.VehicleTokenID)
-						err = v.repositories.Onboarding.InsertOrUpdateVin(c.Context(), dbVin)
+						err = v.repositories.Onboarding.InsertOrUpdateOnboarding(c.Context(), dbVin)
 						if err != nil {
 							v.logger.Error().Msgf(`Failed to set vehicle token ID %d for VIN %s`, vehicle.VehicleTokenID, vehicle.Vin)
 							return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -278,7 +278,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 	mintingData := make([]VinTransactionData, 0, len(validVins))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.repositories.Onboarding.GetVehiclesByVinsAndOnboardingStatusRange(
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVinsAndStatusRange(
 			c.Context(),
 			validVins,
 			onboarding.OnboardingStatusVendorValidationSuccess,
@@ -457,7 +457,7 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 	statuses := make([]VinStatus, 0, len(params.VinMintingData))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.repositories.Onboarding.GetVehiclesByVins(c.Context(), validVins)
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVins(c.Context(), validVins)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")
@@ -529,7 +529,7 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 				})
 			}
 
-			err = v.repositories.Onboarding.InsertOrUpdateVin(c.Context(), dbVin)
+			err = v.repositories.Onboarding.InsertOrUpdateOnboarding(c.Context(), dbVin)
 
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -635,7 +635,7 @@ func (v *VehicleController) GetMintStatusForVins(c *fiber.Ctx) error {
 	statuses := make([]VinStatus, 0, len(validVins))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.repositories.Onboarding.GetVehiclesByVins(c.Context(), validVins)
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVins(c.Context(), validVins)
 		if err != nil {
 			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
 				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")
@@ -736,7 +736,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 	vehicles := make([]OnboardedVehicle, 0, len(validVins))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.repositories.Onboarding.GetVehiclesByVins(c.Context(), validVins)
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVins(c.Context(), validVins)
 		if err != nil {
 			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
 				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")

@@ -33,8 +33,8 @@ func NewVehicleRepository(db *db.Store, cipher cipher.Cipher, logger *zerolog.Lo
 	}
 }
 
-// GetSyntheticDeviceByVIN retrieves a synthetic device by its VIN
-func (r *vehicleRepository) GetSyntheticDeviceByVIN(ctx context.Context, vin string) (*dbmodels.SyntheticDevice, error) {
+// GetSyntheticDeviceByVin retrieves a synthetic device by its VIN
+func (r *vehicleRepository) GetSyntheticDeviceByVin(ctx context.Context, vin string) (*dbmodels.SyntheticDevice, error) {
 	sd, err := dbmodels.SyntheticDevices(dbmodels.SyntheticDeviceWhere.Vin.EQ(vin)).One(ctx, r.db.DBS().Reader)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
