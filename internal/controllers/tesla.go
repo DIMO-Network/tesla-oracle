@@ -1,19 +1,18 @@
 package controllers
 
 import (
-	"context"
 	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
@@ -24,14 +23,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type CredStore interface {
-	Store(ctx context.Context, user common.Address, cred *service.Credential) error
-	Retrieve(_ context.Context, user common.Address) (*service.Credential, error)
-	RetrieveAndDelete(_ context.Context, user common.Address) (*service.Credential, error)
-	RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*service.Credential, error)
-	EncryptTokens(cred *service.Credential) (*service.Credential, error)
-}
-
 type TeslaController struct {
 	settings       *config.Settings
 	logger         *zerolog.Logger
@@ -39,14 +30,13 @@ type TeslaController struct {
 	ddSvc          service.DeviceDefinitionsAPIService
 	identitySvc    service.IdentityAPIService
 	requiredScopes []string
-	credStore      CredStore
+	repositories   *repository.Repositories
 	onboarding     *service.OnboardingService
-	pdb            *db.Store
 	devicesService service.DevicesGRPCService
 	teslaService   service.TeslaService
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, store CredStore, onboardingSvc *service.OnboardingService, teslaService service.TeslaService, pdb *db.Store) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaFleetAPISvc service.TeslaFleetAPIService, ddSvc service.DeviceDefinitionsAPIService, identitySvc service.IdentityAPIService, repositories *repository.Repositories, onboardingSvc *service.OnboardingService, teslaService service.TeslaService) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -70,9 +60,8 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		ddSvc:          ddSvc,
 		identitySvc:    identitySvc,
 		requiredScopes: requiredScopes,
-		credStore:      store,
+		repositories:   repositories,
 		onboarding:     onboardingSvc,
-		pdb:            pdb,
 		devicesService: devicesService,
 		teslaService:   teslaService,
 	}
@@ -148,7 +137,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		subscribeTelemetryFailureCount.Inc()
 		return fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Dev license %s is not allowed to subscribe to telemetry.", walletAddress.Hex()))
 	}
-	sd, err := tc.teslaService.GetByVehicleTokenID(c.Context(), tc.logger, tc.pdb, tokenID)
+	sd, err := tc.repositories.Vehicle.GetSyntheticDeviceByTokenID(c.Context(), tokenID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by vehicle token id.")
 	}
@@ -159,7 +148,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 		return err
 	}
 
-	err = tc.teslaService.UpdateSubscriptionStatus(c.Context(), sd, "active")
+	err = tc.repositories.Vehicle.UpdateSyntheticDeviceSubscriptionStatus(c.Context(), sd, "active")
 	if err != nil {
 		logger.Err(err).Msg("Failed to update subscription status.")
 		subscribeTelemetryFailureCount.Inc()
@@ -211,7 +200,7 @@ func (tc *TeslaController) StartDataFlow(c *fiber.Ctx) error {
 	}
 
 	// Fetch synthetic device
-	sd, err := tc.teslaService.GetByVehicleTokenID(c.Context(), tc.logger, tc.pdb, tokenID)
+	sd, err := tc.repositories.Vehicle.GetSyntheticDeviceByTokenID(c.Context(), tokenID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by token ID.")
 	}
@@ -276,8 +265,7 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 		return err
 	}
 
-	device, err := dbmodels.SyntheticDevices(
-		dbmodels.SyntheticDeviceWhere.Address.EQ(common.HexToAddress(vehicle.SyntheticDevice.Address).Bytes())).One(c.Context(), tc.pdb.DBS().Reader)
+	device, err := tc.repositories.Vehicle.GetSyntheticDeviceByAddress(c.Context(), common.HexToAddress(vehicle.SyntheticDevice.Address))
 	if err != nil {
 		logger.Err(err).Msg("Failed to find synthetic device.")
 		unsubscribeTelemetryFailureCount.Inc()
@@ -296,7 +284,7 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 		logger.Warn().Err(stopErr).Msg("Failed to stop Tesla task for synthetic device.")
 	}
 
-	err = tc.teslaService.UpdateSubscriptionStatus(c.Context(), device, "inactive")
+	err = tc.repositories.Vehicle.UpdateSyntheticDeviceSubscriptionStatus(c.Context(), device, "inactive")
 	if err != nil {
 		logger.Err(err).Msg("Failed to update subscription status.")
 		unsubscribeTelemetryFailureCount.Inc()
@@ -351,7 +339,7 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	}
 
 	// Save tesla oauth credentials in cache
-	if err := tc.credStore.Store(c.Context(), walletAddress, &service.Credential{
+	if err := tc.repositories.Credential.Store(c.Context(), walletAddress, &repository.Credential{
 		AccessToken:   teslaAuth.AccessToken,
 		RefreshToken:  teslaAuth.RefreshToken,
 		AccessExpiry:  teslaAuth.Expiry,
@@ -380,15 +368,15 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 			return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
 		}
 
-		record, err := tc.onboarding.GetVehicleByVin(c.Context(), v.VIN)
+		record, err := tc.repositories.Onboarding.GetOnboardingByVin(c.Context(), v.VIN)
 		if err != nil {
-			if !errors.Is(err, service.ErrVehicleNotFound) {
+			if !errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
 				logger.Err(err).Str("vin", v.VIN).Msg("Failed to fetch record.")
 			}
 		}
 
 		if record == nil {
-			err = tc.onboarding.InsertVinToDB(c.Context(), &dbmodels.Onboarding{
+			err = tc.repositories.Onboarding.InsertOnboarding(c.Context(), &dbmodels.Onboarding{
 				Vin:                v.VIN,
 				DeviceDefinitionID: null.String{String: ddRes.DeviceDefinitionID, Valid: true},
 				OnboardingStatus:   onboarding.OnboardingStatusVendorValidationSuccess,
@@ -442,7 +430,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse request URL params")
 	}
 
-	teslaAuth, err := tc.credStore.Retrieve(c.Context(), walletAddress)
+	teslaAuth, err := tc.repositories.Credential.Retrieve(c.Context(), walletAddress)
 	if err != nil {
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
 	}
@@ -486,7 +474,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	if err != nil {
 		return err
 	}
-	sd, err := tc.teslaService.GetByVehicleTokenID(c.Context(), tc.logger, tc.pdb, tokenID)
+	sd, err := tc.repositories.Vehicle.GetSyntheticDeviceByTokenID(c.Context(), tokenID)
 	if err != nil {
 		return fiber.NewError(fiber.StatusNotFound, "Failed to get vehicle by vehicle token id.")
 	}
@@ -620,13 +608,13 @@ func (tc *TeslaController) getOrRefreshAccessToken(c *fiber.Ctx, sd *dbmodels.Sy
 				return "", fiber.NewError(fiber.StatusInternalServerError, "Failed to refresh access token.")
 			}
 			expiryTime := time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second)
-			creds := service.Credential{
+			creds := repository.Credential{
 				AccessToken:   tokens.AccessToken,
 				RefreshToken:  tokens.RefreshToken,
 				AccessExpiry:  expiryTime,
 				RefreshExpiry: time.Now().AddDate(0, 3, 0),
 			}
-			errUpdate := tc.teslaService.UpdateCreds(c.Context(), sd, &creds)
+			errUpdate := tc.repositories.Vehicle.UpdateSyntheticDeviceCredentials(c.Context(), sd, &creds)
 			if errUpdate != nil {
 				logger.Warn().Err(errUpdate).Msg("Failed to update credentials after refresh.")
 			}

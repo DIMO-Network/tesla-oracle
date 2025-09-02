@@ -12,15 +12,14 @@ import (
 	"github.com/DIMO-Network/go-transactions"
 	registry "github.com/DIMO-Network/go-transactions/contracts"
 	"github.com/DIMO-Network/go-zerodev"
-	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
-	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	signer "github.com/ethereum/go-ethereum/signer/core/apitypes"
@@ -41,8 +40,7 @@ type VehicleController struct {
 	riverClient   *river.Client[pgx.Tx]
 	walletSvc     service.SDWalletsAPI
 	transactions  *transactions.Client
-	pdb           *db.Store
-	credentials   CredStore
+	repositories  *repository.Repositories
 }
 
 func NewVehicleOnboardController(
@@ -53,8 +51,7 @@ func NewVehicleOnboardController(
 	riverClient *river.Client[pgx.Tx],
 	walletSvc service.SDWalletsAPI,
 	transactions *transactions.Client,
-	pdb *db.Store,
-	credentials CredStore,
+	repositories *repository.Repositories,
 ) *VehicleController {
 	return &VehicleController{
 		settings:      settings,
@@ -64,8 +61,7 @@ func NewVehicleOnboardController(
 		riverClient:   riverClient,
 		walletSvc:     walletSvc,
 		transactions:  transactions,
-		pdb:           pdb,
-		credentials:   credentials,
+		repositories:  repositories,
 	}
 }
 
@@ -143,7 +139,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 
 	if len(validVins) > 0 {
 		// fetch all the onboarding records that could still be moved forward. Eg. also onboardings that need to be retried.
-		dbVins, err := v.onboardingSvc.GetVehiclesByVinsAndOnboardingStatusRange(
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVinsAndStatusRange(
 			c.Context(),
 			validVins,
 			onboarding.OnboardingStatusVendorValidationSuccess,
@@ -151,7 +147,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 			nil,
 		)
 		if err != nil {
-			if errors.Is(err, service.ErrVehicleNotFound) {
+			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
 				return fiber.NewError(fiber.StatusBadRequest, "Could not find Vehicles")
 			}
 
@@ -197,7 +193,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 					} else {
 						// Looks legit, let's update onboarding record with the provided vehicle token id
 						dbVin.VehicleTokenID = null.Int64From(vehicle.VehicleTokenID)
-						err = v.onboardingSvc.InsertOrUpdateVin(c.Context(), dbVin)
+						err = v.repositories.Onboarding.InsertOrUpdateOnboarding(c.Context(), dbVin)
 						if err != nil {
 							v.logger.Error().Msgf(`Failed to set vehicle token ID %d for VIN %s`, vehicle.VehicleTokenID, vehicle.Vin)
 							return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -282,7 +278,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 	mintingData := make([]VinTransactionData, 0, len(validVins))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.onboardingSvc.GetVehiclesByVinsAndOnboardingStatusRange(
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVinsAndStatusRange(
 			c.Context(),
 			validVins,
 			onboarding.OnboardingStatusVendorValidationSuccess,
@@ -290,7 +286,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 			[]int{onboarding.OnboardingStatusBurnSDSuccess, onboarding.OnboardingStatusBurnVehicleSuccess},
 		)
 		if err != nil {
-			if errors.Is(err, service.ErrVehicleNotFound) {
+			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
 				return fiber.NewError(fiber.StatusBadRequest, "Could not find Vehicles")
 			}
 
@@ -461,7 +457,7 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 	statuses := make([]VinStatus, 0, len(params.VinMintingData))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.onboardingSvc.GetVehiclesByVins(c.Context(), validVins)
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVins(c.Context(), validVins)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")
@@ -533,7 +529,7 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 				})
 			}
 
-			err = v.onboardingSvc.InsertOrUpdateVin(c.Context(), dbVin)
+			err = v.repositories.Onboarding.InsertOrUpdateOnboarding(c.Context(), dbVin)
 
 			if err != nil {
 				return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -639,9 +635,9 @@ func (v *VehicleController) GetMintStatusForVins(c *fiber.Ctx) error {
 	statuses := make([]VinStatus, 0, len(validVins))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.onboardingSvc.GetVehiclesByVins(c.Context(), validVins)
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVins(c.Context(), validVins)
 		if err != nil {
-			if errors.Is(err, service.ErrVehicleNotFound) {
+			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
 				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")
 			}
 
@@ -740,9 +736,9 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 	vehicles := make([]OnboardedVehicle, 0, len(validVins))
 
 	if len(validVins) > 0 {
-		dbVins, err := v.onboardingSvc.GetVehiclesByVins(c.Context(), validVins)
+		dbVins, err := v.repositories.Onboarding.GetOnboardingsByVins(c.Context(), validVins)
 		if err != nil {
-			if errors.Is(err, service.ErrVehicleNotFound) {
+			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
 				return fiber.NewError(fiber.StatusNotFound, "Could not find Vehicles")
 			}
 
@@ -768,7 +764,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					})
 				}
 
-				creds, err := v.credentials.RetrieveAndDelete(c.Context(), walletAddress)
+				creds, err := v.repositories.Credential.RetrieveAndDelete(c.Context(), walletAddress)
 				if err != nil {
 					localLog.Error().Err(err).Msg("Failed to retrieve credentials")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -776,7 +772,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					})
 				}
 
-				encryptedCreds, err := v.credentials.EncryptTokens(creds)
+				encryptedCreds, err := v.repositories.Credential.EncryptTokens(creds)
 				if err != nil {
 					localLog.Error().Err(err).Msg("Failed to encrypt credentials")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -796,7 +792,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					RefreshExpiresAt:  null.TimeFrom(encryptedCreds.RefreshExpiry),
 				}
 
-				errIns := sdRecord.Insert(c.Context(), v.pdb.DBS().Writer, boil.Infer())
+				errIns := v.repositories.Vehicle.InsertSyntheticDevice(c.Context(), sdRecord)
 				if errIns != nil {
 					localLog.Error().Err(errIns).Msg("Failed to insert Synthetic Device")
 					return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -804,7 +800,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 					})
 				}
 
-				err = v.onboardingSvc.DeleteOnboarding(c.Context(), dbVin)
+				err = v.repositories.Onboarding.DeleteOnboarding(c.Context(), dbVin)
 				if err != nil {
 					localLog.Error().Err(err).Msg("Failed to delete onboarding data from Database")
 				}
