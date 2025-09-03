@@ -148,7 +148,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			//  then
 			req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/subscribe/789", nil)
 			req.Header.Set("Content-Type", "application/json")
-			test.GenerateJWT(req)
+			assert.NoError(s.T(), test.GenerateJWT(req))
 
 			// Execute test
 			resp, err := app.Test(req)
@@ -233,7 +233,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			// then
 			req, _ := http.NewRequest("POST", "/v1/tesla/start/789", nil)
 			req.Header.Set("Content-Type", "application/json")
-			test.GenerateJWT(req)
+			assert.NoError(s.T(), test.GenerateJWT(req))
 
 			resp, err := app.Test(req)
 
@@ -266,7 +266,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// then
 	app := s.setupTestApp("/v1/tesla/telemetry/unsubscribe/:vehicleTokenId", "POST", controller.UnsubscribeTelemetry)
 	req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/unsubscribe/789", nil)
-	test.GenerateJWT(req)
+	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
 
@@ -321,7 +321,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
 	req, _ := http.NewRequest("POST", "/v1/tesla/vehicles", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
-	generateJWT(req)
+	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
 
@@ -349,7 +349,7 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	// then
 	app := s.setupFiberApp("/v1/tesla/virtual-key", "GET", controller.GetVirtualKeyStatus)
 	req, _ := createRequest("GET", "/v1/tesla/virtual-key?vin="+vin, "")
-	generateJWT(req)
+	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
 
@@ -580,7 +580,7 @@ func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 			}
 
 			// then
-			token, err := controller.teslaService.GetOrRefreshAccessToken(nil, tc.syntheticDevice)
+			token, err := controller.teslaService.GetOrRefreshAccessToken(context.TODO(), tc.syntheticDevice)
 
 			// verify
 			if tc.expectedError != "" {
