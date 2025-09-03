@@ -182,3 +182,20 @@ func (m *MockDeviceDefinitionsAPIService) DecodeVin(vin, countryCode string) (*s
 	}
 	return nil, args.Error(1)
 }
+
+// MockCipher is a mock implementation of a Cipher interface.
+type MockCipher struct {
+	mock.Mock
+}
+
+// Encrypt mocks the Encrypt method.
+func (m *MockCipher) Encrypt(data string) (string, error) {
+	args := m.Called(data)
+	return args.String(0), args.Error(1)
+}
+
+// Decrypt mocks the Decrypt method.
+func (m *MockCipher) Decrypt(data string) (string, error) {
+	args := m.Called(data)
+	return args.String(0), args.Error(1)
+}
