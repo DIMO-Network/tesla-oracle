@@ -51,13 +51,8 @@ func (sm *ServerManager) Initialize() error {
 	sm.webApp = app.App(
 		sm.settings,
 		sm.logger,
-		sm.services.IdentityService,
-		sm.services.OnboardingService,
-		sm.services.RiverClient,
-		sm.services.WalletService,
-		sm.services.TransactionsClient,
-		sm.services.Repositories,
 		sm.services.TeslaService,
+		sm.services.VehicleOnboardService,
 	)
 
 	// Create gRPC server

@@ -17,7 +17,6 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
 	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
-	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
@@ -42,14 +41,13 @@ const sdWalletsSeed = "cabaabd8c7c7d27347349e48fb11319bc6656cb6cc1bdc717e94dae8d
 
 type VehicleControllerTestSuite struct {
 	suite.Suite
-	pdb           db.Store
-	container     testcontainers.Container
-	ctx           context.Context
-	river         *river.Client[pgx.Tx]
-	settings      config.Settings
-	onboardingSvc *service.OnboardingService
-	ws            *service.SDWalletsService
-	logger        zerolog.Logger
+	pdb       db.Store
+	container testcontainers.Container
+	ctx       context.Context
+	river     *river.Client[pgx.Tx]
+	settings  config.Settings
+	ws        *service.SDWalletsService
+	logger    zerolog.Logger
 }
 
 // SetupSuite starts container db
@@ -58,7 +56,6 @@ func (s *VehicleControllerTestSuite) SetupSuite() {
 	s.logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	s.pdb, s.container, s.settings = test.StartContainerDatabase(context.Background(), s.T(), migrationsDirRelPath)
 	s.ws = service.NewSDWalletsService(s.logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
-	s.onboardingSvc = service.NewOnboardingService(&s.logger)
 
 	fmt.Println("Suite setup completed.")
 }
@@ -177,15 +174,20 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		Onboarding: onboardingRepo,
 	}
 
-	c := NewVehicleOnboardController(
-		&config.Settings{Port: 3000},
+	// Create a mock service for testing
+	mockService := service.NewVehicleOnboardService(
+		&config.Settings{},
 		&mockDeps.logger,
 		mockDeps.identity,
-		s.onboardingSvc,
 		s.river,
-		nil,
-		nil,
+		s.ws,
+		nil, // transactions client
 		repos,
+	)
+
+	c := NewVehicleOnboardController(
+		&mockDeps.logger,
+		mockService,
 	)
 	app := fiber.New(fiber.Config{
 		EnableSplittingOnParsers: true,
@@ -205,7 +207,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 	s.Run("Get verification status for empty VIN list", func() {
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{},
+			Vins: []service.VinWithTokenID{},
 		})
 		assert.NilError(t, err)
 
@@ -217,7 +219,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 		body, _ := io.ReadAll(response.Body)
 		expected := StatusForVinsResponse{
-			Statuses: []VinStatus{},
+			Statuses: []service.VinStatus{},
 		}
 
 		expectedJSON, err := json.Marshal(expected)
@@ -228,7 +230,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 	s.Run("Get verification status for a list of valid, but unknown VINs", func() {
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567811"},
 				{Vin: "ABCDEFG1234567812", VehicleTokenID: 123},
 			},
@@ -244,7 +246,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 	s.Run("Fails for duplicates", func() {
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567811"},
 				{Vin: "ABCDEFG1234567811", VehicleTokenID: 123},
 			},
@@ -260,7 +262,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 	dbVin := dbmodels.Onboarding{
 		Vin:                "ABCDEFG1234567812",
-		OnboardingStatus:   onboarding.OnboardingStatusVendorValidationSuccess,
+		OnboardingStatus:   23, // OnboardingStatusVendorValidationSuccess
 		DeviceDefinitionID: null.StringFrom("test-dd-2025"),
 	}
 
@@ -268,7 +270,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		require.NoError(t, dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567811"},
 				{Vin: "ABCDEFG1234567812"},
 			},
@@ -289,7 +291,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		require.NoError(t, dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567811"},
 			},
 		})
@@ -309,7 +311,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		require.NoError(t, dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567812"},
 			},
 		})
@@ -323,7 +325,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 		body, _ := io.ReadAll(response.Body)
 		expected := StatusForVinsResponse{
-			Statuses: []VinStatus{
+			Statuses: []service.VinStatus{
 				{
 					Vin:     "ABCDEFG1234567812",
 					Status:  "Success",
@@ -345,7 +347,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		require.NoError(t, dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567812", VehicleTokenID: vehicleTokenIDnoSDValidDD},
 			},
 		})
@@ -359,7 +361,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 		body, _ := io.ReadAll(response.Body)
 		expected := StatusForVinsResponse{
-			Statuses: []VinStatus{
+			Statuses: []service.VinStatus{
 				{
 					Vin:     "ABCDEFG1234567812",
 					Status:  "Success",
@@ -381,7 +383,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		require.NoError(t, dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567812", VehicleTokenID: vehicleTokenIDnoSDValidDDDifferentOwner},
 			},
 		})
@@ -395,7 +397,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 		body, _ := io.ReadAll(response.Body)
 		expected := StatusForVinsResponse{
-			Statuses: []VinStatus{
+			Statuses: []service.VinStatus{
 				{
 					Vin:     "ABCDEFG1234567812",
 					Status:  "Success",
@@ -417,7 +419,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		require.NoError(t, dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567812", VehicleTokenID: vehicleTokenIDnoSDInvalidDD},
 			},
 		})
@@ -431,7 +433,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 		body, _ := io.ReadAll(response.Body)
 		expected := StatusForVinsResponse{
-			Statuses: []VinStatus{
+			Statuses: []service.VinStatus{
 				{
 					Vin:     "ABCDEFG1234567812",
 					Status:  "Success",
@@ -453,7 +455,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		require.NoError(t, dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
-			Vins: []VinWithTokenID{
+			Vins: []service.VinWithTokenID{
 				{Vin: "ABCDEFG1234567812", VehicleTokenID: vehicleTokenIDwithSDValidDD},
 			},
 		})
@@ -467,7 +469,7 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 
 		body, _ := io.ReadAll(response.Body)
 		expected := StatusForVinsResponse{
-			Statuses: []VinStatus{
+			Statuses: []service.VinStatus{
 				{
 					Vin:     "ABCDEFG1234567812",
 					Status:  "Success",
@@ -546,15 +548,20 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		Onboarding: onboardingRepo,
 	}
 
-	controller := NewVehicleOnboardController(
-		&s.settings,
+	// Create a mock service for testing
+	mockService := service.NewVehicleOnboardService(
+		&config.Settings{},
 		&mockDeps.logger,
 		mockDeps.identity,
-		s.onboardingSvc,
 		s.river,
 		s.ws,
-		nil,
+		nil, // transactions client
 		repos,
+	)
+
+	controller := NewVehicleOnboardController(
+		&mockDeps.logger,
+		mockService,
 	)
 
 	app := fiber.New(fiber.Config{
@@ -621,7 +628,7 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 			AccessExpiry:  time.Now().Add(1 * time.Hour),
 			RefreshExpiry: time.Now().Add(24 * time.Hour),
 		}
-		if err := controller.repositories.Credential.Store(s.ctx, user, creds); err != nil {
+		if err := repos.Credential.Store(s.ctx, user, creds); err != nil {
 			s.T().Fatalf("failed to store credentials: %v", err)
 		}
 
@@ -640,7 +647,7 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 		assert.Equal(t, string(body), expectedBody)
 
 		// Verify that the cache no longer contains the credentials
-		retrievedCreds, _ := controller.repositories.Credential.Retrieve(s.ctx, user)
+		retrievedCreds, _ := repos.Credential.Retrieve(s.ctx, user)
 		require.Nil(t, retrievedCreds)
 	})
 }
