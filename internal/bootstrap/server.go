@@ -52,15 +52,12 @@ func (sm *ServerManager) Initialize() error {
 		sm.settings,
 		sm.logger,
 		sm.services.IdentityService,
-		sm.services.DeviceDefinitionsService,
 		sm.services.OnboardingService,
 		sm.services.RiverClient,
 		sm.services.WalletService,
 		sm.services.TransactionsClient,
 		sm.services.Repositories,
-		sm.services.TeslaFleetAPIService,
 		sm.services.TeslaService,
-		sm.services.DB,
 	)
 
 	// Create gRPC server

@@ -615,7 +615,7 @@ func (t *teslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Contex
 	}, nil
 }
 
-var ErrUnauthorized = errors.New("unauthorized")
+var ErrFleetAPIUnauthorized = errors.New("unauthorized")
 
 // performRequest a helper function for making http requests, it adds a timeout context and parses error response
 func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL, token, method string, body []byte) ([]byte, error) {
@@ -645,7 +645,7 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 		t.log.Info().Int("code", resp.StatusCode).Str("error", errBody.Error).Str("errorDescription", errBody.ErrorDescription).Str("url", url.String()).Msg("Tesla error.")
 
 		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
-			return nil, ErrUnauthorized
+			return nil, ErrFleetAPIUnauthorized
 		}
 
 		return nil, fmt.Errorf("error occurred calling Tesla api: %s", errBody.Error)

@@ -265,7 +265,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_controllers.VirtualKeyStatusResponse"
+                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VirtualKeyStatusResponse"
                         }
                     },
                     "400": {
@@ -786,6 +786,23 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinitionRes": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "make": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "year": {
+                    "type": "integer"
+                }
+            }
+        },
         "github_com_DIMO-Network_tesla-oracle_internal_models.NextAction": {
             "type": "object",
             "properties": {
@@ -793,6 +810,20 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "method": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_DIMO-Network_tesla-oracle_internal_models.TeslaVehicleRes": {
+            "type": "object",
+            "properties": {
+                "definition": {
+                    "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinitionRes"
+                },
+                "externalId": {
+                    "type": "string"
+                },
+                "vin": {
                     "type": "string"
                 }
             }
@@ -808,6 +839,17 @@ const docTemplate = `{
                 },
                 "next": {
                     "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.NextAction"
+                }
+            }
+        },
+        "github_com_DIMO-Network_tesla-oracle_internal_models.VirtualKeyStatusResponse": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -828,25 +870,8 @@ const docTemplate = `{
                 "vehicles": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_controllers.TeslaVehicle"
+                        "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.TeslaVehicleRes"
                     }
-                }
-            }
-        },
-        "internal_controllers.DeviceDefinition": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "string"
-                },
-                "make": {
-                    "type": "string"
-                },
-                "model": {
-                    "type": "string"
-                },
-                "year": {
-                    "type": "integer"
                 }
             }
         },
@@ -917,20 +942,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_controllers.TeslaVehicle": {
-            "type": "object",
-            "properties": {
-                "definition": {
-                    "$ref": "#/definitions/internal_controllers.DeviceDefinition"
-                },
-                "externalId": {
-                    "type": "string"
-                },
-                "vin": {
-                    "type": "string"
-                }
-            }
-        },
         "internal_controllers.VinStatus": {
             "type": "object",
             "properties": {
@@ -996,17 +1007,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/internal_controllers.VinWithTokenID"
                     }
-                }
-            }
-        },
-        "internal_controllers.VirtualKeyStatusResponse": {
-            "type": "object",
-            "properties": {
-                "added": {
-                    "type": "boolean"
-                },
-                "status": {
-                    "type": "string"
                 }
             }
         },

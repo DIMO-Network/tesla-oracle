@@ -1,5 +1,7 @@
 package models
 
+import "fmt"
+
 type GraphQLRequest struct {
 	Query string `json:"query"`
 }
@@ -74,22 +76,6 @@ type GraphQlData[T any] struct {
 	Data T `json:"data"`
 }
 
-const (
-	ActionSetTelemetryConfig = "set_telemetry_config"
-	ActionOpenTeslaDeeplink  = "open_tesla_deeplink"
-	ActionUpdateFirmware     = "update_firmware"
-	ActionStartPolling       = "start_polling"
-	ActionPromptToggle       = "prompt_toggle"
-	ActionDummy              = "do_nothing"
-)
-
-const (
-	MessageReadyToStartDataFlow    = "Vehicle ready to start data flow. Call start data flow endpoint"
-	MessageVirtualKeyNotPaired     = "Virtual key not paired. Open Tesla app deeplink for pairing."
-	MessageFirmwareTooOld          = "Firmware too old. Please update to 2025.20 or higher."
-	MessageStreamingToggleDisabled = "Streaming toggle disabled. Prompt user to enable it."
-)
-
 type StatusDecision struct {
 	Action  string      `json:"action"`
 	Message string      `json:"message"`
@@ -105,4 +91,60 @@ type VehicleStatusResponse struct {
 	Action  string      `json:"action"`
 	Message string      `json:"message"`
 	Next    *NextAction `json:"next"`
+}
+
+type TeslaVehicleRes struct {
+	ExternalID string              `json:"externalId"`
+	VIN        string              `json:"vin"`
+	Definition DeviceDefinitionRes `json:"definition"`
+}
+
+type DeviceDefinitionRes struct {
+	Make               string `json:"make"`
+	Model              string `json:"model"`
+	Year               int    `json:"year"`
+	DeviceDefinitionID string `json:"id"`
+}
+
+type VirtualKeyStatus int
+
+const (
+	Incapable VirtualKeyStatus = iota
+	Paired
+	Unpaired
+)
+
+type VirtualKeyStatusResponse struct {
+	Added  bool             `json:"added"`
+	Status VirtualKeyStatus `json:"status" swaggertype:"string"`
+}
+
+func (s VirtualKeyStatus) String() string {
+	switch s {
+	case Incapable:
+		return "Incapable"
+	case Paired:
+		return "Paired"
+	case Unpaired:
+		return "Unpaired"
+	}
+	return ""
+}
+
+func (s VirtualKeyStatus) MarshalText() ([]byte, error) {
+	return []byte(s.String()), nil
+}
+
+func (s *VirtualKeyStatus) UnmarshalText(text []byte) error {
+	switch str := string(text); str {
+	case "Incapable":
+		*s = Incapable
+	case "Paired":
+		*s = Paired
+	case "Unpaired":
+		*s = Unpaired
+	default:
+		return fmt.Errorf("unrecognized status %q", str)
+	}
+	return nil
 }

@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/DIMO-Network/go-transactions"
-	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
@@ -27,15 +26,12 @@ func App(
 	settings *config.Settings,
 	logger *zerolog.Logger,
 	identitySvc service.IdentityAPIService,
-	ddSvc service.DeviceDefinitionsAPIService,
 	onboardingSvc *service.OnboardingService,
 	riverClient *river.Client[pgx.Tx],
 	ws service.SDWalletsAPI,
 	tr *transactions.Client,
 	repositories *repository.Repositories,
-	teslaFleetAPISvc service.TeslaFleetAPIService,
 	teslaService *service.TeslaService,
-	pdb *db.Store,
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -84,7 +80,7 @@ func App(
 	app.Get("/health", healthCheck)
 
 	// Initialize controllers with services
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaFleetAPISvc, ddSvc, identitySvc, repositories, onboardingSvc, *teslaService)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaService)
 	onboardCtrl := controllers.NewVehicleOnboardController(settings, logger, identitySvc, onboardingSvc, riverClient, ws, tr, repositories)
 
 	jwtAuth := jwtware.New(jwtware.Config{
