@@ -853,6 +853,86 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_DIMO-Network_tesla-oracle_internal_service.OnboardedVehicle": {
+            "type": "object",
+            "properties": {
+                "syntheticTokenId": {
+                    "type": "integer"
+                },
+                "vehicleTokenId": {
+                    "type": "integer"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_DIMO-Network_tesla-oracle_internal_service.SacdInput": {
+            "type": "object",
+            "properties": {
+                "expiration": {
+                    "type": "integer"
+                },
+                "grantee": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "permissions": {
+                    "type": "integer"
+                },
+                "source": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_DIMO-Network_tesla-oracle_internal_service.VinStatus": {
+            "type": "object",
+            "properties": {
+                "details": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status ` + "`" + `\"Pending\"` + "`" + `, ` + "`" + `\"Failure\"` + "`" + `, ` + "`" + `\"Success\"` + "`" + `",
+                    "type": "string"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_DIMO-Network_tesla-oracle_internal_service.VinTransactionData": {
+            "type": "object",
+            "properties": {
+                "sacd": {
+                    "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.SacdInput"
+                },
+                "signature": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "typedData": {
+                    "$ref": "#/definitions/apitypes.TypedData"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_DIMO-Network_tesla-oracle_internal_service.VinWithTokenID": {
+            "type": "object",
+            "properties": {
+                "vehicleTokenId": {
+                    "type": "integer"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_controllers.CompleteOAuthExchangeRequest": {
             "type": "object",
             "properties": {
@@ -881,7 +961,7 @@ const docTemplate = `{
                 "vehicles": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_controllers.OnboardedVehicle"
+                        "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.OnboardedVehicle"
                     }
                 }
             }
@@ -892,42 +972,8 @@ const docTemplate = `{
                 "vinMintingData": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_controllers.VinTransactionData"
+                        "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VinTransactionData"
                     }
-                }
-            }
-        },
-        "internal_controllers.OnboardedVehicle": {
-            "type": "object",
-            "properties": {
-                "syntheticTokenId": {
-                    "type": "integer"
-                },
-                "vehicleTokenId": {
-                    "type": "integer"
-                },
-                "vin": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_controllers.SacdInput": {
-            "type": "object",
-            "properties": {
-                "expiration": {
-                    "type": "integer"
-                },
-                "grantee": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "permissions": {
-                    "type": "integer"
-                },
-                "source": {
-                    "type": "string"
                 }
             }
         },
@@ -937,54 +983,8 @@ const docTemplate = `{
                 "statuses": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_controllers.VinStatus"
+                        "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VinStatus"
                     }
-                }
-            }
-        },
-        "internal_controllers.VinStatus": {
-            "type": "object",
-            "properties": {
-                "details": {
-                    "type": "string"
-                },
-                "status": {
-                    "description": "Status ` + "`" + `\"Pending\"` + "`" + `, ` + "`" + `\"Failure\"` + "`" + `, ` + "`" + `\"Success\"` + "`" + `",
-                    "type": "string"
-                },
-                "vin": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_controllers.VinTransactionData": {
-            "type": "object",
-            "properties": {
-                "sacd": {
-                    "$ref": "#/definitions/internal_controllers.SacdInput"
-                },
-                "signature": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "typedData": {
-                    "$ref": "#/definitions/apitypes.TypedData"
-                },
-                "vin": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_controllers.VinWithTokenID": {
-            "type": "object",
-            "properties": {
-                "vehicleTokenId": {
-                    "type": "integer"
-                },
-                "vin": {
-                    "type": "string"
                 }
             }
         },
@@ -1005,7 +1005,7 @@ const docTemplate = `{
                 "vins": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/internal_controllers.VinWithTokenID"
+                        "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VinWithTokenID"
                     }
                 }
             }

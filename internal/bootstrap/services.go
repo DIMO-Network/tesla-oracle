@@ -27,7 +27,7 @@ import (
 type Services struct {
 	DB                       *db.Store
 	TransactionsClient       *transactions.Client
-	OnboardingService        *service.OnboardingService
+	VehicleOnboardService    service.VehicleOnboardService
 	IdentityService          service.IdentityAPIService
 	DeviceDefinitionsService service.DeviceDefinitionsAPIService
 	WalletService            service.SDWalletsAPI
@@ -51,7 +51,6 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	}
 
 	// Initialize services
-	onboardingService := service.NewOnboardingService(logger)
 	identityService := service.NewIdentityAPIService(logger, settings)
 	deviceDefinitionsService := service.NewDeviceDefinitionsAPIService(logger, settings)
 
@@ -93,10 +92,13 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		return nil, fmt.Errorf("failed to create river client: %w", err)
 	}
 
+	// Initialize VehicleOnboardService
+	vehicleOnboardService := service.NewVehicleOnboardService(settings, logger, identityService, riverClient, walletService, transactionsClient, repositories)
+
 	return &Services{
 		DB:                       &pdb,
 		TransactionsClient:       transactionsClient,
-		OnboardingService:        onboardingService,
+		VehicleOnboardService:    vehicleOnboardService,
 		IdentityService:          identityService,
 		DeviceDefinitionsService: deviceDefinitionsService,
 		WalletService:            walletService,

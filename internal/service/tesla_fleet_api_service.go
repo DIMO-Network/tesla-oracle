@@ -36,7 +36,6 @@ type TeslaFleetAPIService interface {
 	GetVehicles(ctx context.Context, token string) ([]TeslaVehicle, error)
 	GetVehicle(ctx context.Context, token string, vehicleID int) (*TeslaVehicle, error)
 	WakeUpVehicle(ctx context.Context, token string, vehicleID int) error
-	//GetAvailableCommands(token string) (*UserDeviceAPIIntegrationsMetadataCommands, error)
 	VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*VehicleFleetStatus, error)
 	SubscribeForTelemetryData(ctx context.Context, token, vin string) error
 	UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error

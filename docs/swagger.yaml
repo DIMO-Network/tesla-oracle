@@ -89,6 +89,58 @@ definitions:
       status:
         type: string
     type: object
+  github_com_DIMO-Network_tesla-oracle_internal_service.OnboardedVehicle:
+    properties:
+      syntheticTokenId:
+        type: integer
+      vehicleTokenId:
+        type: integer
+      vin:
+        type: string
+    type: object
+  github_com_DIMO-Network_tesla-oracle_internal_service.SacdInput:
+    properties:
+      expiration:
+        type: integer
+      grantee:
+        items:
+          type: integer
+        type: array
+      permissions:
+        type: integer
+      source:
+        type: string
+    type: object
+  github_com_DIMO-Network_tesla-oracle_internal_service.VinStatus:
+    properties:
+      details:
+        type: string
+      status:
+        description: Status `"Pending"`, `"Failure"`, `"Success"`
+        type: string
+      vin:
+        type: string
+    type: object
+  github_com_DIMO-Network_tesla-oracle_internal_service.VinTransactionData:
+    properties:
+      sacd:
+        $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.SacdInput'
+      signature:
+        items:
+          type: integer
+        type: array
+      typedData:
+        $ref: '#/definitions/apitypes.TypedData'
+      vin:
+        type: string
+    type: object
+  github_com_DIMO-Network_tesla-oracle_internal_service.VinWithTokenID:
+    properties:
+      vehicleTokenId:
+        type: integer
+      vin:
+        type: string
+    type: object
   internal_controllers.CompleteOAuthExchangeRequest:
     properties:
       authorizationCode:
@@ -107,74 +159,22 @@ definitions:
     properties:
       vehicles:
         items:
-          $ref: '#/definitions/internal_controllers.OnboardedVehicle'
+          $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.OnboardedVehicle'
         type: array
     type: object
   internal_controllers.MintDataForVins:
     properties:
       vinMintingData:
         items:
-          $ref: '#/definitions/internal_controllers.VinTransactionData'
+          $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VinTransactionData'
         type: array
-    type: object
-  internal_controllers.OnboardedVehicle:
-    properties:
-      syntheticTokenId:
-        type: integer
-      vehicleTokenId:
-        type: integer
-      vin:
-        type: string
-    type: object
-  internal_controllers.SacdInput:
-    properties:
-      expiration:
-        type: integer
-      grantee:
-        items:
-          type: integer
-        type: array
-      permissions:
-        type: integer
-      source:
-        type: string
     type: object
   internal_controllers.StatusForVinsResponse:
     properties:
       statuses:
         items:
-          $ref: '#/definitions/internal_controllers.VinStatus'
+          $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VinStatus'
         type: array
-    type: object
-  internal_controllers.VinStatus:
-    properties:
-      details:
-        type: string
-      status:
-        description: Status `"Pending"`, `"Failure"`, `"Success"`
-        type: string
-      vin:
-        type: string
-    type: object
-  internal_controllers.VinTransactionData:
-    properties:
-      sacd:
-        $ref: '#/definitions/internal_controllers.SacdInput'
-      signature:
-        items:
-          type: integer
-        type: array
-      typedData:
-        $ref: '#/definitions/apitypes.TypedData'
-      vin:
-        type: string
-    type: object
-  internal_controllers.VinWithTokenID:
-    properties:
-      vehicleTokenId:
-        type: integer
-      vin:
-        type: string
     type: object
   internal_controllers.VinsGetParams:
     properties:
@@ -187,7 +187,7 @@ definitions:
     properties:
       vins:
         items:
-          $ref: '#/definitions/internal_controllers.VinWithTokenID'
+          $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VinWithTokenID'
         type: array
     type: object
   math.HexOrDecimal256:
