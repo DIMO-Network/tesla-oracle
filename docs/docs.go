@@ -786,7 +786,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinition1": {
+        "github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinitionRes": {
             "type": "object",
             "properties": {
                 "id": {
@@ -818,7 +818,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "definition": {
-                    "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinition1"
+                    "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinitionRes"
                 },
                 "externalId": {
                     "type": "string"

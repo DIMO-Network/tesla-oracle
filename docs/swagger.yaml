@@ -46,7 +46,7 @@ definitions:
       message:
         type: string
     type: object
-  github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinition1:
+  github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinitionRes:
     properties:
       id:
         type: string
@@ -67,7 +67,7 @@ definitions:
   github_com_DIMO-Network_tesla-oracle_internal_models.TeslaVehicleRes:
     properties:
       definition:
-        $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinition1'
+        $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinitionRes'
       externalId:
         type: string
       vin:

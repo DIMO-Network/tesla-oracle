@@ -295,7 +295,7 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 		response = append(response, models.TeslaVehicleRes{
 			ExternalID: strconv.Itoa(v.ID),
 			VIN:        v.VIN,
-			Definition: models.DeviceDefinition1{
+			Definition: models.DeviceDefinitionRes{
 				Make:               ddRes.Manufacturer.Name,
 				Model:              ddRes.Model,
 				Year:               ddRes.Year,

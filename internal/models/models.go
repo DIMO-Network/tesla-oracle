@@ -93,14 +93,12 @@ type VehicleStatusResponse struct {
 }
 
 type TeslaVehicleRes struct {
-	ExternalID string            `json:"externalId"`
-	VIN        string            `json:"vin"`
-	Definition DeviceDefinition1 `json:"definition"`
+	ExternalID string              `json:"externalId"`
+	VIN        string              `json:"vin"`
+	Definition DeviceDefinitionRes `json:"definition"`
 }
 
-// TODO remove DeviceDefinition1 and use DeviceDefinition from above?
-// DeviceDefinition1 represents vehicle device definition
-type DeviceDefinition1 struct {
+type DeviceDefinitionRes struct {
 	Make               string `json:"make"`
 	Model              string `json:"model"`
 	Year               int    `json:"year"`

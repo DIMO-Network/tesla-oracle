@@ -811,7 +811,7 @@ func (s *TeslaControllerTestSuite) assertListVehiclesResponse(resp *http.Respons
 		{
 			VIN:        vin,
 			ExternalID: "1",
-			Definition: mods.DeviceDefinition1{Make: "", Model: "Model 3", Year: 2019, DeviceDefinitionID: "12345"},
+			Definition: mods.DeviceDefinitionRes{Make: "", Model: "Model 3", Year: 2019, DeviceDefinitionID: "12345"},
 		},
 	}
 	assert.Equal(s.T(), expectedVehicles, responseWrapper.Vehicles)
