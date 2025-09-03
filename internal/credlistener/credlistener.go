@@ -51,7 +51,10 @@ func (c *Consumer) Handle(ctx context.Context, msg *sarama.ConsumerMessage) erro
 
 	err := json.Unmarshal(msg.Value, &ce)
 	if err != nil {
-		c.logger.Warn().Err(err).Msgf("Couldn't parse credential message.")
+		c.logger.Warn().
+			Err(err).
+			RawJSON("message", msg.Value).
+			Msgf("Couldn't parse credential message.")
 		return nil
 	}
 
