@@ -332,15 +332,34 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, wal
 		return nil, err
 	}
 
-	// get telemetry subscription status. we do not take into account polling here
-	telemetryStatus, err := ts.fleetAPISvc.GetTelemetrySubscriptionStatus(ctx, accessToken, sd.Vin)
+	// Get status and decide on action
+	resp, err := ts.decideOnAction(ctx, sd, accessToken, tokenID)
 	if err != nil {
-		// Log error but don't fail the request - telemetry status is optional
-		ts.logger.Warn().Err(err).Str("vin", sd.Vin).Msg("Failed to get telemetry subscription status")
+		return nil, err
 	}
 
-	// Get status and decide on action
-	return ts.decideOnAction(ctx, sd, telemetryStatus, accessToken, tokenID)
+	switch resp.Action {
+	case ActionSetTelemetryConfig:
+		telemetryStatus, err := ts.fleetAPISvc.GetTelemetrySubscriptionStatus(ctx, accessToken, sd.Vin)
+		if err != nil {
+			// Log error but don't fail the request - telemetry status is optional
+			ts.logger.Warn().Err(err).Str("vin", sd.Vin).Msg("Failed to get telemetry subscription status")
+		} else if telemetryStatus != nil && telemetryStatus.Configured {
+			// Telemetry is already configured, return telemetry_configured status
+			return &models.StatusDecision{
+				Action:  ActionTelemetryConfigured,
+				Message: MessageTelemetryConfigured,
+			}, nil
+		}
+	case ActionStartPolling:
+		// For polling, we consider telemetry already started be devices-api
+		return &models.StatusDecision{
+			Action:  ActionTelemetryConfigured,
+			Message: MessageTelemetryConfigured,
+		}, nil
+	}
+
+	return resp, nil
 }
 
 // GetVirtualKeyStatus handles virtual key status check workflow
@@ -479,7 +498,7 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 		return err
 	}
 
-	resp, err := ts.decideOnAction(ctx, sd, nil, accessToken, tokenID)
+	resp, err := ts.decideOnAction(ctx, sd, accessToken, tokenID)
 	if err != nil {
 		return err
 	}
@@ -514,9 +533,9 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 	return nil
 }
 
-// decideOnAction determines the next action for a Tesla vehicle based on its fleet status
-// and telemetry configuration status. It evaluates the appropriate action using a decision tree.
-func (ts *TeslaService) decideOnAction(ctx context.Context, sd *dbmodels.SyntheticDevice, telemetryStatus *VehicleTelemetryStatus, accessToken string, tokenID int64) (*models.StatusDecision, error) {
+// decideOnAction determines the next action for a Tesla vehicle based on its fleet status.
+// It evaluates the appropriate action using a decision tree.
+func (ts *TeslaService) decideOnAction(ctx context.Context, sd *dbmodels.SyntheticDevice, accessToken string, tokenID int64) (*models.StatusDecision, error) {
 	// get vehicle status
 	connectionStatus, err := ts.fleetAPISvc.VirtualKeyConnectionStatus(ctx, accessToken, sd.Vin)
 	if err != nil {
@@ -524,7 +543,7 @@ func (ts *TeslaService) decideOnAction(ctx context.Context, sd *dbmodels.Synthet
 	}
 
 	// determine action based on status
-	resp, err := DecisionTreeAction(connectionStatus, telemetryStatus, tokenID)
+	resp, err := DecisionTreeAction(connectionStatus, tokenID)
 	if err != nil {
 		ts.logger.Err(err)
 		return nil, fmt.Errorf("error determining fleet action: %w", err)

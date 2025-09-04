@@ -26,20 +26,11 @@ const (
 	MessageTelemetryConfigured     = "Telemetry configuration already set, no need to call /start endpoint"
 )
 
-// DecisionTreeAction determines the appropriate action and message based on vehicle fleet status and telemetry status
-func DecisionTreeAction(fleetStatus *VehicleFleetStatus, telemetryStatus *VehicleTelemetryStatus, vehicleTokenID int64) (*models.StatusDecision, error) {
+// DecisionTreeAction determines the appropriate action and message based on vehicle fleet status
+func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.StatusDecision, error) {
 	var action string
 	var message string
 	var next *models.NextAction
-
-	// Check if telemetry is already configured first
-	if telemetryStatus != nil && telemetryStatus.Configured {
-		return &models.StatusDecision{
-			Action:  ActionTelemetryConfigured,
-			Message: MessageTelemetryConfigured,
-			Next:    nil,
-		}, nil
-	}
 
 	telemetryStart := fmt.Sprintf("/v1/tesla/telemetry/%d/start", vehicleTokenID)
 

@@ -419,11 +419,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			},
 			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{
-				Message: service.MessageReadyToStartDataFlow,
-				Next: &mods.NextAction{
-					Method:   "POST",
-					Endpoint: expectedStartEndpoint,
-				},
+				Message: service.MessageTelemetryConfigured,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -478,9 +474,17 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			settings, logger, repos := s.createTestDependencies()
 
 			// when
-			mockTeslaService, mockCredStore := s.setupGetStatusMocks(tc.fleetStatus, tc.telemetryStatus)
+			mockTeslaService, mockCredStore := s.setupGetStatusMocks(tc.fleetStatus)
 			mockIdentitySvc := s.setupMockIdentityService()
 			repos.Credential = mockCredStore
+
+			// Add telemetry status mock for test cases that result in ActionSetTelemetryConfig
+			if (tc.fleetStatus.VehicleCommandProtocolRequired && tc.fleetStatus.KeyPaired) ||
+				(tc.fleetStatus.SafetyScreenStreamingToggleEnabled != nil && *tc.fleetStatus.SafetyScreenStreamingToggleEnabled) {
+				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{
+					Configured: tc.telemetryStatus,
+				}, nil)
+			}
 
 			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, nil)
 			dbVin := s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, "")
@@ -1036,11 +1040,9 @@ func (s *TeslaControllerTestSuite) setupVirtualKeyStatusMocks() (*test.MockTesla
 	return mockTeslaService, mockCredStore
 }
 
-func (s *TeslaControllerTestSuite) setupGetStatusMocks(fleetStatus *service.VehicleFleetStatus, telemetryStatus bool) (*test.MockTeslaFleetAPIService, *test.MockCredStore) {
+func (s *TeslaControllerTestSuite) setupGetStatusMocks(fleetStatus *service.VehicleFleetStatus) (*test.MockTeslaFleetAPIService, *test.MockCredStore) {
 	mockTeslaService, mockCredStore, _, _ := s.setupGenericMocks(MockConfig{
-		FleetStatus:           fleetStatus,
-		EnableTelemetryStatus: true,
-		TelemetryStatus:       telemetryStatus,
+		FleetStatus: fleetStatus,
 	})
 	return mockTeslaService, mockCredStore
 }
