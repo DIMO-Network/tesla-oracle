@@ -534,7 +534,7 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 }
 
 // decideOnAction determines the next action for a Tesla vehicle based on its fleet status.
-// It evaluates the appropriate action using a decision tree.
+// It retrieves the vehicle's connection status and evaluates the appropriate action using a decision tree.
 func (ts *TeslaService) decideOnAction(ctx context.Context, sd *dbmodels.SyntheticDevice, accessToken string, tokenID int64) (*models.StatusDecision, error) {
 	// get vehicle status
 	connectionStatus, err := ts.fleetAPISvc.VirtualKeyConnectionStatus(ctx, accessToken, sd.Vin)
