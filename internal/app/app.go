@@ -89,7 +89,6 @@ func App(
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
 	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
 	teslaGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
-	teslaGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
 
 	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
 	vehicleGroup.Post("/verify", onboardCtrl.VerifyVins)
@@ -101,6 +100,7 @@ func App(
 	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
 	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
 	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
+	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
 
 	return app
 }

@@ -9,12 +9,13 @@ import (
 )
 
 const (
-	ActionSetTelemetryConfig = "set_telemetry_config"
-	ActionOpenTeslaDeeplink  = "open_tesla_deeplink"
-	ActionUpdateFirmware     = "update_firmware"
-	ActionStartPolling       = "start_polling"
-	ActionPromptToggle       = "prompt_toggle"
-	ActionDummy              = "do_nothing"
+	ActionSetTelemetryConfig  = "set_telemetry_config"
+	ActionOpenTeslaDeeplink   = "open_tesla_deeplink"
+	ActionUpdateFirmware      = "update_firmware"
+	ActionStartPolling        = "start_polling"
+	ActionPromptToggle        = "prompt_toggle"
+	ActionDummy               = "do_nothing"
+	ActionTelemetryConfigured = "telemetry_configured"
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 	MessageVirtualKeyNotPaired     = "Virtual key not paired. Open Tesla app deeplink for pairing."
 	MessageFirmwareTooOld          = "Firmware too old. Please update to 2025.20 or higher."
 	MessageStreamingToggleDisabled = "Streaming toggle disabled. Prompt user to enable it."
+	MessageTelemetryConfigured     = "Telemetry configuration already set, no need to call /start endpoint"
 )
 
 // DecisionTreeAction determines the appropriate action and message based on vehicle fleet status
@@ -30,13 +32,15 @@ func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (
 	var message string
 	var next *models.NextAction
 
+	telemetryStart := fmt.Sprintf("/v1/tesla/telemetry/%d/start", vehicleTokenID)
+
 	if fleetStatus.VehicleCommandProtocolRequired {
 		if fleetStatus.KeyPaired {
 			action = ActionSetTelemetryConfig
 			message = MessageReadyToStartDataFlow
 			next = &models.NextAction{
 				Method:   "POST",
-				Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
+				Endpoint: telemetryStart,
 			}
 		} else {
 			action = ActionOpenTeslaDeeplink
@@ -56,14 +60,14 @@ func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (
 				message = MessageReadyToStartDataFlow
 				next = &models.NextAction{
 					Method:   "POST",
-					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
+					Endpoint: telemetryStart,
 				}
 			} else if *fleetStatus.SafetyScreenStreamingToggleEnabled {
 				action = ActionSetTelemetryConfig
 				message = MessageReadyToStartDataFlow
 				next = &models.NextAction{
 					Method:   "POST",
-					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
+					Endpoint: telemetryStart,
 				}
 			} else {
 				action = ActionPromptToggle

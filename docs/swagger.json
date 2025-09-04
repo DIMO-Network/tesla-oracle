@@ -162,6 +162,76 @@
                 }
             }
         },
+        "/v1/tesla/telemetry/{vehicleTokenId}/start": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Initiates the data flow for a Tesla vehicle using the provided vehicle token ID.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla"
+                ],
+                "summary": "Start data flow for Tesla vehicle",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Vehicle token ID that must be set in the request path to fetch vehicle details",
+                        "name": "vehicleTokenId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Successfully started data flow for the vehicle.",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized or vehicle does not belong to the authenticated user.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Vehicle not found or failed to get vehicle by token ID.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "409": {
+                        "description": "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error, including decryption or fleet status retrieval failures.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/tesla/vehicles": {
             "post": {
                 "security": [
@@ -273,76 +343,6 @@
                     },
                     "500": {
                         "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/tesla/{vehicleTokenId}/start": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Initiates the data flow for a Tesla vehicle using the provided vehicle token ID.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "tesla"
-                ],
-                "summary": "Start data flow for Tesla vehicle",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Vehicle token ID that must be set in the request path to fetch vehicle details",
-                        "name": "vehicleTokenId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully started data flow for the vehicle.",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized or vehicle does not belong to the authenticated user.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Vehicle not found or failed to get vehicle by token ID.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "409": {
-                        "description": "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error, including decryption or fleet status retrieval failures.",
                         "schema": {
                             "$ref": "#/definitions/fiber.Error"
                         }

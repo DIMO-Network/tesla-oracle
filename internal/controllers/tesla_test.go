@@ -228,10 +228,10 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			}()
 
 			controller := NewTeslaController(settings, logger, teslaSvc)
-			app := s.setupTestApp("/v1/tesla/start/:vehicleTokenId", "POST", controller.StartDataFlow)
+			app := s.setupTestApp("/v1/tesla/telemetry/:vehicleTokenId/start", "POST", controller.StartDataFlow)
 
 			// then
-			req, _ := http.NewRequest("POST", "/v1/tesla/start/789", nil)
+			req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/789/start", nil)
 			req.Header.Set("Content-Type", "application/json")
 			assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -363,11 +363,13 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 }
 
 func (s *TeslaControllerTestSuite) TestGetStatus() {
+	expectedStartEndpoint := fmt.Sprintf("/v1/tesla/telemetry/%d/start", vehicleTokenID)
 	testCases := []struct {
 		name               string
 		fleetStatus        *service.VehicleFleetStatus
 		expectedResponse   *mods.StatusDecision
 		expectedStatusCode int
+		telemetryStatus    bool
 	}{
 		{
 			name: "VehicleCommandProtocolRequired and KeyPaired",
@@ -375,11 +377,12 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      true,
 			},
+			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{
 				Message: service.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
-					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
+					Endpoint: expectedStartEndpoint,
 				},
 			},
 			expectedStatusCode: fiber.StatusOK,
@@ -390,6 +393,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				VehicleCommandProtocolRequired: true,
 				KeyPaired:                      false,
 			},
+			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{
 				Message: service.MessageVirtualKeyNotPaired,
 			},
@@ -401,6 +405,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2023.10.14",
 			},
+			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{
 				Message: service.MessageFirmwareTooOld,
 			},
@@ -412,12 +417,9 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2025.21.11",
 			},
+			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{
-				Message: service.MessageReadyToStartDataFlow,
-				Next: &mods.NextAction{
-					Method:   "POST",
-					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
-				},
+				Message: service.MessageTelemetryConfigured,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -428,6 +430,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				SafetyScreenStreamingToggleEnabled: func(b bool) *bool { return &b }(false),
 				FirmwareVersion:                    "2025.21.11",
 			},
+			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{
 				Message: service.MessageStreamingToggleDisabled,
 			},
@@ -440,12 +443,26 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				SafetyScreenStreamingToggleEnabled: func(b bool) *bool { return &b }(true),
 				FirmwareVersion:                    "2025.21.11",
 			},
+			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{
 				Message: service.MessageReadyToStartDataFlow,
 				Next: &mods.NextAction{
 					Method:   "POST",
-					Endpoint: fmt.Sprintf("/v1/tesla/%d/start", vehicleTokenID),
+					Endpoint: expectedStartEndpoint,
 				},
+			},
+			expectedStatusCode: fiber.StatusOK,
+		},
+		{
+			name: "Telemetry already configured",
+			fleetStatus: &service.VehicleFleetStatus{
+				VehicleCommandProtocolRequired:     false,
+				SafetyScreenStreamingToggleEnabled: func(b bool) *bool { return &b }(true),
+				FirmwareVersion:                    "2025.21.11",
+			},
+			telemetryStatus: true,
+			expectedResponse: &mods.StatusDecision{
+				Message: service.MessageTelemetryConfigured,
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -460,6 +477,14 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			mockTeslaService, mockCredStore := s.setupGetStatusMocks(tc.fleetStatus)
 			mockIdentitySvc := s.setupMockIdentityService()
 			repos.Credential = mockCredStore
+
+			// Add telemetry status mock for test cases that result in ActionSetTelemetryConfig
+			if (tc.fleetStatus.VehicleCommandProtocolRequired && tc.fleetStatus.KeyPaired) ||
+				(tc.fleetStatus.SafetyScreenStreamingToggleEnabled != nil && *tc.fleetStatus.SafetyScreenStreamingToggleEnabled) {
+				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&service.VehicleTelemetryStatus{
+					Configured: tc.telemetryStatus,
+				}, nil)
+			}
 
 			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, nil)
 			dbVin := s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, "")
@@ -920,13 +945,15 @@ func (s *TeslaControllerTestSuite) assertMockCalls(mockTeslaService *test.MockTe
 
 // Generic mock setup functions to reduce duplication
 type MockConfig struct {
-	FleetStatus       *service.VehicleFleetStatus
-	NeedsCredStore    bool
-	NeedsIdentity     bool
-	NeedsDevices      bool
-	NeedsPartnerToken bool
-	AccessToken       string
-	PartnerToken      string
+	FleetStatus           *service.VehicleFleetStatus
+	NeedsCredStore        bool
+	NeedsIdentity         bool
+	NeedsDevices          bool
+	NeedsPartnerToken     bool
+	EnableTelemetryStatus bool
+	TelemetryStatus       bool
+	AccessToken           string
+	PartnerToken          string
 }
 
 func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.MockTeslaFleetAPIService, *test.MockCredStore, *test.MockIdentityAPIService, *test.MockDevicesGRPCService) {
@@ -973,6 +1000,13 @@ func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.M
 	// Setup fleet status if provided
 	if config.FleetStatus != nil {
 		mockTeslaService.On("VirtualKeyConnectionStatus", mock.Anything, accessToken, vin).Return(config.FleetStatus, nil)
+	}
+
+	// Setup default telemetry status for status endpoint (when EnableTelemetryStatus is true)
+	if config.EnableTelemetryStatus {
+		mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, accessToken, vin).Return(&service.VehicleTelemetryStatus{
+			Configured: config.TelemetryStatus,
+		}, nil)
 	}
 
 	// Setup partner token if needed

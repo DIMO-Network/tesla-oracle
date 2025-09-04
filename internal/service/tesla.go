@@ -333,7 +333,33 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, wal
 	}
 
 	// Get status and decide on action
-	return ts.decideOnAction(ctx, sd, accessToken, tokenID)
+	resp, err := ts.decideOnAction(ctx, sd, accessToken, tokenID)
+	if err != nil {
+		return nil, err
+	}
+
+	switch resp.Action {
+	case ActionSetTelemetryConfig:
+		telemetryStatus, err := ts.fleetAPISvc.GetTelemetrySubscriptionStatus(ctx, accessToken, sd.Vin)
+		if err != nil {
+			// Log error but don't fail the request - telemetry status is optional
+			ts.logger.Warn().Err(err).Str("vin", sd.Vin).Msg("Failed to get telemetry subscription status")
+		} else if telemetryStatus != nil && telemetryStatus.Configured {
+			// Telemetry is already configured, return telemetry_configured status
+			return &models.StatusDecision{
+				Action:  ActionTelemetryConfigured,
+				Message: MessageTelemetryConfigured,
+			}, nil
+		}
+	case ActionStartPolling:
+		// For polling, we consider telemetry already started be devices-api
+		return &models.StatusDecision{
+			Action:  ActionTelemetryConfigured,
+			Message: MessageTelemetryConfigured,
+		}, nil
+	}
+
+	return resp, nil
 }
 
 // GetVirtualKeyStatus handles virtual key status check workflow
