@@ -122,7 +122,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
 // @Failure     409 {object} fiber.Error "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps."
 // @Failure     500 {object} fiber.Error "Internal server error, including decryption or fleet status retrieval failures."
-// @Router      /v1/tesla/{vehicleTokenId}/start [post]
+// @Router      /v1/tesla/telemetry/{vehicleTokenId}/start [post]
 func (tc *TeslaController) StartDataFlow(c *fiber.Ctx) error {
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Telemetry/Start").
