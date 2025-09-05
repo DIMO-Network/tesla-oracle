@@ -47,6 +47,11 @@ func (c *Consumer) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 }
 
 func (c *Consumer) Handle(ctx context.Context, msg *sarama.ConsumerMessage) error {
+	if len(msg.Value) == 0 {
+		// Tombstone.
+		return nil
+	}
+
 	var ce cloudevent.CloudEvent[sdtask.CredentialData]
 
 	err := json.Unmarshal(msg.Value, &ce)
