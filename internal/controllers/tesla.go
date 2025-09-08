@@ -423,6 +423,8 @@ func (tc *TeslaController) translateServiceError(err error) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to create onboarding record.")
 	case errors.Is(err, service.ErrDeviceDefinitionNotFound):
 		return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
+	case errors.Is(err, service.ErrBadRequest):
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrUnsupportedCommand):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
 	case errors.Is(err, service.ErrInactiveSubscription):

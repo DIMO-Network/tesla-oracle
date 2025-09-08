@@ -136,7 +136,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 
 			// when
 			mockTeslaService, mockDevicesService := s.setupMockServices(tc.fleetStatus, tc.expectedAction, false)
-			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, nil, nil, mockDevicesService)
+			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, nil, nil, mockDevicesService, nil)
 			dbVin := s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, "")
 			defer func() {
 				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
@@ -221,7 +221,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			mockTeslaService, mockDevicesService := s.setupMockServices(tc.fleetStatus, tc.expectedAction, tc.expectedConfigLimitReached)
 			mockIdentitySvc := s.setupMockIdentityService()
 
-			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService)
+			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService, nil)
 			dbVin := s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, "pending")
 			defer func() {
 				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
@@ -255,7 +255,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	mockTeslaService, mockDevicesService, mockIdentitySvc := s.setupUnsubscribeMocks()
 
 	mockCredStore := repos.Credential.(*test.MockCredStore)
-	teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService)
+	teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService, nil)
 	controller := NewTeslaController(settings, logger, teslaSvc)
 
 	dbVin := s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, "active")
@@ -313,7 +313,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 		Credential: credStore,
 		Onboarding: onboardingRepo,
 	}
-	teslaSvc := service.NewTeslaService(settings, &logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, mockDDService, nil)
+	teslaSvc := service.NewTeslaService(settings, &logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, mockDDService, nil, nil)
 	controller := NewTeslaController(settings, &logger, teslaSvc)
 	app := s.setupTestAppForListVehicles(controller)
 
@@ -343,7 +343,7 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	mockTeslaService, mockCredStore := s.setupVirtualKeyStatusMocks()
 	repos.Credential = mockCredStore
 
-	teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, nil, nil, nil)
+	teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, nil, nil, nil, nil)
 	controller := NewTeslaController(settings, logger, teslaSvc)
 
 	// then
@@ -486,7 +486,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 				}, nil)
 			}
 
-			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, nil)
+			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, nil, nil)
 			dbVin := s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, "")
 			defer func() {
 				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
@@ -535,7 +535,7 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 	}
 
 	settings := config.Settings{DevicesGRPCEndpoint: "localhost:50051"}
-	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, nil)
+	teslaSvc := service.NewTeslaService(&settings, &logger, new(cipher.ROT13Cipher), repos, mockTeslaService, mockIdentitySvc, nil, nil, nil)
 
 	controller := func() *TeslaController {
 		return NewTeslaController(&settings, &logger, teslaSvc)
@@ -1079,6 +1079,266 @@ func (s *TeslaControllerTestSuite) assertGetStatusResponse(resp *http.Response, 
 	// Assert the response content
 	s.Equal(expectedResponse.Message, actualResponse.Message)
 	s.Equal(expectedResponse.Next, actualResponse.Next)
+}
+
+func (s *TeslaControllerTestSuite) TestSubmitCommand() {
+	testCases := []struct {
+		name                  string
+		command               string
+		subscriptionStatus    string
+		expectedStatusCode    int
+		expectedCommandID     string
+		expectedStatus        string
+		expectedMessage       string
+		publishCommandError   error
+		saveCommandError      error
+		vehicleOwnerMismatch  bool
+		syntheticDeviceExists bool
+		validJSON             bool
+	}{
+		{
+			name:                  "Successful frunk open command",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-123",
+			expectedStatus:        "submitted",
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful trunk open command",
+			command:               "trunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-456",
+			expectedStatus:        "submitted",
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful doors lock command",
+			command:               "doors/lock",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-789",
+			expectedStatus:        "submitted",
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful doors unlock command",
+			command:               "doors/unlock",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-101",
+			expectedStatus:        "submitted",
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful charge start command",
+			command:               "charge/start",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-202",
+			expectedStatus:        "submitted",
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful charge stop command",
+			command:               "charge/stop",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-303",
+			expectedStatus:        "submitted",
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Empty command",
+			command:               "",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusBadRequest,
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Unsupported command",
+			command:               "windows/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusBadRequest,
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Inactive subscription",
+			command:               "frunk/open",
+			subscriptionStatus:    "inactive",
+			expectedStatusCode:    fiber.StatusForbidden,
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Command publisher error",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusInternalServerError,
+			publishCommandError:   fmt.Errorf("failed to publish to Kafka"),
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Command save error (should still succeed)",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-404",
+			expectedStatus:        "submitted",
+			expectedMessage:       "Command successfully submitted for processing",
+			saveCommandError:      fmt.Errorf("database error"),
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Vehicle ownership mismatch",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusUnauthorized,
+			vehicleOwnerMismatch:  true,
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Synthetic device not found",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusNotFound,
+			syntheticDeviceExists: false,
+			validJSON:             true,
+		},
+		{
+			name:                  "Invalid JSON",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusBadRequest,
+			syntheticDeviceExists: true,
+			validJSON:             false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			// given
+			settings, logger, repos := s.createTestDependencies()
+
+			// Setup mocks
+			var mockCommandPublisher *test.MockCommandPublisher
+			var mockCommandRepo *test.MockCommandRepository
+			var mockIdentitySvc *test.MockIdentityAPIService
+
+			// Setup command publisher mock
+			if tc.syntheticDeviceExists && tc.validJSON && tc.command != "" && tc.command != "windows/open" && tc.subscriptionStatus == "active" && !tc.vehicleOwnerMismatch {
+				mockCommandPublisher = new(test.MockCommandPublisher)
+				if tc.publishCommandError != nil {
+					mockCommandPublisher.On("PublishCommand", mock.Anything, mock.Anything, tc.command).Return("", tc.publishCommandError)
+				} else {
+					mockCommandPublisher.On("PublishCommand", mock.Anything, mock.Anything, tc.command).Return(tc.expectedCommandID, nil)
+				}
+			}
+
+			// Setup command repository mock
+			if tc.syntheticDeviceExists && tc.validJSON && tc.command != "" && tc.command != "windows/open" && tc.subscriptionStatus == "active" && !tc.vehicleOwnerMismatch && tc.publishCommandError == nil {
+				mockCommandRepo = new(test.MockCommandRepository)
+				if tc.saveCommandError != nil {
+					mockCommandRepo.On("SaveCommandRequest", mock.Anything, mock.Anything).Return(tc.saveCommandError)
+				} else {
+					mockCommandRepo.On("SaveCommandRequest", mock.Anything, mock.Anything).Return(nil)
+				}
+				repos.Command = mockCommandRepo
+			}
+
+			// Setup identity service mock
+			if tc.vehicleOwnerMismatch {
+				mockIdentitySvc = new(test.MockIdentityAPIService)
+				mockVehicle := &mods.Vehicle{
+					Owner:   "0xdifferentowner123456789abcdef123456789abcdef",
+					TokenID: vehicleTokenID,
+					SyntheticDevice: mods.SyntheticDevice{
+						Address: "0xabcdef1234567890abcdef1234567890abcdef12",
+					},
+				}
+				mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
+			} else {
+				mockIdentitySvc = s.setupMockIdentityService()
+			}
+
+			// Create Tesla service
+			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, nil, mockIdentitySvc, nil, nil, mockCommandPublisher)
+
+			// Create synthetic device if needed
+			var dbVin *models.SyntheticDevice
+			if tc.syntheticDeviceExists {
+				dbVin = s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, tc.subscriptionStatus)
+				defer func() {
+					_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+				}()
+			}
+
+			controller := NewTeslaController(settings, logger, teslaSvc)
+			app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+
+			// when
+			var requestBody string
+			if tc.validJSON {
+				requestBody = fmt.Sprintf(`{"command": "%s"}`, tc.command)
+			} else {
+				requestBody = `{"command": "frunk/open"` // Invalid JSON - missing closing brace
+			}
+
+			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+			req.Header.Set("Content-Type", "application/json")
+			assert.NoError(s.T(), test.GenerateJWT(req))
+
+			resp, err := app.Test(req)
+
+			// then
+			assert.NoError(s.T(), err)
+			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
+
+			if tc.expectedStatusCode == fiber.StatusOK {
+				s.assertSubmitCommandResponse(resp, tc.expectedCommandID, tc.expectedStatus, tc.expectedMessage)
+			}
+
+			// Verify mock expectations
+			if mockCommandPublisher != nil {
+				mockCommandPublisher.AssertExpectations(s.T())
+			}
+			if mockCommandRepo != nil {
+				mockCommandRepo.AssertExpectations(s.T())
+			}
+			if tc.validJSON {
+				mockIdentitySvc.AssertExpectations(s.T())
+			}
+		})
+	}
+}
+
+// Helper function to assert SubmitCommand response
+func (s *TeslaControllerTestSuite) assertSubmitCommandResponse(resp *http.Response, expectedCommandID, expectedStatus, expectedMessage string) {
+	var response map[string]interface{}
+	s.assertJSONResponse(resp, &response, fiber.StatusOK)
+
+	assert.Equal(s.T(), expectedCommandID, response["commandId"])
+	assert.Equal(s.T(), expectedStatus, response["status"])
+	assert.Equal(s.T(), expectedMessage, response["message"])
 }
 
 func (s *TeslaControllerTestSuite) createTestSyntheticDeviceWithStatus(cipher cipher.Cipher, subscriptionStatus string) *models.SyntheticDevice {

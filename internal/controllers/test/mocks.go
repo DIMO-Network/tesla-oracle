@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 
 	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/ethereum/go-ethereum/common"
@@ -198,4 +199,45 @@ func (m *MockCipher) Encrypt(data string) (string, error) {
 func (m *MockCipher) Decrypt(data string) (string, error) {
 	args := m.Called(data)
 	return args.String(0), args.Error(1)
+}
+
+// MockCommandPublisher is a mock implementation of the CommandPublisher interface.
+type MockCommandPublisher struct {
+	mock.Mock
+}
+
+func (m *MockCommandPublisher) PublishCommand(ctx context.Context, sd *dbmodels.SyntheticDevice, command string) (string, error) {
+	args := m.Called(ctx, sd, command)
+	return args.String(0), args.Error(1)
+}
+
+// MockCommandRepository is a mock implementation of the CommandRepository interface.
+type MockCommandRepository struct {
+	mock.Mock
+}
+
+func (m *MockCommandRepository) SaveCommandRequest(ctx context.Context, request *dbmodels.DeviceCommandRequest) error {
+	args := m.Called(ctx, request)
+	return args.Error(0)
+}
+
+func (m *MockCommandRepository) UpdateCommandRequest(ctx context.Context, request *dbmodels.DeviceCommandRequest) error {
+	args := m.Called(ctx, request)
+	return args.Error(0)
+}
+
+func (m *MockCommandRepository) GetCommandRequest(ctx context.Context, taskID string) (*dbmodels.DeviceCommandRequest, error) {
+	args := m.Called(ctx, taskID)
+	if args.Get(0) != nil {
+		return args.Get(0).(*dbmodels.DeviceCommandRequest), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockCommandRepository) GetCommandRequestsByVehicle(ctx context.Context, vehicleTokenID int, limit int) (dbmodels.DeviceCommandRequestSlice, error) {
+	args := m.Called(ctx, vehicleTokenID, limit)
+	if args.Get(0) != nil {
+		return args.Get(0).(dbmodels.DeviceCommandRequestSlice), args.Error(1)
+	}
+	return nil, args.Error(1)
 }

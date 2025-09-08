@@ -6,8 +6,8 @@ import (
 	"fmt"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
-	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/credlistener"
+	"github.com/DIMO-Network/tesla-oracle/internal/messaging"
 	"github.com/IBM/sarama"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
@@ -56,7 +56,7 @@ func (cm *ConsumerManager) startContractEventConsumer(ctx context.Context, group
 		return fmt.Errorf("error creating consumer group: %w", err)
 	}
 
-	proc := consumer.New(*cm.services.DB, cm.settings.TopicContractEvent, cm.logger)
+	proc := messaging.New(*cm.services.DB, cm.settings.TopicContractEvent, cm.logger)
 
 	group.Go(func() error {
 		return cm.runContractEventConsumer(ctx, proc, cGroup, cm.settings.TopicContractEvent)
@@ -95,7 +95,7 @@ func (cm *ConsumerManager) startCredentialListener(ctx context.Context, group *e
 }
 
 // runContractEventConsumer runs the contract event consumer with retry logic
-func (cm *ConsumerManager) runContractEventConsumer(ctx context.Context, proc *consumer.Processor, consumer sarama.ConsumerGroup, topic string) error {
+func (cm *ConsumerManager) runContractEventConsumer(ctx context.Context, proc *messaging.Processor, consumer sarama.ConsumerGroup, topic string) error {
 	for {
 		cm.logger.Info().Msgf("starting consumer: %s", topic)
 		if err := consumer.Consume(ctx, []string{topic}, proc); err != nil {

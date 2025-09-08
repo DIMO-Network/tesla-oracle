@@ -11,6 +11,7 @@ import (
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/messaging"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
@@ -39,6 +40,7 @@ type Services struct {
 	TeslaFleetAPIService     service.TeslaFleetAPIService
 	TeslaService             *service.TeslaService
 	KafkaProducer            sarama.SyncProducer
+	TeslaCommandPublisher    messaging.CommandPublisher
 }
 
 // InitializeServices creates and initializes all application services
@@ -92,8 +94,11 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		return nil, fmt.Errorf("failed to create Kafka producer: %w", err)
 	}
 
+	// Initialize Tesla command publisher
+	teslaCommandPublisher := messaging.NewTeslaCommandPublisher(kafkaProducer, settings, logger)
+
 	// Initialize Tesla service with all dependencies
-	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, kafkaProducer)
+	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, teslaCommandPublisher)
 
 	// Initialize River client with workers
 	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService)
@@ -117,6 +122,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		TeslaFleetAPIService:     teslaFleetAPIService,
 		TeslaService:             teslaService,
 		KafkaProducer:            kafkaProducer,
+		TeslaCommandPublisher:    teslaCommandPublisher,
 	}, nil
 }
 
