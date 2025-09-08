@@ -102,6 +102,9 @@ func App(
 	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
 	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
 
+	commandsGroup := app.Group("/v1/tesla/commands", jwtAuth, walletMdw)
+	commandsGroup.Post("/:vehicleTokenId", teslaCtrl.SubmitCommand)
+
 	return app
 }
 

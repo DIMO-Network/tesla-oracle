@@ -41,9 +41,18 @@ type OnboardingRepository interface {
 	DeleteAllOnboardings(ctx context.Context) error
 }
 
+// CommandRepository handles device command request operations
+type CommandRepository interface {
+	SaveCommandRequest(ctx context.Context, request *dbmodels.DeviceCommandRequest) error
+	UpdateCommandRequest(ctx context.Context, request *dbmodels.DeviceCommandRequest) error
+	GetCommandRequest(ctx context.Context, taskID string) (*dbmodels.DeviceCommandRequest, error)
+	GetCommandRequestsByVehicle(ctx context.Context, vehicleTokenID int, limit int) (dbmodels.DeviceCommandRequestSlice, error)
+}
+
 // Repositories aggregates all repository interfaces
 type Repositories struct {
 	Vehicle    VehicleRepository
 	Credential CredentialRepository
 	Onboarding OnboardingRepository
+	Command    CommandRepository
 }

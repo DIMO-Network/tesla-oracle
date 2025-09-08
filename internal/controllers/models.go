@@ -38,3 +38,13 @@ type MintDataForVins struct {
 type FinalizeResponse struct {
 	Vehicles []service.OnboardedVehicle `json:"vehicles"`
 }
+
+type SubmitCommandRequest struct {
+	Command string `json:"command"`
+}
+
+type SubmitCommandResponse struct {
+	CommandID string `json:"commandId"`
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+}

@@ -3,6 +3,7 @@ package bootstrap
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/DIMO-Network/go-transactions"
@@ -13,6 +14,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	"github.com/IBM/sarama"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/jackc/pgx/v5"
@@ -36,6 +38,7 @@ type Services struct {
 	Repositories             *repository.Repositories
 	TeslaFleetAPIService     service.TeslaFleetAPIService
 	TeslaService             *service.TeslaService
+	KafkaProducer            sarama.SyncProducer
 }
 
 // InitializeServices creates and initializes all application services
@@ -83,8 +86,14 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		logger.Warn().Msgf("Devices GRPC is DISABLED")
 	}
 
+	// Initialize Kafka producer
+	kafkaProducer, err := initializeKafkaProducer(settings, logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kafka producer: %w", err)
+	}
+
 	// Initialize Tesla service with all dependencies
-	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService)
+	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, kafkaProducer)
 
 	// Initialize River client with workers
 	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService)
@@ -107,6 +116,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		Repositories:             repositories,
 		TeslaFleetAPIService:     teslaFleetAPIService,
 		TeslaService:             teslaService,
+		KafkaProducer:            kafkaProducer,
 	}, nil
 }
 
@@ -154,10 +164,14 @@ func initializeRepositories(pdb *db.Store, settings *config.Settings, logger *ze
 	// Initialize onboarding repository
 	onboardingRepo := repository.NewOnboardingRepository(pdb, logger)
 
+	// Initialize command repository
+	commandRepo := repository.NewCommandRepository(pdb, logger)
+
 	return &repository.Repositories{
 		Vehicle:    vehicleRepo,
 		Credential: credentialRepo,
 		Onboarding: onboardingRepo,
+		Command:    commandRepo,
 	}
 }
 
@@ -213,8 +227,35 @@ func createKMS(settings *config.Settings, logger *zerolog.Logger) cipher.Cipher 
 	}
 }
 
+// initializeKafkaProducer creates and configures the Kafka producer
+func initializeKafkaProducer(settings *config.Settings, logger *zerolog.Logger) (sarama.SyncProducer, error) {
+	config := sarama.NewConfig()
+	config.Version = sarama.V3_6_0_0
+	config.Producer.Return.Successes = true
+	config.Producer.RequiredAcks = sarama.WaitForAll // Wait for all in-sync replicas to ack
+	config.Producer.Retry.Max = 5                    // Retry up to 5 times
+	config.Producer.Compression = sarama.CompressionSnappy
+
+	// Create producer
+	brokers := strings.Split(settings.KafkaBrokers, ",")
+	producer, err := sarama.NewSyncProducer(brokers, config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Kafka sync producer: %w", err)
+	}
+
+	logger.Info().Strs("brokers", brokers).Msg("Kafka producer initialized")
+	return producer, nil
+}
+
 // Cleanup properly closes all services
 func (s *Services) Cleanup() {
+	if s.KafkaProducer != nil {
+		if err := s.KafkaProducer.Close(); err != nil {
+			// Log the error but don't fail cleanup
+			logger := zerolog.New(nil)
+			logger.Err(err).Msg("Failed to close Kafka producer")
+		}
+	}
 	if s.DBPool != nil {
 		s.DBPool.Close()
 	}

@@ -291,6 +291,50 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	return c.JSON(resp)
 }
 
+// SubmitCommand godoc
+// @Summary     Submit command to Tesla vehicle
+// @Description Submits a command to a Tesla vehicle using the provided vehicle token ID and command details.
+// @Tags        tesla
+// @Accept      json
+// @Produce     json
+// @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to identify the vehicle"
+// @Param       payload body controllers.SubmitCommandRequest true "Command details"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.SubmitCommandResponse "Command submitted successfully"
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized or vehicle does not belong to the authenticated user."
+// @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
+// @Failure     500 {object} fiber.Error "Internal server error, including command submission failures."
+// @Router      /v1/tesla/commands/{vehicleTokenId} [post]
+func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
+	logger := helpers.GetLogger(c, tc.logger).With().
+		Str("Name", "Tesla/SubmitCommand").
+		Logger()
+
+	tokenID, err := extractVehicleTokenId(c)
+	if err != nil {
+		return err
+	}
+
+	var reqBody SubmitCommandRequest
+	if err := c.BodyParser(&reqBody); err != nil {
+		logger.Err(err).Msg("Failed to parse request body")
+		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse request body")
+	}
+
+	logger.Debug().Msgf("Received command submission request for vehicle %d, command: %s", tokenID, reqBody.Command)
+
+	walletAddress := helpers.GetWallet(c)
+	response, err := tc.teslaService.SubmitCommand(c.Context(), tokenID, walletAddress, reqBody.Command)
+	if err != nil {
+		logger.Err(err).Msgf("Failed to submit command %s for vehicle %d", reqBody.Command, tokenID)
+		return tc.translateServiceError(err)
+	}
+
+	logger.Info().Msgf("Successfully submitted command %s for vehicle %d", reqBody.Command, tokenID)
+	return c.JSON(response)
+}
+
 func (tc *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeResponse, error) {
 	var reqBody CompleteOAuthExchangeRequest
 	if err := c.BodyParser(&reqBody); err != nil {
@@ -379,6 +423,10 @@ func (tc *TeslaController) translateServiceError(err error) error {
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to create onboarding record.")
 	case errors.Is(err, service.ErrDeviceDefinitionNotFound):
 		return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
+	case errors.Is(err, service.ErrUnsupportedCommand):
+		return fiber.NewError(fiber.StatusBadRequest, err.Error())
+	case errors.Is(err, service.ErrInactiveSubscription):
+		return fiber.NewError(fiber.StatusForbidden, err.Error())
 	default:
 		// For unknown errors
 		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error")

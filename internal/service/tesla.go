@@ -2,22 +2,26 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DIMO-Network/cloudevent"
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/IBM/sarama"
 	"github.com/aarondl/null/v8"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/friendsofgo/errors"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/rs/zerolog"
+	"github.com/segmentio/ksuid"
 )
 
 // Domain errors
@@ -44,6 +48,18 @@ var (
 	ErrOAuthVehiclesFetch       = errors.New("failed to fetch vehicles from Tesla")
 	ErrOnboardingRecordCreation = errors.New("failed to create onboarding record")
 	ErrVINDecoding              = errors.New("failed to decode VIN")
+	ErrUnsupportedCommand       = errors.New("unsupported command")
+	ErrInactiveSubscription     = errors.New("vehicle subscription is not active")
+)
+
+// Supported Tesla commands
+const (
+	CommandFrunkOpen   = "frunk/open"
+	CommandTrunkOpen   = "trunk/open"
+	CommandDoorsLock   = "doors/lock"
+	CommandDoorsUnlock = "doors/unlock"
+	CommandChargeStart = "charge/start"
+	CommandChargeStop  = "charge/stop"
 )
 
 type TeslaService struct {
@@ -55,9 +71,10 @@ type TeslaService struct {
 	identitySvc  IdentityAPIService
 	ddSvc        DeviceDefinitionsAPIService
 	devicesSvc   DevicesGRPCService
+	producer     sarama.SyncProducer
 }
 
-func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, cipher cipher.Cipher, repositories *repository.Repositories, fleetAPISvc TeslaFleetAPIService, identitySvc IdentityAPIService, ddSvc DeviceDefinitionsAPIService, devicesService DevicesGRPCService) *TeslaService {
+func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, cipher cipher.Cipher, repositories *repository.Repositories, fleetAPISvc TeslaFleetAPIService, identitySvc IdentityAPIService, ddSvc DeviceDefinitionsAPIService, devicesService DevicesGRPCService, producer sarama.SyncProducer) *TeslaService {
 	return &TeslaService{
 		settings:     settings,
 		logger:       logger,
@@ -67,6 +84,7 @@ func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, cipher c
 		identitySvc:  identitySvc,
 		ddSvc:        ddSvc,
 		devicesSvc:   devicesService,
+		producer:     producer,
 	}
 }
 
@@ -389,6 +407,200 @@ func (ts *TeslaService) GetVirtualKeyStatus(ctx context.Context, vin string, wal
 	}
 
 	return &response, nil
+}
+
+// SubmitCommand handles command submission to Tesla vehicles
+func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, walletAddress common.Address, command string) (interface{}, error) {
+	// Validate vehicle ownership
+	err := ts.validateVehicleOwnership(tokenID, walletAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	// Validate command
+	err = ts.validateCommand(command)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get synthetic device
+	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", ErrSyntheticDeviceNotFound, err.Error())
+	}
+
+	// Check subscription status - commands only allowed for active subscriptions
+	if sd.SubscriptionStatus.String == "inactive" {
+		ts.logger.Warn().
+			Str("subscriptionStatus", sd.SubscriptionStatus.String).
+			Int("vehicleTokenId", sd.VehicleTokenID.Int).
+			Msgf("Dropping command request for vehicle due to subscription status")
+		return nil, ErrInactiveSubscription
+	}
+
+	//  TODO Should we check if commands enabled, who enable it?
+
+	ts.logger.Debug().Str("vin", sd.Vin).Msg("Ready to submit command to vehicle")
+
+	// Send to task worker
+	commandID, err := ts.publishTeslaCommand(sd, command)
+	if err != nil {
+		return nil, fmt.Errorf("failed to publish Tesla command: %w", err)
+	}
+
+	// Save command request to database
+	eventType := ts.getEventTypeForCommand(command)
+	commandRequest := &dbmodels.DeviceCommandRequest{
+		ID:             commandID,
+		VehicleTokenID: sd.VehicleTokenID.Int,
+		Vin:            sd.Vin,
+		Command:        command,
+		EventType:      eventType,
+		Status:         "pending",
+	}
+
+	err = ts.repositories.Command.SaveCommandRequest(ctx, commandRequest)
+	if err != nil {
+		// Log error but don't fail the request since Kafka message was already sent
+		ts.logger.Err(err).Str("commandId", commandID).Msg("Failed to save command request to database")
+	}
+
+	return map[string]interface{}{
+		"commandId": commandID,
+		"status":    "submitted",
+		"message":   "Command successfully submitted for processing",
+	}, nil
+}
+
+// validateCommand validates the command against supported commands
+func (ts *TeslaService) validateCommand(command string) error {
+
+	if command == "" {
+		return fmt.Errorf("%w: command field is required", ErrBadRequest)
+	}
+
+	// Validate command against supported commands
+	if !ts.isCommandSupported(command) {
+		return fmt.Errorf("%w: command '%s' is not supported. Supported commands: %s",
+			ErrUnsupportedCommand, command, ts.getSupportedCommandsList())
+	}
+
+	return nil
+}
+
+// isCommandSupported checks if the command is in the list of supported commands
+func (ts *TeslaService) isCommandSupported(command string) bool {
+	supportedCommands := map[string]bool{
+		CommandFrunkOpen:   true,
+		CommandTrunkOpen:   true,
+		CommandDoorsLock:   true,
+		CommandDoorsUnlock: true,
+		CommandChargeStart: true,
+		CommandChargeStop:  true,
+	}
+
+	return supportedCommands[command]
+}
+
+// getSupportedCommandsList returns a comma-separated list of supported commands for error messages
+func (ts *TeslaService) getSupportedCommandsList() string {
+	commands := []string{
+		CommandFrunkOpen,
+		CommandTrunkOpen,
+		CommandDoorsLock,
+		CommandDoorsUnlock,
+		CommandChargeStart,
+		CommandChargeStop,
+	}
+
+	return strings.Join(commands, ", ")
+}
+
+// TeslaCommandData represents the data structure for Tesla command messages
+type TeslaCommandData struct {
+	TaskID         string    `json:"taskId"`
+	VehicleTokenID int       `json:"vehicleTokenId"`
+	VIN            string    `json:"vin"`
+	Timestamp      time.Time `json:"timestamp"`
+}
+
+// publishTeslaCommand publishes a Tesla command to Kafka using CloudEvents
+func (ts *TeslaService) publishTeslaCommand(sd *dbmodels.SyntheticDevice, command string) (string, error) {
+	taskID := ksuid.New().String()
+
+	// Get command-specific event type
+	eventType := ts.getEventTypeForCommand(command)
+
+	cmdData := TeslaCommandData{
+		TaskID:         taskID,
+		VehicleTokenID: sd.VehicleTokenID.Int,
+		VIN:            sd.Vin,
+		Timestamp:      time.Now(),
+	}
+
+	// Create CloudEvent
+	event := cloudevent.CloudEvent[TeslaCommandData]{
+		CloudEventHeader: cloudevent.CloudEventHeader{
+			ID:          taskID,
+			SpecVersion: "1.0",
+			Type:        eventType,
+			Source:      "tesla-oracle",
+			Subject:     strconv.Itoa(sd.VehicleTokenID.Int),
+			Time:        time.Now().UTC(),
+		},
+		Data: cmdData,
+	}
+
+	// Marshal to JSON
+	eventJSON, err := json.Marshal(event)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal command event: %w", err)
+	}
+
+	// Create Kafka message
+	msg := &sarama.ProducerMessage{
+		Topic: ts.settings.TopicTeslaCommand,
+		Key:   sarama.StringEncoder(sd.VehicleTokenID.Int), // Partition by vehicleTokenID
+		Value: sarama.ByteEncoder(eventJSON),
+	}
+
+	// Send message
+	partition, offset, err := ts.producer.SendMessage(msg)
+	if err != nil {
+		return "", fmt.Errorf("failed to send message to Kafka: %w", err)
+	}
+
+	ts.logger.Info().
+		Str("taskId", taskID).
+		Str("vin", sd.Vin).
+		Str("command", command).
+		Int32("partition", partition).
+		Int64("offset", offset).
+		Msg("Tesla command published to Kafka")
+
+	return taskID, nil
+}
+
+// getEventTypeForCommand returns the CloudEvent type for each Tesla command
+// Based on legacy implementation: different commands have different event types
+// so the consumer knows which Tesla API endpoint to call
+func (ts *TeslaService) getEventTypeForCommand(command string) string {
+	prefix := "zone.dimo.task.tesla"
+	commandEventTypes := map[string]string{
+		CommandFrunkOpen:   fmt.Sprintf("%s.frunk.open", prefix),
+		CommandTrunkOpen:   fmt.Sprintf("%s.trunk.open", prefix),
+		CommandDoorsLock:   fmt.Sprintf("%s.doors.lock", prefix),
+		CommandDoorsUnlock: fmt.Sprintf("%s.doors.unlock", prefix),
+		CommandChargeStart: fmt.Sprintf("%s.charge.start", prefix),
+		CommandChargeStop:  fmt.Sprintf("%s.charge.stop", prefix),
+	}
+
+	if eventType, exists := commandEventTypes[command]; exists {
+		return eventType
+	}
+
+	// Fallback to generic command type if command not found
+	return "com.tesla.vehicle.command.generic"
 }
 
 // fetchVehicle retrieves a vehicle from identity-api by its token ID.
