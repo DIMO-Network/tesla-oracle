@@ -254,11 +254,9 @@ func initializeKafkaProducer(settings *config.Settings, logger *zerolog.Logger) 
 }
 
 // Cleanup properly closes all services
-func (s *Services) Cleanup() {
+func (s *Services) Cleanup(logger zerolog.Logger) {
 	if s.KafkaProducer != nil {
 		if err := s.KafkaProducer.Close(); err != nil {
-			// Log the error but don't fail cleanup
-			logger := zerolog.New(nil)
 			logger.Err(err).Msg("Failed to close Kafka producer")
 		}
 	}

@@ -48,7 +48,7 @@ func main() {
 	if err != nil {
 		logger.Fatal().Err(err).Msg("failed to initialize services")
 	}
-	defer services.Cleanup()
+	defer services.Cleanup(logger)
 
 	group, gCtx := errgroup.WithContext(ctx)
 
