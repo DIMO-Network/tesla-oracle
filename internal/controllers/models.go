@@ -42,9 +42,3 @@ type FinalizeResponse struct {
 type SubmitCommandRequest struct {
 	Command string `json:"command"`
 }
-
-type SubmitCommandResponse struct {
-	CommandID string `json:"commandId"`
-	Status    string `json:"status"`
-	Message   string `json:"message"`
-}

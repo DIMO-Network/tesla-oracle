@@ -1358,12 +1358,12 @@ func (s *TeslaControllerTestSuite) assertGetStatusResponse(resp *http.Response, 
 
 // Helper function to assert SubmitCommand response
 func (s *TeslaControllerTestSuite) assertSubmitCommandResponse(resp *http.Response, expectedCommandID, expectedStatus, expectedMessage string) {
-	var response map[string]interface{}
+	var response mods.SubmitCommandResponse
 	s.assertJSONResponse(resp, &response, fiber.StatusOK)
 
-	assert.Equal(s.T(), expectedCommandID, response["commandId"])
-	assert.Equal(s.T(), expectedStatus, response["status"])
-	assert.Equal(s.T(), expectedMessage, response["message"])
+	assert.Equal(s.T(), expectedCommandID, response.CommandID)
+	assert.Equal(s.T(), expectedStatus, response.Status)
+	assert.Equal(s.T(), expectedMessage, response.Message)
 }
 
 func (s *TeslaControllerTestSuite) createTestSyntheticDeviceWithStatus(cipher cipher.Cipher, subscriptionStatus string) *models.SyntheticDevice {

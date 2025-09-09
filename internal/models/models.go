@@ -148,3 +148,10 @@ func (s *VirtualKeyStatus) UnmarshalText(text []byte) error {
 	}
 	return nil
 }
+
+// SubmitCommandResponse represents the response from submitting a Tesla command
+type SubmitCommandResponse struct {
+	CommandID string `json:"commandId"`
+	Status    string `json:"status"`
+	Message   string `json:"message"`
+}

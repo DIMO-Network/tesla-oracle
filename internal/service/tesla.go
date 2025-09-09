@@ -369,7 +369,7 @@ func (ts *TeslaService) GetVirtualKeyStatus(ctx context.Context, vin string, wal
 }
 
 // SubmitCommand handles command submission to Tesla vehicles
-func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, walletAddress common.Address, command string) (interface{}, error) {
+func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, walletAddress common.Address, command string) (*models.SubmitCommandResponse, error) {
 	// Validate vehicle ownership
 	err := ts.validateVehicleOwnership(tokenID, walletAddress)
 	if err != nil {
@@ -422,10 +422,10 @@ func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, wallet
 		ts.logger.Err(err).Str("commandId", commandID).Msg("Failed to save command request to database")
 	}
 
-	return map[string]interface{}{
-		"commandId": commandID,
-		"status":    CommandStatusPending,
-		"message":   "Command successfully submitted for processing",
+	return &models.SubmitCommandResponse{
+		CommandID: commandID,
+		Status:    CommandStatusPending,
+		Message:   "Command successfully submitted for processing",
 	}, nil
 }
 
