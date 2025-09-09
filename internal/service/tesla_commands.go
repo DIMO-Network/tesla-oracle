@@ -68,21 +68,21 @@ func getSupportedCommandsList() string {
 // getEventTypeForCommand returns the CloudEvent type for each Tesla command
 // Based on legacy implementation: different commands have different event types
 // so the consumer knows which Tesla API endpoint to call
-func (ts *TeslaService) getEventTypeForCommand(command string) string {
-	prefix := "zone.dimo.task.tesla"
-	commandEventTypes := map[string]string{
-		CommandFrunkOpen:   fmt.Sprintf("%s.frunk.open", prefix),
-		CommandTrunkOpen:   fmt.Sprintf("%s.trunk.open", prefix),
-		CommandDoorsLock:   fmt.Sprintf("%s.doors.lock", prefix),
-		CommandDoorsUnlock: fmt.Sprintf("%s.doors.unlock", prefix),
-		CommandChargeStart: fmt.Sprintf("%s.charge.start", prefix),
-		CommandChargeStop:  fmt.Sprintf("%s.charge.stop", prefix),
-	}
-
-	if eventType, exists := commandEventTypes[command]; exists {
-		return eventType
-	}
-
-	// Fallback to generic command type if command not found
-	return "com.tesla.vehicle.command.generic"
-}
+//func getEventTypeForCommand(command string) string {
+//	prefix := "zone.dimo.task.tesla"
+//	commandEventTypes := map[string]string{
+//		CommandFrunkOpen:   fmt.Sprintf("%s.frunk.open", prefix),
+//		CommandTrunkOpen:   fmt.Sprintf("%s.trunk.open", prefix),
+//		CommandDoorsLock:   fmt.Sprintf("%s.doors.lock", prefix),
+//		CommandDoorsUnlock: fmt.Sprintf("%s.doors.unlock", prefix),
+//		CommandChargeStart: fmt.Sprintf("%s.charge.start", prefix),
+//		CommandChargeStop:  fmt.Sprintf("%s.charge.stop", prefix),
+//	}
+//
+//	if eventType, exists := commandEventTypes[command]; exists {
+//		return eventType
+//	}
+//
+//	// Fallback to generic command type if command not found
+//	return "com.tesla.vehicle.command.generic"
+//}
