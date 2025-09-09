@@ -71,7 +71,7 @@ func (p *CommandPublisherImpl) PublishCommand(ctx context.Context, sd *dbmodels.
 
 	msg := &sarama.ProducerMessage{
 		Topic: p.settings.TopicTeslaCommand,
-		Key:   sarama.StringEncoder(sd.VehicleTokenID.Int), // Partition by vehicleTokenID
+		Key:   sarama.StringEncoder(rune(sd.VehicleTokenID.Int)), // Partition by vehicleTokenID
 		Value: sarama.ByteEncoder(eventJSON),
 	}
 
