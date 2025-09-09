@@ -5,6 +5,13 @@ import (
 	"strings"
 )
 
+// Command status constants for Tesla device commands
+const (
+	CommandStatusPending   = "pending"   // Command has been submitted and is waiting to be processed
+	CommandStatusCompleted = "completed" // Command has been successfully executed
+	CommandStatusFailed    = "failed"    // Command execution failed
+)
+
 // Supported Tesla commands
 const (
 	CommandFrunkOpen   = "frunk/open"

@@ -621,6 +621,236 @@ func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 	}
 }
 
+func (s *TeslaControllerTestSuite) TestSubmitCommand() {
+	testCases := []struct {
+		name                  string
+		command               string
+		subscriptionStatus    string
+		expectedStatusCode    int
+		expectedCommandID     string
+		expectedStatus        string
+		expectedMessage       string
+		publishCommandError   error
+		saveCommandError      error
+		vehicleOwnerMismatch  bool
+		syntheticDeviceExists bool
+		validJSON             bool
+	}{
+		{
+			name:                  "Successful frunk open command",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-123",
+			expectedStatus:        service.CommandStatusPending,
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful trunk open command",
+			command:               "trunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-456",
+			expectedStatus:        service.CommandStatusPending,
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful doors lock command",
+			command:               "doors/lock",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-789",
+			expectedStatus:        service.CommandStatusPending,
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful doors unlock command",
+			command:               "doors/unlock",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-101",
+			expectedStatus:        service.CommandStatusPending,
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful charge start command",
+			command:               "charge/start",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-202",
+			expectedStatus:        service.CommandStatusPending,
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Successful charge stop command",
+			command:               "charge/stop",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-303",
+			expectedStatus:        service.CommandStatusPending,
+			expectedMessage:       "Command successfully submitted for processing",
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Empty command",
+			command:               "",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusBadRequest,
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Unsupported command",
+			command:               "windows/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusBadRequest,
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Inactive subscription",
+			command:               "frunk/open",
+			subscriptionStatus:    "inactive",
+			expectedStatusCode:    fiber.StatusForbidden,
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Command publisher error",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusInternalServerError,
+			publishCommandError:   fmt.Errorf("failed to publish to Kafka"),
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Command save error (should still succeed)",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusOK,
+			expectedCommandID:     "test-command-id-404",
+			expectedStatus:        service.CommandStatusPending,
+			expectedMessage:       "Command successfully submitted for processing",
+			saveCommandError:      fmt.Errorf("database error"),
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Vehicle ownership mismatch",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusUnauthorized,
+			vehicleOwnerMismatch:  true,
+			syntheticDeviceExists: true,
+			validJSON:             true,
+		},
+		{
+			name:                  "Synthetic device not found",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusNotFound,
+			syntheticDeviceExists: false,
+			validJSON:             true,
+		},
+		{
+			name:                  "Invalid JSON",
+			command:               "frunk/open",
+			subscriptionStatus:    "active",
+			expectedStatusCode:    fiber.StatusBadRequest,
+			syntheticDeviceExists: true,
+			validJSON:             false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			// given
+			settings, logger, repos := s.createTestDependencies()
+
+			// Determine if we need command mocks
+			needsCommandMocks := tc.syntheticDeviceExists && tc.validJSON && tc.command != "" && tc.command != "windows/open" && tc.subscriptionStatus == "active" && !tc.vehicleOwnerMismatch
+
+			// Setup mocks using setupGenericMocks
+			config := MockConfig{
+				NeedsIdentity:         !tc.vehicleOwnerMismatch,
+				VehicleOwnerMismatch:  tc.vehicleOwnerMismatch,
+				NeedsCommandPublisher: needsCommandMocks,
+				NeedsCommandRepo:      needsCommandMocks && tc.publishCommandError == nil,
+				CommandPublisherError: tc.publishCommandError,
+				CommandRepoError:      tc.saveCommandError,
+				ExpectedCommandID:     tc.expectedCommandID,
+			}
+
+			_, _, mockIdentitySvc, _, mockCommandPublisher, mockCommandRepo := s.setupGenericMocks(config)
+
+			// Set command repository in repos if we have one
+			if mockCommandRepo != nil {
+				repos.Command = mockCommandRepo
+			}
+
+			// Create Tesla service
+			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, nil, mockIdentitySvc, nil, nil, mockCommandPublisher)
+
+			// Create synthetic device if needed
+			var dbVin *models.SyntheticDevice
+			if tc.syntheticDeviceExists {
+				dbVin = s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, tc.subscriptionStatus)
+				defer func() {
+					_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+				}()
+			}
+
+			controller := NewTeslaController(settings, logger, teslaSvc)
+			app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+
+			// when
+			var requestBody string
+			if tc.validJSON {
+				requestBody = fmt.Sprintf(`{"command": "%s"}`, tc.command)
+			} else {
+				requestBody = `{"command": "frunk/open"` // Invalid JSON - missing closing brace
+			}
+
+			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+			req.Header.Set("Content-Type", "application/json")
+			assert.NoError(s.T(), test.GenerateJWT(req))
+
+			resp, err := app.Test(req)
+
+			// then
+			assert.NoError(s.T(), err)
+			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
+
+			if tc.expectedStatusCode == fiber.StatusOK {
+				s.assertSubmitCommandResponse(resp, tc.expectedCommandID, tc.expectedStatus, tc.expectedMessage)
+			}
+
+			// Verify mock expectations
+			if mockCommandPublisher != nil {
+				mockCommandPublisher.AssertExpectations(s.T())
+			}
+			if mockCommandRepo != nil {
+				mockCommandRepo.AssertExpectations(s.T())
+			}
+			if tc.validJSON && mockIdentitySvc != nil {
+				mockIdentitySvc.AssertExpectations(s.T())
+			}
+		})
+	}
+}
+
 func generateTokenWithClaims() string {
 	secretKey := []byte("your-secret-key")
 
@@ -908,7 +1138,7 @@ func (s *TeslaControllerTestSuite) setupMockServices(fleetStatus *service.Vehicl
 		NeedsDevices: expectedAction == service.ActionStartPolling,
 	}
 
-	mockTeslaService, _, _, mockDevicesService := s.setupGenericMocks(config)
+	mockTeslaService, _, _, mockDevicesService, _, _ := s.setupGenericMocks(config)
 
 	// Setup action-specific mocks
 	switch expectedAction {
@@ -954,13 +1184,21 @@ type MockConfig struct {
 	TelemetryStatus       bool
 	AccessToken           string
 	PartnerToken          string
+	NeedsCommandPublisher bool
+	NeedsCommandRepo      bool
+	CommandPublisherError error
+	CommandRepoError      error
+	ExpectedCommandID     string
+	VehicleOwnerMismatch  bool
 }
 
-func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.MockTeslaFleetAPIService, *test.MockCredStore, *test.MockIdentityAPIService, *test.MockDevicesGRPCService) {
+func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.MockTeslaFleetAPIService, *test.MockCredStore, *test.MockIdentityAPIService, *test.MockDevicesGRPCService, *test.MockCommandPublisher, *test.MockCommandRepository) {
 	mockTeslaService := new(test.MockTeslaFleetAPIService)
 	var mockCredStore *test.MockCredStore
 	var mockIdentitySvc *test.MockIdentityAPIService
 	var mockDevicesService *test.MockDevicesGRPCService
+	var mockCommandPublisher *test.MockCommandPublisher
+	var mockCommandRepo *test.MockCommandRepository
 
 	// Setup access token (default if not specified)
 	accessToken := "mockAccessToken"
@@ -1023,7 +1261,44 @@ func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.M
 		mockTeslaService.On("UnSubscribeFromTelemetryData", mock.Anything, partnerToken, vin).Return(nil)
 	}
 
-	return mockTeslaService, mockCredStore, mockIdentitySvc, mockDevicesService
+	// Setup command publisher if needed
+	if config.NeedsCommandPublisher {
+		mockCommandPublisher = new(test.MockCommandPublisher)
+		commandID := "test-command-id-123"
+		if config.ExpectedCommandID != "" {
+			commandID = config.ExpectedCommandID
+		}
+		if config.CommandPublisherError != nil {
+			mockCommandPublisher.On("PublishCommand", mock.Anything, mock.Anything, mock.Anything).Return("", config.CommandPublisherError)
+		} else {
+			mockCommandPublisher.On("PublishCommand", mock.Anything, mock.Anything, mock.Anything).Return(commandID, nil)
+		}
+	}
+
+	// Setup command repository if needed
+	if config.NeedsCommandRepo {
+		mockCommandRepo = new(test.MockCommandRepository)
+		if config.CommandRepoError != nil {
+			mockCommandRepo.On("SaveCommandRequest", mock.Anything, mock.Anything).Return(config.CommandRepoError)
+		} else {
+			mockCommandRepo.On("SaveCommandRequest", mock.Anything, mock.Anything).Return(nil)
+		}
+	}
+
+	// Setup identity service with ownership mismatch if needed
+	if config.VehicleOwnerMismatch {
+		mockIdentitySvc = new(test.MockIdentityAPIService)
+		mockVehicle := &mods.Vehicle{
+			Owner:   "0xdifferentowner123456789abcdef123456789abcdef",
+			TokenID: vehicleTokenID,
+			SyntheticDevice: mods.SyntheticDevice{
+				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
+			},
+		}
+		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
+	}
+
+	return mockTeslaService, mockCredStore, mockIdentitySvc, mockDevicesService, mockCommandPublisher, mockCommandRepo
 }
 
 // Convenience wrappers for common patterns
@@ -1033,7 +1308,7 @@ func (s *TeslaControllerTestSuite) setupVirtualKeyStatusMocks() (*test.MockTesla
 		VehicleCommandProtocolRequired: true,
 		NumberOfKeys:                   1,
 	}
-	mockTeslaService, mockCredStore, _, _ := s.setupGenericMocks(MockConfig{
+	mockTeslaService, mockCredStore, _, _, _, _ := s.setupGenericMocks(MockConfig{
 		FleetStatus:    fleetStatus,
 		NeedsCredStore: true,
 	})
@@ -1041,14 +1316,14 @@ func (s *TeslaControllerTestSuite) setupVirtualKeyStatusMocks() (*test.MockTesla
 }
 
 func (s *TeslaControllerTestSuite) setupGetStatusMocks(fleetStatus *service.VehicleFleetStatus) (*test.MockTeslaFleetAPIService, *test.MockCredStore) {
-	mockTeslaService, mockCredStore, _, _ := s.setupGenericMocks(MockConfig{
+	mockTeslaService, mockCredStore, _, _, _, _ := s.setupGenericMocks(MockConfig{
 		FleetStatus: fleetStatus,
 	})
 	return mockTeslaService, mockCredStore
 }
 
 func (s *TeslaControllerTestSuite) setupUnsubscribeMocks() (*test.MockTeslaFleetAPIService, *test.MockDevicesGRPCService, *test.MockIdentityAPIService) {
-	mockTeslaService, _, mockIdentitySvc, mockDevicesService := s.setupGenericMocks(MockConfig{
+	mockTeslaService, _, mockIdentitySvc, mockDevicesService, _, _ := s.setupGenericMocks(MockConfig{
 		NeedsIdentity:     true,
 		NeedsDevices:      true,
 		NeedsPartnerToken: true,
@@ -1079,256 +1354,6 @@ func (s *TeslaControllerTestSuite) assertGetStatusResponse(resp *http.Response, 
 	// Assert the response content
 	s.Equal(expectedResponse.Message, actualResponse.Message)
 	s.Equal(expectedResponse.Next, actualResponse.Next)
-}
-
-func (s *TeslaControllerTestSuite) TestSubmitCommand() {
-	testCases := []struct {
-		name                  string
-		command               string
-		subscriptionStatus    string
-		expectedStatusCode    int
-		expectedCommandID     string
-		expectedStatus        string
-		expectedMessage       string
-		publishCommandError   error
-		saveCommandError      error
-		vehicleOwnerMismatch  bool
-		syntheticDeviceExists bool
-		validJSON             bool
-	}{
-		{
-			name:                  "Successful frunk open command",
-			command:               "frunk/open",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusOK,
-			expectedCommandID:     "test-command-id-123",
-			expectedStatus:        "submitted",
-			expectedMessage:       "Command successfully submitted for processing",
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Successful trunk open command",
-			command:               "trunk/open",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusOK,
-			expectedCommandID:     "test-command-id-456",
-			expectedStatus:        "submitted",
-			expectedMessage:       "Command successfully submitted for processing",
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Successful doors lock command",
-			command:               "doors/lock",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusOK,
-			expectedCommandID:     "test-command-id-789",
-			expectedStatus:        "submitted",
-			expectedMessage:       "Command successfully submitted for processing",
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Successful doors unlock command",
-			command:               "doors/unlock",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusOK,
-			expectedCommandID:     "test-command-id-101",
-			expectedStatus:        "submitted",
-			expectedMessage:       "Command successfully submitted for processing",
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Successful charge start command",
-			command:               "charge/start",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusOK,
-			expectedCommandID:     "test-command-id-202",
-			expectedStatus:        "submitted",
-			expectedMessage:       "Command successfully submitted for processing",
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Successful charge stop command",
-			command:               "charge/stop",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusOK,
-			expectedCommandID:     "test-command-id-303",
-			expectedStatus:        "submitted",
-			expectedMessage:       "Command successfully submitted for processing",
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Empty command",
-			command:               "",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusBadRequest,
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Unsupported command",
-			command:               "windows/open",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusBadRequest,
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Inactive subscription",
-			command:               "frunk/open",
-			subscriptionStatus:    "inactive",
-			expectedStatusCode:    fiber.StatusForbidden,
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Command publisher error",
-			command:               "frunk/open",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusInternalServerError,
-			publishCommandError:   fmt.Errorf("failed to publish to Kafka"),
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Command save error (should still succeed)",
-			command:               "frunk/open",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusOK,
-			expectedCommandID:     "test-command-id-404",
-			expectedStatus:        "submitted",
-			expectedMessage:       "Command successfully submitted for processing",
-			saveCommandError:      fmt.Errorf("database error"),
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Vehicle ownership mismatch",
-			command:               "frunk/open",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusUnauthorized,
-			vehicleOwnerMismatch:  true,
-			syntheticDeviceExists: true,
-			validJSON:             true,
-		},
-		{
-			name:                  "Synthetic device not found",
-			command:               "frunk/open",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusNotFound,
-			syntheticDeviceExists: false,
-			validJSON:             true,
-		},
-		{
-			name:                  "Invalid JSON",
-			command:               "frunk/open",
-			subscriptionStatus:    "active",
-			expectedStatusCode:    fiber.StatusBadRequest,
-			syntheticDeviceExists: true,
-			validJSON:             false,
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			// given
-			settings, logger, repos := s.createTestDependencies()
-
-			// Setup mocks
-			var mockCommandPublisher *test.MockCommandPublisher
-			var mockCommandRepo *test.MockCommandRepository
-			var mockIdentitySvc *test.MockIdentityAPIService
-
-			// Setup command publisher mock
-			if tc.syntheticDeviceExists && tc.validJSON && tc.command != "" && tc.command != "windows/open" && tc.subscriptionStatus == "active" && !tc.vehicleOwnerMismatch {
-				mockCommandPublisher = new(test.MockCommandPublisher)
-				if tc.publishCommandError != nil {
-					mockCommandPublisher.On("PublishCommand", mock.Anything, mock.Anything, tc.command).Return("", tc.publishCommandError)
-				} else {
-					mockCommandPublisher.On("PublishCommand", mock.Anything, mock.Anything, tc.command).Return(tc.expectedCommandID, nil)
-				}
-			}
-
-			// Setup command repository mock
-			if tc.syntheticDeviceExists && tc.validJSON && tc.command != "" && tc.command != "windows/open" && tc.subscriptionStatus == "active" && !tc.vehicleOwnerMismatch && tc.publishCommandError == nil {
-				mockCommandRepo = new(test.MockCommandRepository)
-				if tc.saveCommandError != nil {
-					mockCommandRepo.On("SaveCommandRequest", mock.Anything, mock.Anything).Return(tc.saveCommandError)
-				} else {
-					mockCommandRepo.On("SaveCommandRequest", mock.Anything, mock.Anything).Return(nil)
-				}
-				repos.Command = mockCommandRepo
-			}
-
-			// Setup identity service mock
-			if tc.vehicleOwnerMismatch {
-				mockIdentitySvc = new(test.MockIdentityAPIService)
-				mockVehicle := &mods.Vehicle{
-					Owner:   "0xdifferentowner123456789abcdef123456789abcdef",
-					TokenID: vehicleTokenID,
-					SyntheticDevice: mods.SyntheticDevice{
-						Address: "0xabcdef1234567890abcdef1234567890abcdef12",
-					},
-				}
-				mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
-			} else {
-				mockIdentitySvc = s.setupMockIdentityService()
-			}
-
-			// Create Tesla service
-			teslaSvc := service.NewTeslaService(settings, logger, new(cipher.ROT13Cipher), repos, nil, mockIdentitySvc, nil, nil, mockCommandPublisher)
-
-			// Create synthetic device if needed
-			var dbVin *models.SyntheticDevice
-			if tc.syntheticDeviceExists {
-				dbVin = s.createTestSyntheticDeviceWithStatus(teslaSvc.Cipher, tc.subscriptionStatus)
-				defer func() {
-					_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
-				}()
-			}
-
-			controller := NewTeslaController(settings, logger, teslaSvc)
-			app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
-
-			// when
-			var requestBody string
-			if tc.validJSON {
-				requestBody = fmt.Sprintf(`{"command": "%s"}`, tc.command)
-			} else {
-				requestBody = `{"command": "frunk/open"` // Invalid JSON - missing closing brace
-			}
-
-			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
-			req.Header.Set("Content-Type", "application/json")
-			assert.NoError(s.T(), test.GenerateJWT(req))
-
-			resp, err := app.Test(req)
-
-			// then
-			assert.NoError(s.T(), err)
-			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
-
-			if tc.expectedStatusCode == fiber.StatusOK {
-				s.assertSubmitCommandResponse(resp, tc.expectedCommandID, tc.expectedStatus, tc.expectedMessage)
-			}
-
-			// Verify mock expectations
-			if mockCommandPublisher != nil {
-				mockCommandPublisher.AssertExpectations(s.T())
-			}
-			if mockCommandRepo != nil {
-				mockCommandRepo.AssertExpectations(s.T())
-			}
-			if tc.validJSON {
-				mockIdentitySvc.AssertExpectations(s.T())
-			}
-		})
-	}
 }
 
 // Helper function to assert SubmitCommand response

@@ -15,7 +15,6 @@ import (
 	"github.com/segmentio/ksuid"
 )
 
-// CommandData represents the data structure for Tesla command messages
 type CommandData struct {
 	TaskID         string    `json:"taskId"`
 	VehicleTokenID int       `json:"vehicleTokenId"`
@@ -23,7 +22,6 @@ type CommandData struct {
 	Timestamp      time.Time `json:"timestamp"`
 }
 
-// CommandPublisherImpl implements CommandPublisher interface
 type CommandPublisherImpl struct {
 	producer sarama.SyncProducer
 	settings *config.Settings
@@ -39,12 +37,11 @@ func NewTeslaCommandPublisher(producer sarama.SyncProducer, settings *config.Set
 	}
 }
 
-// PublishCommand publishes a Tesla command to Kafka using CloudEvents
+// PublishCommand publishes a Tesla command to Kafka, so it will be picked up by the task worker
 func (p *CommandPublisherImpl) PublishCommand(ctx context.Context, sd *dbmodels.SyntheticDevice, command string) (string, error) {
 	// Generate unique task ID
 	taskID := ksuid.New().String()
 
-	// Get command-specific event type
 	eventType := p.getEventTypeForCommand(command)
 
 	// Create command data
@@ -55,7 +52,6 @@ func (p *CommandPublisherImpl) PublishCommand(ctx context.Context, sd *dbmodels.
 		Timestamp:      time.Now(),
 	}
 
-	// Create CloudEvent
 	event := cloudevent.CloudEvent[CommandData]{
 		CloudEventHeader: cloudevent.CloudEventHeader{
 			ID:          taskID,
@@ -68,20 +64,17 @@ func (p *CommandPublisherImpl) PublishCommand(ctx context.Context, sd *dbmodels.
 		Data: cmdData,
 	}
 
-	// Marshal to JSON
 	eventJSON, err := json.Marshal(event)
 	if err != nil {
 		return "", fmt.Errorf("failed to marshal command event: %w", err)
 	}
 
-	// Create Kafka message
 	msg := &sarama.ProducerMessage{
 		Topic: p.settings.TopicTeslaCommand,
 		Key:   sarama.StringEncoder(sd.VehicleTokenID.Int), // Partition by vehicleTokenID
 		Value: sarama.ByteEncoder(eventJSON),
 	}
 
-	// Send message
 	partition, offset, err := p.producer.SendMessage(msg)
 	if err != nil {
 		return "", fmt.Errorf("failed to send message to Kafka: %w", err)

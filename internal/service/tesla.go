@@ -376,7 +376,6 @@ func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, wallet
 		return nil, err
 	}
 
-	// Validate command
 	err = validateCommand(command)
 	if err != nil {
 		return nil, err
@@ -398,7 +397,6 @@ func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, wallet
 	}
 
 	//  TODO Should we check if commands enabled, who enable it?
-
 	ts.logger.Debug().Str("vin", sd.Vin).Msg("Ready to submit command to vehicle")
 
 	// Publish command via messaging layer
@@ -415,7 +413,7 @@ func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, wallet
 		Vin:            sd.Vin,
 		Command:        command,
 		EventType:      eventType,
-		Status:         "pending",
+		Status:         CommandStatusPending,
 	}
 
 	err = ts.repositories.Command.SaveCommandRequest(ctx, commandRequest)
@@ -426,7 +424,7 @@ func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, wallet
 
 	return map[string]interface{}{
 		"commandId": commandID,
-		"status":    "submitted",
+		"status":    CommandStatusPending,
 		"message":   "Command successfully submitted for processing",
 	}, nil
 }
