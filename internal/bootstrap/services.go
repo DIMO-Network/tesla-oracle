@@ -40,7 +40,7 @@ type Services struct {
 	TeslaFleetAPIService     service.TeslaFleetAPIService
 	TeslaService             *service.TeslaService
 	KafkaProducer            sarama.SyncProducer
-	TeslaCommandPublisher    messaging.CommandPublisher
+	CommandPublisher         messaging.CommandPublisher
 }
 
 // InitializeServices creates and initializes all application services
@@ -95,10 +95,10 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	}
 
 	// Initialize Tesla command publisher
-	teslaCommandPublisher := messaging.NewTeslaCommandPublisher(kafkaProducer, settings, logger)
+	commandPublisher := messaging.NewCommandPublisher(kafkaProducer, settings, logger)
 
 	// Initialize Tesla service with all dependencies
-	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, teslaCommandPublisher)
+	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, commandPublisher)
 
 	// Initialize River client with workers
 	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService)
@@ -122,7 +122,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		TeslaFleetAPIService:     teslaFleetAPIService,
 		TeslaService:             teslaService,
 		KafkaProducer:            kafkaProducer,
-		TeslaCommandPublisher:    teslaCommandPublisher,
+		CommandPublisher:         commandPublisher,
 	}, nil
 }
 

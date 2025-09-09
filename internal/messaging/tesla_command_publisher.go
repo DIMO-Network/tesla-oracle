@@ -28,8 +28,8 @@ type CommandPublisherImpl struct {
 	logger   *zerolog.Logger
 }
 
-// NewTeslaCommandPublisher creates a new CommandPublisher implementation
-func NewTeslaCommandPublisher(producer sarama.SyncProducer, settings *config.Settings, logger *zerolog.Logger) CommandPublisher {
+// NewCommandPublisher creates a new CommandPublisher implementation
+func NewCommandPublisher(producer sarama.SyncProducer, settings *config.Settings, logger *zerolog.Logger) CommandPublisher {
 	return &CommandPublisherImpl{
 		producer: producer,
 		settings: settings,
