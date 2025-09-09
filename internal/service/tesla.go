@@ -396,7 +396,7 @@ func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, wallet
 		return nil, ErrInactiveSubscription
 	}
 
-	//  TODO Should we check if commands enabled, who enable it?
+	// TODO: Should we check if commands are enabled? Who enables them?
 	ts.logger.Debug().Str("vin", sd.Vin).Msg("Ready to submit command to vehicle")
 
 	// Publish command via messaging layer
