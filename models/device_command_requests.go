@@ -26,9 +26,7 @@ import (
 type DeviceCommandRequest struct {
 	ID             string      `boil:"id" json:"id" toml:"id" yaml:"id"`
 	VehicleTokenID int         `boil:"vehicle_token_id" json:"vehicle_token_id" toml:"vehicle_token_id" yaml:"vehicle_token_id"`
-	Vin            string      `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
 	Command        string      `boil:"command" json:"command" toml:"command" yaml:"command"`
-	EventType      string      `boil:"event_type" json:"event_type" toml:"event_type" yaml:"event_type"`
 	Status         string      `boil:"status" json:"status" toml:"status" yaml:"status"`
 	ErrorMessage   null.String `boil:"error_message" json:"error_message,omitempty" toml:"error_message" yaml:"error_message,omitempty"`
 	CreatedAt      time.Time   `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
@@ -41,9 +39,7 @@ type DeviceCommandRequest struct {
 var DeviceCommandRequestColumns = struct {
 	ID             string
 	VehicleTokenID string
-	Vin            string
 	Command        string
-	EventType      string
 	Status         string
 	ErrorMessage   string
 	CreatedAt      string
@@ -51,9 +47,7 @@ var DeviceCommandRequestColumns = struct {
 }{
 	ID:             "id",
 	VehicleTokenID: "vehicle_token_id",
-	Vin:            "vin",
 	Command:        "command",
-	EventType:      "event_type",
 	Status:         "status",
 	ErrorMessage:   "error_message",
 	CreatedAt:      "created_at",
@@ -63,9 +57,7 @@ var DeviceCommandRequestColumns = struct {
 var DeviceCommandRequestTableColumns = struct {
 	ID             string
 	VehicleTokenID string
-	Vin            string
 	Command        string
-	EventType      string
 	Status         string
 	ErrorMessage   string
 	CreatedAt      string
@@ -73,9 +65,7 @@ var DeviceCommandRequestTableColumns = struct {
 }{
 	ID:             "device_command_requests.id",
 	VehicleTokenID: "device_command_requests.vehicle_token_id",
-	Vin:            "device_command_requests.vin",
 	Command:        "device_command_requests.command",
-	EventType:      "device_command_requests.event_type",
 	Status:         "device_command_requests.status",
 	ErrorMessage:   "device_command_requests.error_message",
 	CreatedAt:      "device_command_requests.created_at",
@@ -218,9 +208,7 @@ func (w whereHelpertime_Time) GTE(x time.Time) qm.QueryMod {
 var DeviceCommandRequestWhere = struct {
 	ID             whereHelperstring
 	VehicleTokenID whereHelperint
-	Vin            whereHelperstring
 	Command        whereHelperstring
-	EventType      whereHelperstring
 	Status         whereHelperstring
 	ErrorMessage   whereHelpernull_String
 	CreatedAt      whereHelpertime_Time
@@ -228,9 +216,7 @@ var DeviceCommandRequestWhere = struct {
 }{
 	ID:             whereHelperstring{field: "\"tesla_oracle\".\"device_command_requests\".\"id\""},
 	VehicleTokenID: whereHelperint{field: "\"tesla_oracle\".\"device_command_requests\".\"vehicle_token_id\""},
-	Vin:            whereHelperstring{field: "\"tesla_oracle\".\"device_command_requests\".\"vin\""},
 	Command:        whereHelperstring{field: "\"tesla_oracle\".\"device_command_requests\".\"command\""},
-	EventType:      whereHelperstring{field: "\"tesla_oracle\".\"device_command_requests\".\"event_type\""},
 	Status:         whereHelperstring{field: "\"tesla_oracle\".\"device_command_requests\".\"status\""},
 	ErrorMessage:   whereHelpernull_String{field: "\"tesla_oracle\".\"device_command_requests\".\"error_message\""},
 	CreatedAt:      whereHelpertime_Time{field: "\"tesla_oracle\".\"device_command_requests\".\"created_at\""},
@@ -239,10 +225,14 @@ var DeviceCommandRequestWhere = struct {
 
 // DeviceCommandRequestRels is where relationship names are stored.
 var DeviceCommandRequestRels = struct {
-}{}
+	VehicleToken string
+}{
+	VehicleToken: "VehicleToken",
+}
 
 // deviceCommandRequestR is where relationships are stored.
 type deviceCommandRequestR struct {
+	VehicleToken *SyntheticDevice `boil:"VehicleToken" json:"VehicleToken" toml:"VehicleToken" yaml:"VehicleToken"`
 }
 
 // NewStruct creates a new relationship struct
@@ -250,12 +240,28 @@ func (*deviceCommandRequestR) NewStruct() *deviceCommandRequestR {
 	return &deviceCommandRequestR{}
 }
 
+func (o *DeviceCommandRequest) GetVehicleToken() *SyntheticDevice {
+	if o == nil {
+		return nil
+	}
+
+	return o.R.GetVehicleToken()
+}
+
+func (r *deviceCommandRequestR) GetVehicleToken() *SyntheticDevice {
+	if r == nil {
+		return nil
+	}
+
+	return r.VehicleToken
+}
+
 // deviceCommandRequestL is where Load methods for each relationship are stored.
 type deviceCommandRequestL struct{}
 
 var (
-	deviceCommandRequestAllColumns            = []string{"id", "vehicle_token_id", "vin", "command", "event_type", "status", "error_message", "created_at", "updated_at"}
-	deviceCommandRequestColumnsWithoutDefault = []string{"id", "vehicle_token_id", "vin", "command", "event_type"}
+	deviceCommandRequestAllColumns            = []string{"id", "vehicle_token_id", "command", "status", "error_message", "created_at", "updated_at"}
+	deviceCommandRequestColumnsWithoutDefault = []string{"id", "vehicle_token_id", "command"}
 	deviceCommandRequestColumnsWithDefault    = []string{"status", "error_message", "created_at", "updated_at"}
 	deviceCommandRequestPrimaryKeyColumns     = []string{"id"}
 	deviceCommandRequestGeneratedColumns      = []string{}
@@ -564,6 +570,188 @@ func (q deviceCommandRequestQuery) Exists(ctx context.Context, exec boil.Context
 	}
 
 	return count > 0, nil
+}
+
+// VehicleToken pointed to by the foreign key.
+func (o *DeviceCommandRequest) VehicleToken(mods ...qm.QueryMod) syntheticDeviceQuery {
+	queryMods := []qm.QueryMod{
+		qm.Where("\"vehicle_token_id\" = ?", o.VehicleTokenID),
+	}
+
+	queryMods = append(queryMods, mods...)
+
+	return SyntheticDevices(queryMods...)
+}
+
+// LoadVehicleToken allows an eager lookup of values, cached into the
+// loaded structs of the objects. This is for an N-1 relationship.
+func (deviceCommandRequestL) LoadVehicleToken(ctx context.Context, e boil.ContextExecutor, singular bool, maybeDeviceCommandRequest interface{}, mods queries.Applicator) error {
+	var slice []*DeviceCommandRequest
+	var object *DeviceCommandRequest
+
+	if singular {
+		var ok bool
+		object, ok = maybeDeviceCommandRequest.(*DeviceCommandRequest)
+		if !ok {
+			object = new(DeviceCommandRequest)
+			ok = queries.SetFromEmbeddedStruct(&object, &maybeDeviceCommandRequest)
+			if !ok {
+				return errors.New(fmt.Sprintf("failed to set %T from embedded struct %T", object, maybeDeviceCommandRequest))
+			}
+		}
+	} else {
+		s, ok := maybeDeviceCommandRequest.(*[]*DeviceCommandRequest)
+		if ok {
+			slice = *s
+		} else {
+			ok = queries.SetFromEmbeddedStruct(&slice, maybeDeviceCommandRequest)
+			if !ok {
+				return errors.New(fmt.Sprintf("failed to set %T from embedded struct %T", slice, maybeDeviceCommandRequest))
+			}
+		}
+	}
+
+	args := make(map[interface{}]struct{})
+	if singular {
+		if object.R == nil {
+			object.R = &deviceCommandRequestR{}
+		}
+		if !queries.IsNil(object.VehicleTokenID) {
+			args[object.VehicleTokenID] = struct{}{}
+		}
+
+	} else {
+		for _, obj := range slice {
+			if obj.R == nil {
+				obj.R = &deviceCommandRequestR{}
+			}
+
+			if !queries.IsNil(obj.VehicleTokenID) {
+				args[obj.VehicleTokenID] = struct{}{}
+			}
+
+		}
+	}
+
+	if len(args) == 0 {
+		return nil
+	}
+
+	argsSlice := make([]interface{}, len(args))
+	i := 0
+	for arg := range args {
+		argsSlice[i] = arg
+		i++
+	}
+
+	query := NewQuery(
+		qm.From(`tesla_oracle.synthetic_devices`),
+		qm.WhereIn(`tesla_oracle.synthetic_devices.vehicle_token_id in ?`, argsSlice...),
+	)
+	if mods != nil {
+		mods.Apply(query)
+	}
+
+	results, err := query.QueryContext(ctx, e)
+	if err != nil {
+		return errors.Wrap(err, "failed to eager load SyntheticDevice")
+	}
+
+	var resultSlice []*SyntheticDevice
+	if err = queries.Bind(results, &resultSlice); err != nil {
+		return errors.Wrap(err, "failed to bind eager loaded slice SyntheticDevice")
+	}
+
+	if err = results.Close(); err != nil {
+		return errors.Wrap(err, "failed to close results of eager load for synthetic_devices")
+	}
+	if err = results.Err(); err != nil {
+		return errors.Wrap(err, "error occurred during iteration of eager loaded relations for synthetic_devices")
+	}
+
+	if len(syntheticDeviceAfterSelectHooks) != 0 {
+		for _, obj := range resultSlice {
+			if err := obj.doAfterSelectHooks(ctx, e); err != nil {
+				return err
+			}
+		}
+	}
+
+	if len(resultSlice) == 0 {
+		return nil
+	}
+
+	if singular {
+		foreign := resultSlice[0]
+		object.R.VehicleToken = foreign
+		if foreign.R == nil {
+			foreign.R = &syntheticDeviceR{}
+		}
+		foreign.R.VehicleTokenDeviceCommandRequests = append(foreign.R.VehicleTokenDeviceCommandRequests, object)
+		return nil
+	}
+
+	for _, local := range slice {
+		for _, foreign := range resultSlice {
+			if queries.Equal(local.VehicleTokenID, foreign.VehicleTokenID) {
+				local.R.VehicleToken = foreign
+				if foreign.R == nil {
+					foreign.R = &syntheticDeviceR{}
+				}
+				foreign.R.VehicleTokenDeviceCommandRequests = append(foreign.R.VehicleTokenDeviceCommandRequests, local)
+				break
+			}
+		}
+	}
+
+	return nil
+}
+
+// SetVehicleToken of the deviceCommandRequest to the related item.
+// Sets o.R.VehicleToken to related.
+// Adds o to related.R.VehicleTokenDeviceCommandRequests.
+func (o *DeviceCommandRequest) SetVehicleToken(ctx context.Context, exec boil.ContextExecutor, insert bool, related *SyntheticDevice) error {
+	var err error
+	if insert {
+		if err = related.Insert(ctx, exec, boil.Infer()); err != nil {
+			return errors.Wrap(err, "failed to insert into foreign table")
+		}
+	}
+
+	updateQuery := fmt.Sprintf(
+		"UPDATE \"tesla_oracle\".\"device_command_requests\" SET %s WHERE %s",
+		strmangle.SetParamNames("\"", "\"", 1, []string{"vehicle_token_id"}),
+		strmangle.WhereClause("\"", "\"", 2, deviceCommandRequestPrimaryKeyColumns),
+	)
+	values := []interface{}{related.VehicleTokenID, o.ID}
+
+	if boil.IsDebug(ctx) {
+		writer := boil.DebugWriterFrom(ctx)
+		fmt.Fprintln(writer, updateQuery)
+		fmt.Fprintln(writer, values)
+	}
+	if _, err = exec.ExecContext(ctx, updateQuery, values...); err != nil {
+		return errors.Wrap(err, "failed to update local table")
+	}
+
+	queries.Assign(&o.VehicleTokenID, related.VehicleTokenID)
+	if o.R == nil {
+		o.R = &deviceCommandRequestR{
+			VehicleToken: related,
+		}
+	} else {
+		o.R.VehicleToken = related
+	}
+
+	if related.R == nil {
+		related.R = &syntheticDeviceR{
+			VehicleTokenDeviceCommandRequests: DeviceCommandRequestSlice{o},
+		}
+	} else {
+		related.R.VehicleTokenDeviceCommandRequests = append(related.R.VehicleTokenDeviceCommandRequests, o)
+	}
+
+	return nil
 }
 
 // DeviceCommandRequests retrieves all the records using an executor.

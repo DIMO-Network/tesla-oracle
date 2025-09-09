@@ -3,13 +3,12 @@
 CREATE TABLE device_command_requests (
     id VARCHAR PRIMARY KEY,              -- taskID (KSUID)
     vehicle_token_id INTEGER NOT NULL,   -- Vehicle token ID from synthetic device
-    vin VARCHAR(17) NOT NULL,           -- Vehicle VIN
     command VARCHAR NOT NULL,           -- Command type: "frunk/open", "doors/lock", etc.
-    event_type VARCHAR NOT NULL,        -- CloudEvent type: "zone.dimo.task.tesla.frunk.open"
     status VARCHAR NOT NULL DEFAULT 'pending', -- "pending", "completed", "failed"
     error_message TEXT,                 -- Error details if status is "failed"
     created_at TIMESTAMP NOT NULL DEFAULT NOW(),
-    updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+    updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
+    CONSTRAINT fk_vehicle_token_id FOREIGN KEY (vehicle_token_id) REFERENCES synthetic_devices (vehicle_token_id)
 );
 
 -- Indexes for efficient queries

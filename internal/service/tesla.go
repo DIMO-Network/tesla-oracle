@@ -406,13 +406,10 @@ func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, wallet
 	}
 
 	// Save command request to database
-	eventType := ts.getEventTypeForCommand(command)
 	commandRequest := &dbmodels.DeviceCommandRequest{
 		ID:             commandID,
 		VehicleTokenID: sd.VehicleTokenID.Int,
-		Vin:            sd.Vin,
 		Command:        command,
-		EventType:      eventType,
 		Status:         CommandStatusPending,
 	}
 

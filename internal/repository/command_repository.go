@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/DIMO-Network/shared/pkg/db"
@@ -43,7 +44,7 @@ func (r *CommandRepositoryImpl) SaveCommandRequest(ctx context.Context, request 
 
 	r.logger.Debug().
 		Str("taskId", request.ID).
-		Str("vin", request.Vin).
+		Str("vehicleTokenId", strconv.Itoa(request.VehicleTokenID)).
 		Str("command", request.Command).
 		Msg("Command request saved to database")
 
