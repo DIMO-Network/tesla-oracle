@@ -28,6 +28,7 @@ type TeslaVehicle struct {
 	ID        int    `json:"id"`
 	VehicleID int    `json:"vehicle_id"`
 	VIN       string `json:"vin"`
+	State     string `json:"state,omitempty"`
 }
 
 //go:generate mockgen -source tesla_fleet_api_service.go -destination mocks/tesla_fleet_api_service_mock.go
@@ -35,7 +36,7 @@ type TeslaFleetAPIService interface {
 	CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*TeslaAuthCodeResponse, error)
 	GetVehicles(ctx context.Context, token string) ([]TeslaVehicle, error)
 	GetVehicle(ctx context.Context, token string, vehicleID int) (*TeslaVehicle, error)
-	WakeUpVehicle(ctx context.Context, token string, vehicleID int) error
+	WakeUpVehicle(ctx context.Context, token string, vin string) (*TeslaVehicle, error)
 	VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*VehicleFleetStatus, error)
 	SubscribeForTelemetryData(ctx context.Context, token, vin string) error
 	UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error
@@ -344,7 +345,6 @@ func (t *teslaFleetAPIService) GetVehicle(ctx context.Context, token string, veh
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch vehicles for user: %w", err)
 	}
-
 	var vehicle TeslaResponseWrapper[TeslaVehicle]
 	err = json.Unmarshal(body, &vehicle)
 	if err != nil {
@@ -354,15 +354,22 @@ func (t *teslaFleetAPIService) GetVehicle(ctx context.Context, token string, veh
 	return &vehicle.Response, nil
 }
 
-// WakeUpVehicle Calls Tesla Fleet API to wake a vehicle from sleep
-func (t *teslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vehicleID int) error {
-	url := t.FleetBase.JoinPath("api/1/vehicles", strconv.Itoa(vehicleID), "wake_up")
+// WakeUpVehicle Calls Tesla Fleet API to wake a vehicle from sleep and returns the vehicle state
+func (t *teslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vin string) (*TeslaVehicle, error) {
+	url := t.FleetBase.JoinPath("api/1/vehicles", vin, "wake_up")
 
-	if _, err := t.performRequest(ctx, url, token, http.MethodPost, nil); err != nil {
-		return fmt.Errorf("could not wake vehicle: %w", err)
+	body, err := t.performRequest(ctx, url, token, http.MethodPost, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not wake vehicle: %w", err)
 	}
 
-	return nil
+	var vehicle TeslaResponseWrapper[TeslaVehicle]
+	err = json.Unmarshal(body, &vehicle)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response encountered while waking vehicle: %w", err)
+	}
+
+	return &vehicle.Response, nil
 }
 
 // TODO(elffjs): This being here is a bad sign.

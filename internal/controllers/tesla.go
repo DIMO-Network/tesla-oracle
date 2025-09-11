@@ -1,15 +1,22 @@
 package controllers
 
 import (
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DIMO-Network/tesla-oracle/internal/commands"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	"github.com/DIMO-Network/tesla-oracle/internal/workers"
+	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/friendsofgo/errors"
 	"github.com/gofiber/fiber/v2"
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
 
@@ -18,9 +25,11 @@ type TeslaController struct {
 	logger         *zerolog.Logger
 	requiredScopes []string
 	teslaService   *service.TeslaService
+	riverClient    *river.Client[pgx.Tx]
+	commandRepo    repository.CommandRepository
 }
 
-func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaService *service.TeslaService) *TeslaController {
+func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, teslaService *service.TeslaService, riverClient *river.Client[pgx.Tx], commandRepo repository.CommandRepository) *TeslaController {
 	var requiredScopes []string
 	if settings.TeslaRequiredScopes != "" {
 		requiredScopes = strings.Split(settings.TeslaRequiredScopes, ",")
@@ -31,6 +40,8 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 		logger:         logger,
 		requiredScopes: requiredScopes,
 		teslaService:   teslaService,
+		riverClient:    riverClient,
+		commandRepo:    commandRepo,
 	}
 }
 
@@ -300,7 +311,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 // @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to identify the vehicle"
 // @Param       payload body controllers.SubmitCommandRequest true "Command details"
 // @Security    BearerAuth
-// @Success     200 {object} controllers.SubmitCommandResponse "Command submitted successfully"
+// @Success     200 {object} models.SubmitCommandResponse "Command submitted successfully"
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized or vehicle does not belong to the authenticated user."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
@@ -325,13 +336,53 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 	logger.Debug().Msgf("Received command submission request for vehicle %d, command: %s", tokenID, reqBody.Command)
 
 	walletAddress := helpers.GetWallet(c)
-	response, err := tc.teslaService.SubmitCommand(c.Context(), tokenID, walletAddress, reqBody.Command)
+
+	// Validate command and get synthetic device
+	syntheticDevice, err := tc.teslaService.ValidateCommandRequest(c.Context(), tokenID, walletAddress, reqBody.Command)
 	if err != nil {
-		logger.Err(err).Msgf("Failed to submit command %s for vehicle %d", reqBody.Command, tokenID)
+		logger.Err(err).Msgf("Failed to validate command %s for vehicle %d", reqBody.Command, tokenID)
 		return tc.translateServiceError(err)
 	}
 
-	logger.Info().Msgf("Successfully submitted command %s for vehicle %d", reqBody.Command, tokenID)
+	// Create River job args
+	jobArgs := workers.TeslaCommandArgs{
+		VehicleTokenID: int(tokenID),
+		VIN:            syntheticDevice.Vin,
+		Command:        reqBody.Command,
+		WakeAttempts:   0,
+	}
+
+	// Insert job into River queue
+	job, err := tc.riverClient.Insert(c.Context(), jobArgs, nil)
+	if err != nil {
+		logger.Err(err).Msgf("Failed to insert River job for command %s on vehicle %d", reqBody.Command, tokenID)
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to submit command job")
+	}
+
+	// Create command request record in database
+	jobIDStr := strconv.FormatInt(job.Job.ID, 10)
+	commandRequest := &dbmodels.DeviceCommandRequest{
+		ID:             jobIDStr,
+		VehicleTokenID: int(tokenID),
+		Command:        reqBody.Command,
+		Status:         commands.CommandStatusPending,
+		CreatedAt:      time.Now(),
+		UpdatedAt:      time.Now(),
+	}
+
+	err = tc.commandRepo.SaveCommandRequest(c.Context(), commandRequest)
+	if err != nil {
+		logger.Err(err).Msgf("Failed to save command request for job %d", job.Job.ID)
+		// Job is already queued, so we should still return success but log the error
+	}
+
+	response := &models.SubmitCommandResponse{
+		CommandID: jobIDStr,
+		Status:    commands.CommandStatusPending,
+		Message:   "Command submitted successfully and queued for execution",
+	}
+
+	logger.Info().Msgf("Successfully submitted command %s for vehicle %d with job ID %d", reqBody.Command, tokenID, job.Job.ID)
 	return c.JSON(response)
 }
 

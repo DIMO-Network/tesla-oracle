@@ -9,6 +9,7 @@ import (
 
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/logfields"
+	"github.com/DIMO-Network/tesla-oracle/internal/commands"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/messaging"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
@@ -368,15 +369,15 @@ func (ts *TeslaService) GetVirtualKeyStatus(ctx context.Context, vin string, wal
 	return &response, nil
 }
 
-// SubmitCommand handles command submission to Tesla vehicles
-func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, walletAddress common.Address, command string) (*models.SubmitCommandResponse, error) {
+// ValidateCommandRequest validates command request and returns synthetic device
+func (ts *TeslaService) ValidateCommandRequest(ctx context.Context, tokenID int64, walletAddress common.Address, command string) (*dbmodels.SyntheticDevice, error) {
 	// Validate vehicle ownership
 	err := ts.validateVehicleOwnership(tokenID, walletAddress)
 	if err != nil {
 		return nil, err
 	}
 
-	err = validateCommand(command)
+	err = commands.ValidateCommand(command)
 	if err != nil {
 		return nil, err
 	}
@@ -397,33 +398,9 @@ func (ts *TeslaService) SubmitCommand(ctx context.Context, tokenID int64, wallet
 	}
 
 	// TODO: Should we check if commands are enabled? Who enables them?
-	ts.logger.Debug().Str("vin", sd.Vin).Msg("Ready to submit command to vehicle")
+	ts.logger.Debug().Str("vin", sd.Vin).Msg("Command request validation passed")
 
-	// Publish command via messaging layer
-	commandID, err := ts.commandPublisher.PublishCommand(ctx, sd, command)
-	if err != nil {
-		return nil, fmt.Errorf("failed to publish Tesla command: %w", err)
-	}
-
-	// Save command request to database
-	commandRequest := &dbmodels.DeviceCommandRequest{
-		ID:             commandID,
-		VehicleTokenID: sd.VehicleTokenID.Int,
-		Command:        command,
-		Status:         CommandStatusPending,
-	}
-
-	err = ts.repositories.Command.SaveCommandRequest(ctx, commandRequest)
-	if err != nil {
-		// Log error but don't fail the request since Kafka message was already sent
-		ts.logger.Err(err).Str("commandId", commandID).Msg("Failed to save command request to database")
-	}
-
-	return &models.SubmitCommandResponse{
-		CommandID: commandID,
-		Status:    CommandStatusPending,
-		Message:   "Command successfully submitted for processing",
-	}, nil
+	return sd, nil
 }
 
 // fetchVehicle retrieves a vehicle from identity-api by its token ID.

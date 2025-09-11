@@ -15,6 +15,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	work "github.com/DIMO-Network/tesla-oracle/internal/workers"
 	"github.com/IBM/sarama"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
@@ -100,8 +101,8 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	// Initialize Tesla service with all dependencies
 	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, commandPublisher)
 
-	// Initialize River client with workers
-	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService)
+	// Initialize River client with workers (including Tesla command worker)
+	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, teslaService, repositories)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create river client: %w", err)
 	}
@@ -127,7 +128,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 }
 
 // initializeRiver creates River client with workers and database pool
-func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
+func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI, teslaFleetAPI service.TeslaFleetAPIService, teslaService *service.TeslaService, repositories *repository.Repositories) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
 	workers := river.NewWorkers()
 
 	// Create and register workers
@@ -137,6 +138,13 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 	logger.Debug().Msg("Added onboarding worker")
 
+	// Create and register Tesla command worker
+	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, teslaService, repositories.Command, repositories.Vehicle, &logger)
+	if err := river.AddWorkerSafely(workers, teslaCommandWorker); err != nil {
+		return nil, nil, fmt.Errorf("failed to add Tesla command worker: %w", err)
+	}
+	logger.Debug().Msg("Added Tesla command worker")
+
 	// Create database pool
 	dbURL := settings.DB.BuildConnectionString(true)
 	dbPool, err := pgxpool.New(ctx, dbURL)
@@ -145,12 +153,17 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 	logger.Debug().Msg("DB pool for workers created")
 
+	// Create Tesla command error handler
+	errorHandler := work.NewTeslaCommandErrorHandler(logger, repositories)
+
 	// Create River client
 	riverClient, err := river.NewClient(riverpgxv5.New(dbPool), &river.Config{
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: 100},
+			"tesla_commands":   {MaxWorkers: 20}, // Dedicated queue for Tesla commands
 		},
-		Workers: workers,
+		Workers:      workers,
+		ErrorHandler: errorHandler,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create river client: %w", err)
