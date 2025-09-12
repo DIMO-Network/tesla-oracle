@@ -17,7 +17,6 @@ type Settings struct {
 	ChainID                     int         `yaml:"CHAIN_ID"`
 	EnableContractEventConsumer bool        `yaml:"ENABLE_CONTRACT_EVENT_CONSUMER"`
 	TopicContractEvent          string      `yaml:"CONTRACT_EVENT_TOPIC"`
-	TopicTeslaCommand           string      `yaml:"TESLA_COMMAND_TOPIC"`
 	CredentialKTable            string      `yaml:"CREDENTIAL_KTABLE"`
 	KafkaBrokers                string      `yaml:"KAFKA_BROKERS"`
 	DB                          db.Settings `yaml:"DB"`

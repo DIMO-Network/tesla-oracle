@@ -8,6 +8,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/commands"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
@@ -327,20 +328,20 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 		return err
 	}
 
-	var reqBody SubmitCommandRequest
-	if err := c.BodyParser(&reqBody); err != nil {
+	var request SubmitCommandRequest
+	if err := c.BodyParser(&request); err != nil {
 		logger.Err(err).Msg("Failed to parse request body")
 		return fiber.NewError(fiber.StatusBadRequest, "Failed to parse request body")
 	}
 
-	logger.Debug().Msgf("Received command submission request for vehicle %d, command: %s", tokenID, reqBody.Command)
+	logger.Debug().Msgf("Received command submission request for vehicle %d, command: %s", tokenID, request.Command)
 
 	walletAddress := helpers.GetWallet(c)
 
 	// Validate command and get synthetic device
-	syntheticDevice, err := tc.teslaService.ValidateCommandRequest(c.Context(), tokenID, walletAddress, reqBody.Command)
+	syntheticDevice, err := tc.teslaService.ValidateCommandRequest(c.Context(), tokenID, walletAddress, request.Command)
 	if err != nil {
-		logger.Err(err).Msgf("Failed to validate command %s for vehicle %d", reqBody.Command, tokenID)
+		logger.Err(err).Msgf("Failed to validate command %s for vehicle %d", request.Command, tokenID)
 		return tc.translateServiceError(err)
 	}
 
@@ -348,14 +349,14 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 	jobArgs := workers.TeslaCommandArgs{
 		VehicleTokenID: int(tokenID),
 		VIN:            syntheticDevice.Vin,
-		Command:        reqBody.Command,
+		Command:        request.Command,
 		WakeAttempts:   0,
 	}
 
 	// Insert job into River queue
 	job, err := tc.riverClient.Insert(c.Context(), jobArgs, nil)
 	if err != nil {
-		logger.Err(err).Msgf("Failed to insert River job for command %s on vehicle %d", reqBody.Command, tokenID)
+		logger.Err(err).Msgf("Failed to insert River job for command %s on vehicle %d", request.Command, tokenID)
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to submit command job")
 	}
 
@@ -364,7 +365,7 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 	commandRequest := &dbmodels.DeviceCommandRequest{
 		ID:             jobIDStr,
 		VehicleTokenID: int(tokenID),
-		Command:        reqBody.Command,
+		Command:        request.Command,
 		Status:         commands.CommandStatusPending,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
@@ -382,11 +383,11 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 		Message:   "Command submitted successfully and queued for execution",
 	}
 
-	logger.Info().Msgf("Successfully submitted command %s for vehicle %d with job ID %d", reqBody.Command, tokenID, job.Job.ID)
+	logger.Info().Msgf("Successfully submitted command %s for vehicle %d with job ID %d", request.Command, tokenID, job.Job.ID)
 	return c.JSON(response)
 }
 
-func (tc *TeslaController) getAccessToken(c *fiber.Ctx) (*service.TeslaAuthCodeResponse, error) {
+func (tc *TeslaController) getAccessToken(c *fiber.Ctx) (*core.TeslaAuthCodeResponse, error) {
 	var reqBody CompleteOAuthExchangeRequest
 	if err := c.BodyParser(&reqBody); err != nil {
 		tc.logger.Err(err).Msg("Failed to parse request body OR it is empty.")
@@ -429,56 +430,56 @@ func extractVehicleTokenId(c *fiber.Ctx) (int64, error) {
 // translateServiceError converts domain errors to appropriate Fiber HTTP errors
 func (tc *TeslaController) translateServiceError(err error) error {
 	switch {
-	case errors.Is(err, service.ErrUnauthorized):
+	case errors.Is(err, core.ErrUnauthorized):
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
-	case errors.Is(err, service.ErrDevLicenseNotAllowed):
+	case errors.Is(err, core.ErrDevLicenseNotAllowed):
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
-	case errors.Is(err, service.ErrVehicleNotFound):
+	case errors.Is(err, core.ErrVehicleNotFound):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
-	case errors.Is(err, service.ErrSyntheticDeviceNotFound):
+	case errors.Is(err, core.ErrSyntheticDeviceNotFound):
 		return fiber.NewError(fiber.StatusNotFound, err.Error())
-	case errors.Is(err, service.ErrVehicleOwnershipMismatch):
+	case errors.Is(err, core.ErrVehicleOwnershipMismatch):
 		return fiber.NewError(fiber.StatusUnauthorized, err.Error())
-	case errors.Is(err, service.ErrNoCredentials):
+	case errors.Is(err, core.ErrNoCredentials):
 		return fiber.NewError(fiber.StatusUnauthorized, "No credentials found for vehicle. Please reauthenticate.")
-	case errors.Is(err, service.ErrTokenExpired):
+	case errors.Is(err, core.ErrTokenExpired):
 		return fiber.NewError(fiber.StatusUnauthorized, "Refresh token has expired. Please reauthenticate.")
-	case errors.Is(err, service.ErrTelemetryLimitReached):
+	case errors.Is(err, core.ErrTelemetryLimitReached):
 		return fiber.NewError(fiber.StatusConflict, "Telemetry subscription limit reached. Vehicle has reached max supported applications and new fleet telemetry requests cannot be added to the vehicle.")
-	case errors.Is(err, service.ErrTelemetryNotReady):
+	case errors.Is(err, core.ErrTelemetryNotReady):
 		return fiber.NewError(fiber.StatusConflict, "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps.")
-	case errors.Is(err, service.ErrVINDecoding):
+	case errors.Is(err, core.ErrVINDecoding):
 		return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
-	case errors.Is(err, service.ErrOAuthVehiclesFetch):
+	case errors.Is(err, core.ErrOAuthVehiclesFetch):
 		if strings.Contains(err.Error(), "region detection failed") {
 			return fiber.NewError(fiber.StatusInternalServerError, "Region detection failed. Waiting on a fix from Tesla.")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "Couldn't fetch vehicles from Tesla.")
-	case errors.Is(err, service.ErrCredentialDecryption):
+	case errors.Is(err, core.ErrCredentialDecryption):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to decrypt credentials.")
-	case errors.Is(err, service.ErrTokenRefreshFailed):
+	case errors.Is(err, core.ErrTokenRefreshFailed):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to refresh access token.")
-	case errors.Is(err, service.ErrFleetStatusCheck):
+	case errors.Is(err, core.ErrFleetStatusCheck):
 		return fiber.NewError(fiber.StatusInternalServerError, "Error checking fleet status.")
-	case errors.Is(err, service.ErrTelemetryConfigFailed):
+	case errors.Is(err, core.ErrTelemetryConfigFailed):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update telemetry configuration.")
-	case errors.Is(err, service.ErrSubscriptionStatusUpdate):
+	case errors.Is(err, core.ErrSubscriptionStatusUpdate):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to update subscription status.")
-	case errors.Is(err, service.ErrPartnersToken):
+	case errors.Is(err, core.ErrPartnersToken):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to get partners token.")
-	case errors.Is(err, service.ErrTelemetryUnsubscribe):
+	case errors.Is(err, core.ErrTelemetryUnsubscribe):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data.")
-	case errors.Is(err, service.ErrCredentialStore):
+	case errors.Is(err, core.ErrCredentialStore):
 		return fiber.NewError(fiber.StatusInternalServerError, "Error persisting credentials.")
-	case errors.Is(err, service.ErrOnboardingRecordCreation):
+	case errors.Is(err, core.ErrOnboardingRecordCreation):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to create onboarding record.")
-	case errors.Is(err, service.ErrDeviceDefinitionNotFound):
+	case errors.Is(err, core.ErrDeviceDefinitionNotFound):
 		return fiber.NewError(fiber.StatusFailedDependency, "An error occurred completing tesla authorization")
-	case errors.Is(err, service.ErrBadRequest):
+	case errors.Is(err, core.ErrBadRequest):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	case errors.Is(err, service.ErrUnsupportedCommand):
+	case errors.Is(err, core.ErrUnsupportedCommand):
 		return fiber.NewError(fiber.StatusBadRequest, err.Error())
-	case errors.Is(err, service.ErrInactiveSubscription):
+	case errors.Is(err, core.ErrInactiveSubscription):
 		return fiber.NewError(fiber.StatusForbidden, err.Error())
 	default:
 		// For unknown errors

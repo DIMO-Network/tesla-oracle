@@ -11,6 +11,7 @@ import (
 
 	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/patrickmn/go-cache"
 	"github.com/rs/zerolog"
@@ -179,7 +180,7 @@ func (i *identityAPIService) Query(graphqlQuery string) ([]byte, error) {
 	}(resp.Body)
 
 	if resp.StatusCode == 400 {
-		return nil, ErrBadRequest
+		return nil, core.ErrBadRequest
 	}
 
 	// Read the response body

@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/commands"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
-	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
@@ -42,8 +42,8 @@ func (a TeslaCommandArgs) InsertOpts() river.InsertOpts {
 // TeslaCommandWorker handles Tesla command execution with wake-up logic
 type TeslaCommandWorker struct {
 	river.WorkerDefaults[TeslaCommandArgs]
-	teslaFleetAPI service.TeslaFleetAPIService
-	teslaService  *service.TeslaService
+	teslaFleetAPI core.TeslaFleetAPIService
+	tokenManager  *core.TeslaTokenManager
 	commandRepo   repository.CommandRepository
 	vehicleRepo   repository.VehicleRepository
 	logger        *zerolog.Logger
@@ -51,15 +51,15 @@ type TeslaCommandWorker struct {
 
 // NewTeslaCommandWorker creates a new Tesla command worker
 func NewTeslaCommandWorker(
-	teslaFleetAPI service.TeslaFleetAPIService,
-	teslaService *service.TeslaService,
+	teslaFleetAPI core.TeslaFleetAPIService,
+	tokenManger *core.TeslaTokenManager,
 	commandRepo repository.CommandRepository,
 	vehicleRepo repository.VehicleRepository,
 	logger *zerolog.Logger,
 ) *TeslaCommandWorker {
 	return &TeslaCommandWorker{
 		teslaFleetAPI: teslaFleetAPI,
-		teslaService:  teslaService,
+		tokenManager:  tokenManger,
 		commandRepo:   commandRepo,
 		vehicleRepo:   vehicleRepo,
 		logger:        logger,
@@ -91,7 +91,7 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 	}
 
 	// Get access token using TeslaService
-	accessToken, err := w.teslaService.GetOrRefreshAccessToken(ctx, sd)
+	accessToken, err := w.tokenManager.GetOrRefreshAccessToken(ctx, sd)
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to get access token")
 		// Don't update status here - let River handle retries

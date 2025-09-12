@@ -11,7 +11,7 @@ import (
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
-	"github.com/DIMO-Network/tesla-oracle/internal/messaging"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
@@ -38,10 +38,9 @@ type Services struct {
 	RiverClient              *river.Client[pgx.Tx]
 	DBPool                   *pgxpool.Pool
 	Repositories             *repository.Repositories
-	TeslaFleetAPIService     service.TeslaFleetAPIService
+	TeslaFleetAPIService     core.TeslaFleetAPIService
 	TeslaService             *service.TeslaService
 	KafkaProducer            sarama.SyncProducer
-	CommandPublisher         messaging.CommandPublisher
 }
 
 // InitializeServices creates and initializes all application services
@@ -67,7 +66,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	}
 
 	// Initialize Tesla Fleet API service
-	teslaFleetAPIService, err := service.NewTeslaFleetAPIService(settings, logger)
+	teslaFleetAPIService, err := core.NewTeslaFleetAPIService(settings, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create Tesla Fleet API service: %w", err)
 	}
@@ -95,14 +94,14 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		return nil, fmt.Errorf("failed to create Kafka producer: %w", err)
 	}
 
-	// Initialize Tesla command publisher
-	commandPublisher := messaging.NewCommandPublisher(kafkaProducer, settings, logger)
+	// Initialize Tesla token manager
+	tokenManger := core.NewTeslaTokenManager(cip, repositories.Vehicle, teslaFleetAPIService, logger)
 
 	// Initialize Tesla service with all dependencies
-	teslaService := service.NewTeslaService(settings, logger, cip, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, commandPublisher)
+	teslaService := service.NewTeslaService(settings, logger, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, *tokenManger)
 
 	// Initialize River client with workers (including Tesla command worker)
-	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, teslaService, repositories)
+	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, tokenManger, repositories, cip)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create river client: %w", err)
 	}
@@ -123,12 +122,11 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		TeslaFleetAPIService:     teslaFleetAPIService,
 		TeslaService:             teslaService,
 		KafkaProducer:            kafkaProducer,
-		CommandPublisher:         commandPublisher,
 	}, nil
 }
 
 // initializeRiver creates River client with workers and database pool
-func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI, teslaFleetAPI service.TeslaFleetAPIService, teslaService *service.TeslaService, repositories *repository.Repositories) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
+func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories, cipher cipher.Cipher) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
 	workers := river.NewWorkers()
 
 	// Create and register workers
@@ -139,7 +137,8 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	logger.Debug().Msg("Added onboarding worker")
 
 	// Create and register Tesla command worker
-	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, teslaService, repositories.Command, repositories.Vehicle, &logger)
+
+	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger)
 	if err := river.AddWorkerSafely(workers, teslaCommandWorker); err != nil {
 		return nil, nil, fmt.Errorf("failed to add Tesla command worker: %w", err)
 	}

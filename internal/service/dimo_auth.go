@@ -11,6 +11,7 @@ import (
 
 	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
@@ -153,7 +154,7 @@ func (a *DimoAuthService) getChallenge() (*AuthChallenge, error) {
 	}(resp.Body)
 
 	if resp.StatusCode != 200 {
-		return nil, ErrBadRequest
+		return nil, core.ErrBadRequest
 	}
 
 	body, err := io.ReadAll(resp.Body)
@@ -200,7 +201,7 @@ func (a *DimoAuthService) submitChallenge(challenge AuthSubmitChallengePayload) 
 	}(resp.Body)
 
 	if resp.StatusCode != 200 {
-		return nil, ErrBadRequest
+		return nil, core.ErrBadRequest
 	}
 
 	body, err := io.ReadAll(resp.Body)

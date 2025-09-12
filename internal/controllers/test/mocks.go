@@ -2,12 +2,15 @@ package test
 
 import (
 	"context"
+
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
+	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
-
-	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -87,49 +90,52 @@ type MockTeslaFleetAPIService struct {
 	mock.Mock
 }
 
-func (m *MockTeslaFleetAPIService) RefreshToken(ctx context.Context, refreshToken string) (*service.RefreshTokenResp, error) {
+func (m *MockTeslaFleetAPIService) RefreshToken(ctx context.Context, refreshToken string) (*core.RefreshTokenResp, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockTeslaFleetAPIService) GetPartnersToken(ctx context.Context) (*service.PartnersAccessTokenResponse, error) {
+func (m *MockTeslaFleetAPIService) GetPartnersToken(ctx context.Context) (*core.PartnersAccessTokenResponse, error) {
 	args := m.Called(ctx)
 	if args.Get(0) != nil {
-		return args.Get(0).(*service.PartnersAccessTokenResponse), args.Error(1)
+		return args.Get(0).(*core.PartnersAccessTokenResponse), args.Error(1)
 	}
 	return nil, args.Error(1)
 }
 
-func (m *MockTeslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*service.TeslaAuthCodeResponse, error) {
+func (m *MockTeslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*core.TeslaAuthCodeResponse, error) {
 	args := m.Called(ctx, authCode, redirectURI)
 	if args.Get(0) != nil {
-		return args.Get(0).(*service.TeslaAuthCodeResponse), args.Error(1)
+		return args.Get(0).(*core.TeslaAuthCodeResponse), args.Error(1)
 	}
 	return nil, args.Error(1)
 }
 
-func (m *MockTeslaFleetAPIService) GetVehicles(ctx context.Context, token string) ([]service.TeslaVehicle, error) {
+func (m *MockTeslaFleetAPIService) GetVehicles(ctx context.Context, token string) ([]core.TeslaVehicle, error) {
 	args := m.Called(ctx, token)
 	if args.Get(0) != nil {
-		return args.Get(0).([]service.TeslaVehicle), args.Error(1)
+		return args.Get(0).([]core.TeslaVehicle), args.Error(1)
 	}
 	return nil, args.Error(1)
 }
 
-func (m *MockTeslaFleetAPIService) GetVehicle(ctx context.Context, token string, vehicleID int) (*service.TeslaVehicle, error) {
+func (m *MockTeslaFleetAPIService) GetVehicle(ctx context.Context, token string, vehicleID int) (*core.TeslaVehicle, error) {
 	//TODO implement me
 	panic("implement me")
 }
 
-func (m *MockTeslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vehicleID int) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (m *MockTeslaFleetAPIService) VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*service.VehicleFleetStatus, error) {
+func (m *MockTeslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vin string) (*core.TeslaVehicle, error) {
 	args := m.Called(ctx, token, vin)
 	if args.Get(0) != nil {
-		return args.Get(0).(*service.VehicleFleetStatus), args.Error(1)
+		return args.Get(0).(*core.TeslaVehicle), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
+func (m *MockTeslaFleetAPIService) VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*core.VehicleFleetStatus, error) {
+	args := m.Called(ctx, token, vin)
+	if args.Get(0) != nil {
+		return args.Get(0).(*core.VehicleFleetStatus), args.Error(1)
 	}
 	return nil, args.Error(1)
 }
@@ -139,10 +145,10 @@ func (m *MockTeslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Cont
 	return args.Error(0)
 }
 
-func (m *MockTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*service.VehicleTelemetryStatus, error) {
+func (m *MockTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*core.VehicleTelemetryStatus, error) {
 	args := m.Called(ctx, token, vin)
 	if args.Get(0) != nil {
-		return args.Get(0).(*service.VehicleTelemetryStatus), args.Error(1)
+		return args.Get(0).(*core.VehicleTelemetryStatus), args.Error(1)
 	}
 	return nil, args.Error(1)
 }
@@ -240,4 +246,24 @@ func (m *MockCommandRepository) GetCommandRequestsByVehicle(ctx context.Context,
 		return args.Get(0).(dbmodels.DeviceCommandRequestSlice), args.Error(1)
 	}
 	return nil, args.Error(1)
+}
+
+// MockRiverClient is a mock implementation of the River client
+type MockRiverClient struct {
+	mock.Mock
+}
+
+func (m *MockRiverClient) Insert(ctx context.Context, args interface{}, opts *river.InsertOpts) (*river.JobInsertResult, error) {
+	mockArgs := m.Called(ctx, args, opts)
+	if mockArgs.Get(0) != nil {
+		// Create a real JobInsertResult with the mocked job ID
+		jobID := mockArgs.Get(0).(int64)
+		result := &river.JobInsertResult{
+			Job: &river.Job[any]{
+				ID: jobID,
+			},
+		}
+		return result, mockArgs.Error(1)
+	}
+	return nil, mockArgs.Error(1)
 }

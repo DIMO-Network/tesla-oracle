@@ -1,4 +1,4 @@
-package service
+package core
 
 import (
 	"context"
@@ -43,6 +43,7 @@ type TeslaFleetAPIService interface {
 	GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*VehicleTelemetryStatus, error)
 	GetPartnersToken(ctx context.Context) (*PartnersAccessTokenResponse, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*RefreshTokenResp, error)
+	ExecuteCommand(ctx context.Context, token, vin, command string) error
 }
 
 var teslaScopes = []string{"openid", "offline_access", "user_data", "vehicle_device_data", "vehicle_cmds", "vehicle_charging_cmds"}
