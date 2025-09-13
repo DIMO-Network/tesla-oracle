@@ -64,7 +64,10 @@ const vehicleTokenID = 789
 func (s *TeslaControllerTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 	s.pdb, s.container, s.settings = test.StartContainerDatabase(context.Background(), s.T(), migrationsDirRelPath)
-	migrateRiver(s.ctx, s.pdb.DBS().Writer.DB)
+	err := migrateRiver(s.ctx, s.pdb.DBS().Writer.DB)
+	if err != nil {
+		s.T().Fatal(err)
+	}
 	fmt.Println("Suite setup completed.")
 }
 
