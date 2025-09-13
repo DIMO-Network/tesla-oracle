@@ -3,7 +3,6 @@ package bootstrap
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/DIMO-Network/go-transactions"
@@ -16,7 +15,6 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	work "github.com/DIMO-Network/tesla-oracle/internal/workers"
-	"github.com/IBM/sarama"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/jackc/pgx/v5"
@@ -40,7 +38,6 @@ type Services struct {
 	Repositories             *repository.Repositories
 	TeslaFleetAPIService     core.TeslaFleetAPIService
 	TeslaService             *service.TeslaService
-	KafkaProducer            sarama.SyncProducer
 }
 
 // InitializeServices creates and initializes all application services
@@ -88,12 +85,6 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		logger.Warn().Msgf("Devices GRPC is DISABLED")
 	}
 
-	// Initialize Kafka producer
-	kafkaProducer, err := initializeKafkaProducer(settings, logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Kafka producer: %w", err)
-	}
-
 	// Initialize Tesla token manager
 	tokenManger := core.NewTeslaTokenManager(cip, repositories.Vehicle, teslaFleetAPIService, logger)
 
@@ -121,7 +112,6 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		Repositories:             repositories,
 		TeslaFleetAPIService:     teslaFleetAPIService,
 		TeslaService:             teslaService,
-		KafkaProducer:            kafkaProducer,
 	}, nil
 }
 
@@ -245,33 +235,8 @@ func createKMS(settings *config.Settings, logger *zerolog.Logger) cipher.Cipher 
 	}
 }
 
-// initializeKafkaProducer creates and configures the Kafka producer
-func initializeKafkaProducer(settings *config.Settings, logger *zerolog.Logger) (sarama.SyncProducer, error) {
-	config := sarama.NewConfig()
-	config.Version = sarama.V3_6_0_0
-	config.Producer.Return.Successes = true
-	config.Producer.RequiredAcks = sarama.WaitForAll // Wait for all in-sync replicas to ack
-	config.Producer.Retry.Max = 5                    // Retry up to 5 times
-	config.Producer.Compression = sarama.CompressionSnappy
-
-	// Create producer
-	brokers := strings.Split(settings.KafkaBrokers, ",")
-	producer, err := sarama.NewSyncProducer(brokers, config)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Kafka sync producer: %w", err)
-	}
-
-	logger.Info().Strs("brokers", brokers).Msg("Kafka producer initialized")
-	return producer, nil
-}
-
 // Cleanup properly closes all services
-func (s *Services) Cleanup(logger zerolog.Logger) {
-	if s.KafkaProducer != nil {
-		if err := s.KafkaProducer.Close(); err != nil {
-			logger.Err(err).Msg("Failed to close Kafka producer")
-		}
-	}
+func (s *Services) Cleanup() {
 	if s.DBPool != nil {
 		s.DBPool.Close()
 	}
