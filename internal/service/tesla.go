@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/DIMO-Network/shared/pkg/logfields"
-	"github.com/DIMO-Network/tesla-oracle/internal/commands"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
@@ -335,7 +334,7 @@ func (ts *TeslaService) ValidateCommandRequest(ctx context.Context, tokenID int6
 		return nil, err
 	}
 
-	err = commands.ValidateCommand(command)
+	err = core.ValidateCommand(command)
 	if err != nil {
 		return nil, err
 	}

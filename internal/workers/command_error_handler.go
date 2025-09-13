@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/DIMO-Network/tesla-oracle/internal/commands"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/rivertype"
@@ -47,7 +47,7 @@ func (h *TeslaCommandErrorHandler) HandleError(ctx context.Context, job *riverty
 		}
 
 		// Update status to failed with error message
-		commandRequest.Status = commands.CommandStatusFailed
+		commandRequest.Status = core.CommandStatusFailed
 		if err != nil {
 			commandRequest.ErrorMessage.SetValid(err.Error())
 		}
@@ -84,7 +84,7 @@ func (h *TeslaCommandErrorHandler) HandlePanic(ctx context.Context, job *riverty
 		}
 
 		// Update status to failed with panic info
-		commandRequest.Status = commands.CommandStatusFailed
+		commandRequest.Status = core.CommandStatusFailed
 		panicMsg := fmt.Sprintf("Job panicked: %v", panicVal)
 		commandRequest.ErrorMessage.SetValid(panicMsg)
 

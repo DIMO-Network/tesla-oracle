@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DIMO-Network/tesla-oracle/internal/commands"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
@@ -366,7 +365,7 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 		ID:             jobIDStr,
 		VehicleTokenID: int(tokenID),
 		Command:        request.Command,
-		Status:         commands.CommandStatusPending,
+		Status:         core.CommandStatusPending,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      time.Now(),
 	}
@@ -379,7 +378,7 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 
 	response := &models.SubmitCommandResponse{
 		CommandID: jobIDStr,
-		Status:    commands.CommandStatusPending,
+		Status:    core.CommandStatusPending,
 		Message:   "Command submitted successfully and queued for execution",
 	}
 

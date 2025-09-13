@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/DIMO-Network/tesla-oracle/internal/commands"
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/riverqueue/river"
@@ -113,8 +112,8 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 			errMsg := fmt.Sprintf("vehicle failed to wake up after %d attempts, final state: %s", args.WakeAttempts, vehicle.State)
 			logger.Warn().Str("finalState", vehicle.State).Msg("Vehicle failed to wake up after maximum attempts")
 			// This is a permanent failure - vehicle won't wake up, don't retry
-			w.updateCommandStatus(ctx, jobID, commands.CommandStatusFailed, errMsg)
-			return river.JobCancel(fmt.Errorf(errMsg))
+			w.updateCommandStatus(ctx, jobID, core.CommandStatusFailed, errMsg)
+			return river.JobCancel(fmt.Errorf("%s", errMsg))
 		}
 
 		// Vehicle is still not awake, increment wake attempts and snooze
@@ -141,29 +140,28 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 
 	// Command executed successfully
 	logger.Info().Msg("Tesla command executed successfully")
-	w.updateCommandStatus(ctx, jobID, commands.CommandStatusCompleted, "")
+	w.updateCommandStatus(ctx, jobID, core.CommandStatusCompleted, "")
 
 	return nil
 }
 
 // executeCommand executes the actual Tesla command via Fleet API
 func (w *TeslaCommandWorker) executeCommand(ctx context.Context, accessToken string, vin, command string) error {
-	// TODO: Implement actual command execution based on command type
-	// This is where you would call specific Tesla Fleet API endpoints
-	// For now, we'll simulate the command execution
+	w.logger.Info().
+		Str("command", command).
+		Str("vin", vin).
+		Msg("Executing Tesla command")
+
+	// Execute the command using TeslaFleetAPIService
+	err := w.teslaFleetAPI.ExecuteCommand(ctx, accessToken, vin, command)
+	if err != nil {
+		return fmt.Errorf("failed to execute Tesla command %s: %w", command, err)
+	}
 
 	w.logger.Info().
 		Str("command", command).
-		//Int("vehicleId", vehicleID).
-		Msg("Executing Tesla command")
-
-	// Simulate command execution time
-	time.Sleep(2 * time.Second)
-
-	// In a real implementation, you would:
-	// 1. Parse the command type (frunk/open, doors/lock, etc.)
-	// 2. Call the appropriate Tesla Fleet API endpoint
-	// 3. Handle the response and potential errors
+		Str("vin", vin).
+		Msg("Tesla command executed successfully")
 
 	return nil
 }

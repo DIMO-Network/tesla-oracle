@@ -1,4 +1,4 @@
-package commands
+package core
 
 import (
 	"fmt"
@@ -22,16 +22,21 @@ const (
 	CommandChargeStop  = "charge/stop"
 )
 
+const (
+	ChargeLimit               = "charge/limit"
+	TelemetrySubscribe string = "telemetry/subscribe"
+)
+
 // ValidateCommand validates the command against supported commands
 func ValidateCommand(command string) error {
 	if command == "" {
-		return fmt.Errorf("command field is required")
+		return fmt.Errorf("%w: command field is required", ErrBadRequest)
 	}
 
 	// Validate command against supported commands
 	if !IsCommandSupported(command) {
-		return fmt.Errorf("command '%s' is not supported. Supported commands: %s",
-			command, GetSupportedCommandsList())
+		return fmt.Errorf("%w: command '%s' is not supported. Supported commands: %s",
+			ErrUnsupportedCommand, command, GetSupportedCommandsList())
 	}
 
 	return nil

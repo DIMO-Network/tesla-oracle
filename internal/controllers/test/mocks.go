@@ -7,10 +7,7 @@ import (
 	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
-	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/jackc/pgx/v5"
-	"github.com/riverqueue/river"
 	"github.com/stretchr/testify/mock"
 )
 
@@ -158,6 +155,11 @@ func (m *MockTeslaFleetAPIService) SubscribeForTelemetryData(ctx context.Context
 	return args.Error(0)
 }
 
+func (m *MockTeslaFleetAPIService) ExecuteCommand(ctx context.Context, token, vin, command string) error {
+	args := m.Called(ctx, token, vin, command)
+	return args.Error(0)
+}
+
 // MockDevicesGRPCService is a mock implementation of the DevicesGRPCService interface.
 type MockDevicesGRPCService struct {
 	mock.Mock
@@ -205,65 +207,4 @@ func (m *MockCipher) Encrypt(data string) (string, error) {
 func (m *MockCipher) Decrypt(data string) (string, error) {
 	args := m.Called(data)
 	return args.String(0), args.Error(1)
-}
-
-// MockCommandPublisher is a mock implementation of the CommandPublisher interface.
-type MockCommandPublisher struct {
-	mock.Mock
-}
-
-func (m *MockCommandPublisher) PublishCommand(ctx context.Context, sd *dbmodels.SyntheticDevice, command string) (string, error) {
-	args := m.Called(ctx, sd, command)
-	return args.String(0), args.Error(1)
-}
-
-// MockCommandRepository is a mock implementation of the CommandRepository interface.
-type MockCommandRepository struct {
-	mock.Mock
-}
-
-func (m *MockCommandRepository) SaveCommandRequest(ctx context.Context, request *dbmodels.DeviceCommandRequest) error {
-	args := m.Called(ctx, request)
-	return args.Error(0)
-}
-
-func (m *MockCommandRepository) UpdateCommandRequest(ctx context.Context, request *dbmodels.DeviceCommandRequest) error {
-	args := m.Called(ctx, request)
-	return args.Error(0)
-}
-
-func (m *MockCommandRepository) GetCommandRequest(ctx context.Context, taskID string) (*dbmodels.DeviceCommandRequest, error) {
-	args := m.Called(ctx, taskID)
-	if args.Get(0) != nil {
-		return args.Get(0).(*dbmodels.DeviceCommandRequest), args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-
-func (m *MockCommandRepository) GetCommandRequestsByVehicle(ctx context.Context, vehicleTokenID int, limit int) (dbmodels.DeviceCommandRequestSlice, error) {
-	args := m.Called(ctx, vehicleTokenID, limit)
-	if args.Get(0) != nil {
-		return args.Get(0).(dbmodels.DeviceCommandRequestSlice), args.Error(1)
-	}
-	return nil, args.Error(1)
-}
-
-// MockRiverClient is a mock implementation of the River client
-type MockRiverClient struct {
-	mock.Mock
-}
-
-func (m *MockRiverClient) Insert(ctx context.Context, args interface{}, opts *river.InsertOpts) (*river.JobInsertResult, error) {
-	mockArgs := m.Called(ctx, args, opts)
-	if mockArgs.Get(0) != nil {
-		// Create a real JobInsertResult with the mocked job ID
-		jobID := mockArgs.Get(0).(int64)
-		result := &river.JobInsertResult{
-			Job: &river.Job[any]{
-				ID: jobID,
-			},
-		}
-		return result, mockArgs.Error(1)
-	}
-	return nil, mockArgs.Error(1)
 }
