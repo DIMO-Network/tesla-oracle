@@ -92,7 +92,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	teslaService := service.NewTeslaService(settings, logger, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, *tokenManger)
 
 	// Initialize River client with workers (including Tesla command worker)
-	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, tokenManger, repositories, cip)
+	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, tokenManger, repositories)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create river client: %w", err)
 	}
@@ -116,7 +116,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 }
 
 // initializeRiver creates River client with workers and database pool
-func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories, cipher cipher.Cipher) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
+func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
 	workers := river.NewWorkers()
 
 	// Create and register workers
