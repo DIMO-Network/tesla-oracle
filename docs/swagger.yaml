@@ -64,6 +64,15 @@ definitions:
       method:
         type: string
     type: object
+  github_com_DIMO-Network_tesla-oracle_internal_models.SubmitCommandResponse:
+    properties:
+      commandId:
+        type: string
+      message:
+        type: string
+      status:
+        type: string
+    type: object
   github_com_DIMO-Network_tesla-oracle_internal_models.TeslaVehicleRes:
     properties:
       definition:
@@ -181,15 +190,6 @@ definitions:
       command:
         type: string
     type: object
-  internal_controllers.SubmitCommandResponse:
-    properties:
-      commandId:
-        type: string
-      message:
-        type: string
-      status:
-        type: string
-    type: object
   internal_controllers.VinsGetParams:
     properties:
       vins:
@@ -280,7 +280,7 @@ paths:
         "200":
           description: Command submitted successfully
           schema:
-            $ref: '#/definitions/internal_controllers.SubmitCommandResponse'
+            $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.SubmitCommandResponse'
         "400":
           description: Bad Request
           schema:

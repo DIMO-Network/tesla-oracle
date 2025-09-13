@@ -55,7 +55,7 @@ const docTemplate = `{
                     "200": {
                         "description": "Command submitted successfully",
                         "schema": {
-                            "$ref": "#/definitions/internal_controllers.SubmitCommandResponse"
+                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.SubmitCommandResponse"
                         }
                     },
                     "400": {
@@ -884,6 +884,20 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_DIMO-Network_tesla-oracle_internal_models.SubmitCommandResponse": {
+            "type": "object",
+            "properties": {
+                "commandId": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_DIMO-Network_tesla-oracle_internal_models.TeslaVehicleRes": {
             "type": "object",
             "properties": {
@@ -1062,20 +1076,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "command": {
-                    "type": "string"
-                }
-            }
-        },
-        "internal_controllers.SubmitCommandResponse": {
-            "type": "object",
-            "properties": {
-                "commandId": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "status": {
                     "type": "string"
                 }
             }
