@@ -842,7 +842,7 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	workers := river.NewWorkers()
 
 	// Create and register Tesla command worker
-	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger)
+	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger, 5*time.Second)
 	if err := river.AddWorkerSafely(workers, teslaCommandWorker); err != nil {
 		return nil, nil, fmt.Errorf("failed to add Tesla command worker: %w", err)
 	}
@@ -1007,7 +1007,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 			// Wait for River job to complete
 			if tc.vehicleState == "asleep" {
 				// If vehicle is sleeping, wait for retry delay (1 minute + processing time)
-				time.Sleep(65 * time.Second)
+				time.Sleep(10 * time.Second)
 			} else {
 				// Wait for immediate job processing
 				time.Sleep(2 * time.Second)
@@ -1110,7 +1110,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 		commandID := response["commandId"].(string)
 
 		// Wait for all retry attempts (1 minute + processing time)
-		time.Sleep(1*time.Minute + 10*time.Second)
+		time.Sleep(15 * time.Second)
 
 		// then - verify command failed after max wake attempts
 		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
@@ -1269,7 +1269,11 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		// Start River worker
 		err = riverClient.Start(s.ctx)
 		require.NoError(s.T(), err)
-		defer riverClient.Stop(s.ctx)
+		defer func() {
+			if err := riverClient.Stop(s.ctx); err != nil {
+				s.T().Logf("failed to stop River client: %v", err)
+			}
+		}()
 
 		// Mock Tesla Fleet API - vehicle is asleep first, then wakes up
 		asleepVehicle := &core.TeslaVehicle{
@@ -1317,7 +1321,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		commandID := response["commandId"].(string)
 
 		// Wait for retries and wake-up attempts (River retries + wake-up snoozing)
-		time.Sleep(1*time.Minute + 30*time.Second)
+		time.Sleep(30 * time.Second)
 
 		// then - verify command eventually succeeded
 		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
@@ -1376,10 +1380,14 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		// Start River worker
 		err = riverClient.Start(s.ctx)
 		require.NoError(s.T(), err)
-		defer riverClient.Stop(s.ctx)
+		defer func() {
+			if err := riverClient.Stop(s.ctx); err != nil {
+				s.T().Logf("failed to stop River client: %v", err)
+			}
+		}()
 
 		// Mock token refresh failures on first 2 attempts, then succeed
-		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(nil, fmt.Errorf("some error")).Times(4)
+		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(nil, fmt.Errorf("some error")).Times(3)
 
 		// Create Tesla service
 		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
@@ -1405,7 +1413,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		require.NoError(s.T(), err)
 		commandID := response["commandId"].(string)
 
-		time.Sleep(30 * time.Second)
+		time.Sleep(20 * time.Second)
 
 		// then - verify command eventually succeeded
 		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)

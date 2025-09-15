@@ -41,11 +41,12 @@ func (a TeslaCommandArgs) InsertOpts() river.InsertOpts {
 // TeslaCommandWorker handles Tesla command execution with wake-up logic
 type TeslaCommandWorker struct {
 	river.WorkerDefaults[TeslaCommandArgs]
-	teslaFleetAPI core.TeslaFleetAPIService
-	tokenManager  *core.TeslaTokenManager
-	commandRepo   repository.CommandRepository
-	vehicleRepo   repository.VehicleRepository
-	logger        *zerolog.Logger
+	teslaFleetAPI  core.TeslaFleetAPIService
+	tokenManager   *core.TeslaTokenManager
+	commandRepo    repository.CommandRepository
+	vehicleRepo    repository.VehicleRepository
+	logger         *zerolog.Logger
+	SnoozeDuration time.Duration
 }
 
 // NewTeslaCommandWorker creates a new Tesla command worker
@@ -55,13 +56,15 @@ func NewTeslaCommandWorker(
 	commandRepo repository.CommandRepository,
 	vehicleRepo repository.VehicleRepository,
 	logger *zerolog.Logger,
+	snoozeDuration time.Duration,
 ) *TeslaCommandWorker {
 	return &TeslaCommandWorker{
-		teslaFleetAPI: teslaFleetAPI,
-		tokenManager:  tokenManger,
-		commandRepo:   commandRepo,
-		vehicleRepo:   vehicleRepo,
-		logger:        logger,
+		teslaFleetAPI:  teslaFleetAPI,
+		tokenManager:   tokenManger,
+		commandRepo:    commandRepo,
+		vehicleRepo:    vehicleRepo,
+		logger:         logger,
+		SnoozeDuration: snoozeDuration,
 	}
 }
 
@@ -143,7 +146,7 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 		}
 
 		// Snooze for 1 minute and let River retry the same job
-		return river.JobSnooze(1 * time.Minute)
+		return river.JobSnooze(w.SnoozeDuration)
 	}
 
 	logger.Info().Str("vehicleState", vehicle.State).Msg("Vehicle is awake, executing command")

@@ -128,7 +128,7 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 
 	// Create and register Tesla command worker
 
-	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger)
+	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger, 1*time.Minute)
 	if err := river.AddWorkerSafely(workers, teslaCommandWorker); err != nil {
 		return nil, nil, fmt.Errorf("failed to add Tesla command worker: %w", err)
 	}
