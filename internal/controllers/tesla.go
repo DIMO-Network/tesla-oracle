@@ -349,7 +349,6 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 		VehicleTokenID: int(tokenID),
 		VIN:            syntheticDevice.Vin,
 		Command:        request.Command,
-		WakeAttempts:   0,
 	}
 
 	// Insert job into River queue

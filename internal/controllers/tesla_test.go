@@ -605,7 +605,6 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 	mockTeslaService.AssertExpectations(s.T())
 }
 
-// TODO: Fix this test after TeslaTokenManager migration - currently commented out
 func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 	testCases := []struct {
 		name              string
@@ -874,6 +873,540 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 
 	return riverClient, dbPool, nil
+}
+
+func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
+	testCases := []struct {
+		name             string
+		command          string
+		vehicleState     string
+		expectWakeUpCall bool
+		expectSuccess    bool
+	}{
+		{
+			name:             "successful command with awake vehicle",
+			command:          "frunk/open",
+			vehicleState:     "online",
+			expectWakeUpCall: true,
+			expectSuccess:    true,
+		},
+		{
+			name:             "successful command with sleeping vehicle that wakes up",
+			command:          "doors/lock",
+			vehicleState:     "asleep", // Will wake up after first call
+			expectWakeUpCall: true,
+			expectSuccess:    true,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			s.TearDownTest()
+
+			// given - setup mocks
+			mockTeslaService := &test.MockTeslaFleetAPIService{}
+			mockIdentitySvc := &test.MockIdentityAPIService{}
+
+			// Mock identity service to return our vehicle using the correct structure
+			vehicle := &mods.Vehicle{
+				Owner:   walletAddress,
+				TokenID: vehicleTokenID,
+				SyntheticDevice: mods.SyntheticDevice{
+					Address: "0xabcdef1234567890abcdef1234567890abcdef12",
+				},
+			}
+			mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
+
+			// Mock Tesla Fleet API calls
+			teslaVehicle := &core.TeslaVehicle{
+				ID:    12345,
+				VIN:   vin,
+				State: tc.vehicleState,
+			}
+
+			if tc.vehicleState == "asleep" {
+				// First call returns sleeping, second returns online
+				mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(&core.TeslaVehicle{
+					ID:    12345,
+					VIN:   vin,
+					State: "asleep",
+				}, nil).Once()
+
+				mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(&core.TeslaVehicle{
+					ID:    12345,
+					VIN:   vin,
+					State: "online",
+				}, nil).Once()
+			} else {
+				mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(teslaVehicle, nil).Once()
+			}
+
+			if tc.expectSuccess {
+				mockTeslaService.On("ExecuteCommand", mock.Anything, mock.AnythingOfType("string"), vin, tc.command).Return(nil)
+			}
+
+			// Setup services
+			settings, logger, repos := s.createTestDependencies()
+			cip := new(cipher.ROT13Cipher)
+			tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+
+			// Create synthetic device for the test
+			dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
+			defer func() {
+				// Delete dependent records in device_command_requests first
+				_, err := s.pdb.DBS().Writer.Exec("DELETE FROM device_command_requests")
+				require.NoError(s.T(), err, "Failed to delete records from device_command_requests")
+
+				_, err = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+				if err != nil {
+					s.T().Logf("failed to delete synthetic device: %v", err)
+				}
+			}()
+
+			// Setup River client
+			riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+			require.NoError(s.T(), err)
+
+			// Start River worker to process jobs
+			err = riverClient.Start(s.ctx)
+			require.NoError(s.T(), err)
+			defer riverClient.Stop(s.ctx)
+
+			// Setup controller
+			controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
+			app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+
+			// when - submit command
+			requestBody := fmt.Sprintf(`{"command": "%s"}`, tc.command)
+			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+			req.Header.Set("Content-Type", "application/json")
+			assert.NoError(s.T(), test.GenerateJWT(req))
+
+			// sleep so river job can start
+			time.Sleep(1 * time.Second)
+
+			resp, err := app.Test(req)
+			assert.NoError(s.T(), err)
+			assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+
+			// Extract command request ID from response
+			var response map[string]interface{}
+			body, _ := io.ReadAll(resp.Body)
+			// Log the raw response body
+			fmt.Printf("Response Body: %s\n", string(body))
+
+			err = json.Unmarshal(body, &response)
+			require.NoError(s.T(), err)
+			commandID := response["commandId"].(string)
+
+			// Wait for River job to complete
+			if tc.vehicleState == "asleep" {
+				// If vehicle is sleeping, wait for retry delay (1 minute + processing time)
+				time.Sleep(65 * time.Second)
+			} else {
+				// Wait for immediate job processing
+				time.Sleep(2 * time.Second)
+			}
+
+			// then - verify command request status was updated in database
+			commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
+			require.NoError(s.T(), err)
+
+			if tc.expectSuccess {
+				assert.Equal(s.T(), core.CommandStatusCompleted, commandRequest.Status)
+				assert.False(s.T(), commandRequest.ErrorMessage.Valid)
+			}
+
+			// Verify mock expectations
+			mockTeslaService.AssertExpectations(s.T())
+			mockIdentitySvc.AssertExpectations(s.T())
+		})
+	}
+}
+
+func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() {
+	s.Run("vehicle fails to wake up after max attempts", func() {
+		s.TearDownTest()
+
+		// given - setup mocks
+		mockTeslaService := &test.MockTeslaFleetAPIService{}
+		mockIdentitySvc := &test.MockIdentityAPIService{}
+
+		// Mock identity service to return our vehicle
+		vehicle := &mods.Vehicle{
+			Owner:   walletAddress,
+			TokenID: vehicleTokenID,
+			SyntheticDevice: mods.SyntheticDevice{
+				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
+			},
+		}
+		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
+
+		// Mock Tesla Fleet API - vehicle never wakes up (always returns "asleep")
+		sleepingVehicle := &core.TeslaVehicle{
+			ID:    12345,
+			VIN:   vin,
+			State: "asleep",
+		}
+		// Should be called 5 times (maxWakeUpAttempts)
+		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(sleepingVehicle, nil).Times(2)
+
+		// Setup services
+		settings, logger, repos := s.createTestDependencies()
+		cip := new(cipher.ROT13Cipher)
+		tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+
+		// Create synthetic device for the test
+		dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
+		defer func() {
+			// Delete dependent records in device_command_requests first
+			_, err := s.pdb.DBS().Writer.Exec("DELETE FROM device_command_requests")
+			require.NoError(s.T(), err, "Failed to delete records from device_command_requests")
+
+			_, err = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+			if err != nil {
+				s.T().Logf("failed to delete synthetic device: %v", err)
+			}
+		}()
+
+		// Setup River client
+		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+		require.NoError(s.T(), err)
+
+		// Start River worker
+		err = riverClient.Start(s.ctx)
+		require.NoError(s.T(), err)
+		defer riverClient.Stop(s.ctx)
+
+		// Setup controller
+		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
+		app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+
+		// when - submit command
+		requestBody := `{"command": "frunk/open"}`
+		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
+		assert.NoError(s.T(), test.GenerateJWT(req))
+
+		resp, err := app.Test(req)
+		assert.NoError(s.T(), err)
+		assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+
+		// Extract command request ID
+		var response map[string]interface{}
+		body, _ := io.ReadAll(resp.Body)
+		err = json.Unmarshal(body, &response)
+		require.NoError(s.T(), err)
+		commandID := response["commandId"].(string)
+
+		// Wait for all retry attempts (1 minute + processing time)
+		time.Sleep(1*time.Minute + 10*time.Second)
+
+		// then - verify command failed after max wake attempts
+		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
+		require.NoError(s.T(), err)
+
+		assert.Equal(s.T(), core.CommandStatusFailed, commandRequest.Status)
+		assert.True(s.T(), commandRequest.ErrorMessage.Valid)
+		assert.Contains(s.T(), commandRequest.ErrorMessage.String, "failed to wake up after 2 attempts")
+
+		// Verify WakeUpVehicle was called exactly 5 times (no more)
+		mockTeslaService.AssertExpectations(s.T())
+	})
+}
+
+func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors() {
+	s.Run("job retries 3 times on retriable errors", func() {
+		s.TearDownTest()
+
+		// given - setup mocks
+		mockTeslaService := &test.MockTeslaFleetAPIService{}
+		mockIdentitySvc := &test.MockIdentityAPIService{}
+
+		// Mock identity service to return our vehicle
+		vehicle := &mods.Vehicle{
+			Owner:   walletAddress,
+			TokenID: vehicleTokenID,
+			SyntheticDevice: mods.SyntheticDevice{
+				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
+			},
+		}
+		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
+
+		// Mock Tesla Fleet API - vehicle wakes up successfully
+		onlineVehicle := &core.TeslaVehicle{
+			ID:    12345,
+			VIN:   vin,
+			State: "online",
+		}
+		// WakeUpVehicle will be called 3 times (one per retry attempt)
+		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(onlineVehicle, nil).Times(3)
+
+		// ExecuteCommand fails with retriable error first 2 times, succeeds on 3rd
+		retriableError := fmt.Errorf("network connection failed")
+		mockTeslaService.On("ExecuteCommand", mock.Anything, mock.AnythingOfType("string"), vin, "frunk/open").Return(retriableError).Times(2)
+		mockTeslaService.On("ExecuteCommand", mock.Anything, mock.AnythingOfType("string"), vin, "frunk/open").Return(nil).Once()
+
+		// Setup services
+		settings, logger, repos := s.createTestDependencies()
+		cip := new(cipher.ROT13Cipher)
+		tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+
+		// Create synthetic device for the test
+		dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
+		defer func() {
+			// Delete dependent records in device_command_requests first
+			_, err := s.pdb.DBS().Writer.Exec("DELETE FROM device_command_requests")
+			require.NoError(s.T(), err, "Failed to delete records from device_command_requests")
+
+			_, err = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+			if err != nil {
+				s.T().Logf("failed to delete synthetic device: %v", err)
+			}
+		}()
+
+		// Setup River client
+		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+		require.NoError(s.T(), err)
+
+		// Start River worker
+		err = riverClient.Start(s.ctx)
+		require.NoError(s.T(), err)
+		defer riverClient.Stop(s.ctx)
+
+		// Setup controller
+		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
+		app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+
+		// when - submit command
+		requestBody := `{"command": "frunk/open"}`
+		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
+		assert.NoError(s.T(), test.GenerateJWT(req))
+
+		resp, err := app.Test(req)
+		assert.NoError(s.T(), err)
+		assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+
+		// Extract command request ID
+		var response map[string]interface{}
+		body, _ := io.ReadAll(resp.Body)
+		err = json.Unmarshal(body, &response)
+		require.NoError(s.T(), err)
+		commandID := response["commandId"].(string)
+
+		// Wait for all retry attempts to complete (with exponential backoff)
+		time.Sleep(30 * time.Second)
+
+		// then - verify command eventually succeeded after retries
+		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
+		require.NoError(s.T(), err)
+
+		assert.Equal(s.T(), core.CommandStatusCompleted, commandRequest.Status)
+		assert.False(s.T(), commandRequest.ErrorMessage.Valid)
+
+		// Verify all expected calls were made
+		mockTeslaService.AssertExpectations(s.T())
+		mockIdentitySvc.AssertExpectations(s.T())
+	})
+}
+
+func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
+	s.Run("retries token refresh failures then wakes up vehicle", func() {
+		s.TearDownTest()
+
+		// given - setup mocks
+		mockTeslaService := &test.MockTeslaFleetAPIService{}
+		mockIdentitySvc := &test.MockIdentityAPIService{}
+
+		// Mock identity service to return our vehicle
+		vehicle := &mods.Vehicle{
+			Owner:   walletAddress,
+			TokenID: vehicleTokenID,
+			SyntheticDevice: mods.SyntheticDevice{
+				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
+			},
+		}
+		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
+
+		// Setup repositories and token manager
+		settings, logger, repos := s.createTestDependencies()
+		cip := new(cipher.ROT13Cipher)
+		tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+
+		// Create synthetic device for the test
+		dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
+		defer func() {
+			// Delete dependent records in device_command_requests first
+			_, err := s.pdb.DBS().Writer.Exec("DELETE FROM device_command_requests")
+			require.NoError(s.T(), err, "Failed to delete records from device_command_requests")
+
+			_, err = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+			if err != nil {
+				s.T().Logf("failed to delete synthetic device: %v", err)
+			}
+		}()
+
+		// Setup River client
+		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+		require.NoError(s.T(), err)
+
+		// Start River worker
+		err = riverClient.Start(s.ctx)
+		require.NoError(s.T(), err)
+		defer riverClient.Stop(s.ctx)
+
+		// Mock Tesla Fleet API - vehicle is asleep first, then wakes up
+		asleepVehicle := &core.TeslaVehicle{
+			ID:    12345,
+			VIN:   vin,
+			State: "asleep",
+		}
+		onlineVehicle := &core.TeslaVehicle{
+			ID:    12345,
+			VIN:   vin,
+			State: "online",
+		}
+
+		// Mock token refresh failures on first 2 attempts, then succeed
+		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(nil, fmt.Errorf("some error")).Times(2)
+		// First wake attempt - vehicle still asleep
+		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(asleepVehicle, nil).Once()
+		// Second wake attempt - vehicle comes online
+		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(onlineVehicle, nil).Once()
+		// Command execution succeeds
+		mockTeslaService.On("ExecuteCommand", mock.Anything, mock.AnythingOfType("string"), vin, mock.AnythingOfType("string")).Return(nil).Once()
+
+		// Create Tesla service
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+
+		// Setup controller
+		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
+
+		// when - submit command
+		app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+		requestBody := `{"command": "frunk/open"}`
+		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
+		assert.NoError(s.T(), test.GenerateJWT(req))
+
+		resp, err := app.Test(req, -1)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), 200, resp.StatusCode)
+
+		// Extract command request ID
+		var response map[string]interface{}
+		body, _ := io.ReadAll(resp.Body)
+		err = json.Unmarshal(body, &response)
+		require.NoError(s.T(), err)
+		commandID := response["commandId"].(string)
+
+		// Wait for retries and wake-up attempts (River retries + wake-up snoozing)
+		time.Sleep(1*time.Minute + 30*time.Second)
+
+		// then - verify command eventually succeeded
+		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
+		require.NoError(s.T(), err)
+
+		assert.Equal(s.T(), core.CommandStatusCompleted, commandRequest.Status)
+		assert.False(s.T(), commandRequest.ErrorMessage.Valid)
+		assert.Equal(s.T(), 1, commandRequest.WakeAttempts)
+
+		// Verify all expected calls were made
+		mockTeslaService.AssertExpectations(s.T())
+		mockIdentitySvc.AssertExpectations(s.T())
+	})
+}
+
+func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
+	s.Run("retries token refresh failures then wakes up vehicle", func() {
+		s.TearDownTest()
+
+		// given - setup mocks
+		mockTeslaService := &test.MockTeslaFleetAPIService{}
+		mockIdentitySvc := &test.MockIdentityAPIService{}
+
+		// Mock identity service to return our vehicle
+		vehicle := &mods.Vehicle{
+			Owner:   walletAddress,
+			TokenID: vehicleTokenID,
+			SyntheticDevice: mods.SyntheticDevice{
+				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
+			},
+		}
+		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
+
+		// Setup repositories and token manager
+		settings, logger, repos := s.createTestDependencies()
+		cip := new(cipher.ROT13Cipher)
+		tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+
+		// Create synthetic device for the test
+		dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
+		defer func() {
+			// Delete dependent records in device_command_requests first
+			_, err := s.pdb.DBS().Writer.Exec("DELETE FROM device_command_requests")
+			require.NoError(s.T(), err, "Failed to delete records from device_command_requests")
+
+			_, err = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+			if err != nil {
+				s.T().Logf("failed to delete synthetic device: %v", err)
+			}
+		}()
+
+		// Setup River client
+		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+		require.NoError(s.T(), err)
+
+		// Start River worker
+		err = riverClient.Start(s.ctx)
+		require.NoError(s.T(), err)
+		defer riverClient.Stop(s.ctx)
+
+		// Mock token refresh failures on first 2 attempts, then succeed
+		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(nil, fmt.Errorf("some error")).Times(4)
+
+		// Create Tesla service
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+
+		// Setup controller
+		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
+
+		// when - submit command
+		app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+		requestBody := `{"command": "frunk/open"}`
+		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req.Header.Set("Content-Type", "application/json")
+		assert.NoError(s.T(), test.GenerateJWT(req))
+
+		resp, err := app.Test(req, -1)
+		require.NoError(s.T(), err)
+		require.Equal(s.T(), 200, resp.StatusCode)
+
+		// Extract command request ID
+		var response map[string]interface{}
+		body, _ := io.ReadAll(resp.Body)
+		err = json.Unmarshal(body, &response)
+		require.NoError(s.T(), err)
+		commandID := response["commandId"].(string)
+
+		time.Sleep(30 * time.Second)
+
+		// then - verify command eventually succeeded
+		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
+		require.NoError(s.T(), err)
+
+		assert.Equal(s.T(), core.CommandStatusFailed, commandRequest.Status)
+		assert.True(s.T(), commandRequest.ErrorMessage.Valid)
+		assert.Equal(s.T(), 0, commandRequest.WakeAttempts)
+
+		// Verify all expected calls were made
+		mockTeslaService.AssertExpectations(s.T())
+		mockIdentitySvc.AssertExpectations(s.T())
+	})
 }
 
 func generateTokenWithClaims() string {

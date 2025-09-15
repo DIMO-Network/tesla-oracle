@@ -12,14 +12,14 @@ import (
 	"github.com/rs/zerolog"
 )
 
-const maxWakeUpAttempts = 5
+// We will attempt to wake up the vehicle this many times before giving up
+const maxWakeUpAttempts = 1
 
 // TeslaCommandArgs represents the arguments for a Tesla command job
 type TeslaCommandArgs struct {
 	VehicleTokenID int    `json:"vehicleTokenId"`
 	VIN            string `json:"vin"`
 	Command        string `json:"command"`
-	WakeAttempts   int    `json:"wakeAttempts,omitempty"` // Track wake-up attempts
 }
 
 // Kind returns the job kind identifier for River
@@ -68,7 +68,6 @@ func NewTeslaCommandWorker(
 // Work executes the Tesla command job
 func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaCommandArgs]) error {
 	args := job.Args
-
 	jobID := strconv.FormatInt(job.ID, 10)
 
 	logger := w.logger.With().
@@ -76,10 +75,21 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 		Int("vehicleTokenId", args.VehicleTokenID).
 		Str("vin", args.VIN).
 		Str("command", args.Command).
-		Int("wakeAttempts", args.WakeAttempts).
 		Logger()
 
-	logger.Info().Msg("Starting Tesla command execution")
+	logger.Debug().Msg("Starting Tesla command execution")
+
+	// Get current command request to check wake attempts
+	commandRequest, err := w.commandRepo.GetCommandRequest(ctx, jobID)
+	if err != nil {
+		logger.Error().Err(err).Msg("Failed to get command request")
+		// Don't update status here - let River handle retries
+
+		return fmt.Errorf("failed to get command request: %w", err)
+	}
+
+	currentWakeAttempts := commandRequest.WakeAttempts
+	logger = logger.With().Int("wakeAttempts", currentWakeAttempts).Logger()
 
 	// Get synthetic device to retrieve access token
 	sd, err := w.vehicleRepo.GetSyntheticDeviceByTokenID(ctx, int64(args.VehicleTokenID))
@@ -107,25 +117,33 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 
 	// Check if vehicle is awake
 	if vehicle.State != "online" {
-
-		if args.WakeAttempts >= maxWakeUpAttempts {
-			errMsg := fmt.Sprintf("vehicle failed to wake up after %d attempts, final state: %s", args.WakeAttempts, vehicle.State)
-			logger.Warn().Str("finalState", vehicle.State).Msg("Vehicle failed to wake up after maximum attempts")
+		if currentWakeAttempts >= maxWakeUpAttempts {
+			errMsg := fmt.Sprintf("vehicle failed to wake up after %d attempts, final state: %s", currentWakeAttempts+1, vehicle.State)
+			logger.Warn().Str("finalState", vehicle.State).Int("wakeAttempts", currentWakeAttempts).Msg("Vehicle failed to wake up after maximum attempts")
 			// This is a permanent failure - vehicle won't wake up, don't retry
 			w.updateCommandStatus(ctx, jobID, core.CommandStatusFailed, errMsg)
 			return river.JobCancel(fmt.Errorf("%s", errMsg))
 		}
 
-		// Vehicle is still not awake, increment wake attempts and snooze
-		args.WakeAttempts++
-		logger.Info().
+		// Vehicle is still not awake, increment wake attempts in database and snooze
+		nextWakeAttempts := currentWakeAttempts + 1
+		logger.Debug().
 			Str("currentState", vehicle.State).
-			Int("nextWakeAttempt", args.WakeAttempts).
-			Msg("Vehicle not awake, scheduling retry")
+			Int("currentWakeAttempts", currentWakeAttempts).
+			Int("nextWakeAttempts", nextWakeAttempts).
+			Int("maxAttempts", maxWakeUpAttempts).
+			Msg("Vehicle not awake, incrementing wake attempts and scheduling retry")
 
-		// Update the job args for the next attempt
-		job.Args = args
-		return river.JobSnooze(1 * time.Minute) // Wait 1 minute before retrying
+		// Update wake attempts in database
+		commandRequest.WakeAttempts = nextWakeAttempts
+		err = w.commandRepo.UpdateCommandRequest(ctx, commandRequest)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to update wake attempts in database")
+			return fmt.Errorf("failed to update wake attempts: %w", err)
+		}
+
+		// Snooze for 1 minute and let River retry the same job
+		return river.JobSnooze(1 * time.Minute)
 	}
 
 	logger.Info().Str("vehicleState", vehicle.State).Msg("Vehicle is awake, executing command")

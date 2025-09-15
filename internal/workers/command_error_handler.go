@@ -29,7 +29,10 @@ func NewTeslaCommandErrorHandler(logger zerolog.Logger, repositories *repository
 // HandleError handles final job failures and updates command status accordingly
 func (h *TeslaCommandErrorHandler) HandleError(ctx context.Context, job *rivertype.JobRow, err error) *river.ErrorHandlerResult {
 	// Handle final failures for Tesla command jobs
-	if job.Kind == "tesla_command" && job.State == rivertype.JobStateDiscarded {
+	// Somehow jobState not updated to discarded here, so we check both
+	//if job.Kind == "tesla_command" && job.State == rivertype.JobStateDiscarded {
+	if job.Kind == "tesla_command" && job.Attempt == job.MaxAttempts {
+
 		h.logger.Error().
 			Int64("jobId", job.ID).
 			Str("jobKind", job.Kind).

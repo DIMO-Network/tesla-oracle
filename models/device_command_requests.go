@@ -31,6 +31,7 @@ type DeviceCommandRequest struct {
 	ErrorMessage   null.String `boil:"error_message" json:"error_message,omitempty" toml:"error_message" yaml:"error_message,omitempty"`
 	CreatedAt      time.Time   `boil:"created_at" json:"created_at" toml:"created_at" yaml:"created_at"`
 	UpdatedAt      time.Time   `boil:"updated_at" json:"updated_at" toml:"updated_at" yaml:"updated_at"`
+	WakeAttempts   int         `boil:"wake_attempts" json:"wake_attempts" toml:"wake_attempts" yaml:"wake_attempts"`
 
 	R *deviceCommandRequestR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L deviceCommandRequestL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -44,6 +45,7 @@ var DeviceCommandRequestColumns = struct {
 	ErrorMessage   string
 	CreatedAt      string
 	UpdatedAt      string
+	WakeAttempts   string
 }{
 	ID:             "id",
 	VehicleTokenID: "vehicle_token_id",
@@ -52,6 +54,7 @@ var DeviceCommandRequestColumns = struct {
 	ErrorMessage:   "error_message",
 	CreatedAt:      "created_at",
 	UpdatedAt:      "updated_at",
+	WakeAttempts:   "wake_attempts",
 }
 
 var DeviceCommandRequestTableColumns = struct {
@@ -62,6 +65,7 @@ var DeviceCommandRequestTableColumns = struct {
 	ErrorMessage   string
 	CreatedAt      string
 	UpdatedAt      string
+	WakeAttempts   string
 }{
 	ID:             "device_command_requests.id",
 	VehicleTokenID: "device_command_requests.vehicle_token_id",
@@ -70,6 +74,7 @@ var DeviceCommandRequestTableColumns = struct {
 	ErrorMessage:   "device_command_requests.error_message",
 	CreatedAt:      "device_command_requests.created_at",
 	UpdatedAt:      "device_command_requests.updated_at",
+	WakeAttempts:   "device_command_requests.wake_attempts",
 }
 
 // Generated where
@@ -213,6 +218,7 @@ var DeviceCommandRequestWhere = struct {
 	ErrorMessage   whereHelpernull_String
 	CreatedAt      whereHelpertime_Time
 	UpdatedAt      whereHelpertime_Time
+	WakeAttempts   whereHelperint
 }{
 	ID:             whereHelperstring{field: "\"tesla_oracle\".\"device_command_requests\".\"id\""},
 	VehicleTokenID: whereHelperint{field: "\"tesla_oracle\".\"device_command_requests\".\"vehicle_token_id\""},
@@ -221,6 +227,7 @@ var DeviceCommandRequestWhere = struct {
 	ErrorMessage:   whereHelpernull_String{field: "\"tesla_oracle\".\"device_command_requests\".\"error_message\""},
 	CreatedAt:      whereHelpertime_Time{field: "\"tesla_oracle\".\"device_command_requests\".\"created_at\""},
 	UpdatedAt:      whereHelpertime_Time{field: "\"tesla_oracle\".\"device_command_requests\".\"updated_at\""},
+	WakeAttempts:   whereHelperint{field: "\"tesla_oracle\".\"device_command_requests\".\"wake_attempts\""},
 }
 
 // DeviceCommandRequestRels is where relationship names are stored.
@@ -260,9 +267,9 @@ func (r *deviceCommandRequestR) GetVehicleToken() *SyntheticDevice {
 type deviceCommandRequestL struct{}
 
 var (
-	deviceCommandRequestAllColumns            = []string{"id", "vehicle_token_id", "command", "status", "error_message", "created_at", "updated_at"}
+	deviceCommandRequestAllColumns            = []string{"id", "vehicle_token_id", "command", "status", "error_message", "created_at", "updated_at", "wake_attempts"}
 	deviceCommandRequestColumnsWithoutDefault = []string{"id", "vehicle_token_id", "command"}
-	deviceCommandRequestColumnsWithDefault    = []string{"status", "error_message", "created_at", "updated_at"}
+	deviceCommandRequestColumnsWithDefault    = []string{"status", "error_message", "created_at", "updated_at", "wake_attempts"}
 	deviceCommandRequestPrimaryKeyColumns     = []string{"id"}
 	deviceCommandRequestGeneratedColumns      = []string{}
 )

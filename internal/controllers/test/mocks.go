@@ -17,22 +17,18 @@ type MockIdentityAPIService struct {
 }
 
 func (m *MockIdentityAPIService) GetCachedVehicleByTokenID(tokenID int64) (*mods.Vehicle, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
 func (m *MockIdentityAPIService) FetchVehiclesByWalletAddress(address string) ([]mods.Vehicle, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
 func (m *MockIdentityAPIService) GetDeviceDefinitionByID(id string) (*mods.DeviceDefinition, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
 func (m *MockIdentityAPIService) GetCachedDeviceDefinitionByID(id string) (*mods.DeviceDefinition, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
@@ -88,7 +84,6 @@ type MockTeslaFleetAPIService struct {
 }
 
 func (m *MockTeslaFleetAPIService) RefreshToken(ctx context.Context, refreshToken string) (*core.RefreshTokenResp, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
@@ -117,7 +112,6 @@ func (m *MockTeslaFleetAPIService) GetVehicles(ctx context.Context, token string
 }
 
 func (m *MockTeslaFleetAPIService) GetVehicle(ctx context.Context, token string, vehicleID int) (*core.TeslaVehicle, error) {
-	//TODO implement me
 	panic("implement me")
 }
 
