@@ -132,7 +132,6 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 		nextWakeAttempts := currentWakeAttempts + 1
 		logger.Debug().
 			Str("currentState", vehicle.State).
-			Int("currentWakeAttempts", currentWakeAttempts).
 			Int("nextWakeAttempts", nextWakeAttempts).
 			Int("maxAttempts", maxWakeUpAttempts).
 			Msg("Vehicle not awake, incrementing wake attempts and scheduling retry")
