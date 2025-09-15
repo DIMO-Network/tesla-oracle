@@ -52,7 +52,7 @@ type TeslaCommandWorker struct {
 // NewTeslaCommandWorker creates a new Tesla command worker
 func NewTeslaCommandWorker(
 	teslaFleetAPI core.TeslaFleetAPIService,
-	tokenManger *core.TeslaTokenManager,
+	tokenManager *core.TeslaTokenManager,
 	commandRepo repository.CommandRepository,
 	vehicleRepo repository.VehicleRepository,
 	logger *zerolog.Logger,
@@ -60,7 +60,7 @@ func NewTeslaCommandWorker(
 ) *TeslaCommandWorker {
 	return &TeslaCommandWorker{
 		teslaFleetAPI:  teslaFleetAPI,
-		tokenManager:   tokenManger,
+		tokenManager:   tokenManager,
 		commandRepo:    commandRepo,
 		vehicleRepo:    vehicleRepo,
 		logger:         logger,

@@ -86,13 +86,13 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	}
 
 	// Initialize Tesla token manager
-	tokenManger := core.NewTeslaTokenManager(cip, repositories.Vehicle, teslaFleetAPIService, logger)
+	tokenManager := core.NewTeslaTokenManager(cip, repositories.Vehicle, teslaFleetAPIService, logger)
 
 	// Initialize Tesla service with all dependencies
-	teslaService := service.NewTeslaService(settings, logger, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, *tokenManger)
+	teslaService := service.NewTeslaService(settings, logger, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, *tokenManager)
 
 	// Initialize River client with workers (including Tesla command worker)
-	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, tokenManger, repositories)
+	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, tokenManager, repositories)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create river client: %w", err)
 	}
