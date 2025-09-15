@@ -276,27 +276,51 @@ type RefreshTokenResp struct {
 }
 
 func (t *teslaFleetAPIService) RefreshToken(ctx context.Context, refreshToken string) (*RefreshTokenResp, error) {
+	t.log.Debug().Msg("Starting RefreshToken method")
+
+	// Log input parameters
+	t.log.Debug().Str("refreshToken", refreshToken).Msg("Input parameters")
+
 	data := url.Values{}
 	data.Set("grant_type", "refresh_token")
 	data.Set("client_id", t.Settings.TeslaClientID)
 	data.Set("refresh_token", refreshToken)
 
-	// we have baseUrl set as whole URI
+	// Log request body
+	t.log.Debug().Str("requestBody", data.Encode()).Msg("Request body")
+
+	// Perform the request
 	resp, err := t.TokenHTTPClient.ExecuteRequest("", http.MethodPost, []byte(data.Encode()))
 	if err != nil {
+		t.log.Error().Err(err).Msg("Failed to perform request")
 		return nil, fmt.Errorf("failed to perform request: %w", err)
 	}
 
+	// Log response status code
+	t.log.Debug().Int("statusCode", resp.StatusCode).Msg("Response status code")
+
+	// Read and log response body
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		t.log.Error().Err(err).Msg("Failed to read response body")
+		return nil, fmt.Errorf("error reading response body: %w", err)
+	}
+	t.log.Debug().Str("responseBody", string(body)).Msg("Response body")
+
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("unexpected status code %d: %s", resp.StatusCode, string(body))
 	}
 
 	var refreshTokenResponse RefreshTokenResp
-	if errDecoding := json.NewDecoder(resp.Body).Decode(&refreshTokenResponse); errDecoding != nil {
+	if errDecoding := json.Unmarshal(body, &refreshTokenResponse); errDecoding != nil {
+		t.log.Error().Err(errDecoding).Msg("Failed to parse response")
 		return nil, fmt.Errorf("failed to parse response: %w", errDecoding)
 	}
 
+	// Log the parsed response
+	t.log.Debug().Interface("refreshTokenResponse", refreshTokenResponse).Msg("Parsed response")
+
+	t.log.Debug().Msg("RefreshToken method completed successfully")
 	return &refreshTokenResponse, nil
 }
 
