@@ -971,7 +971,11 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 			// Start River worker to process jobs
 			err = riverClient.Start(s.ctx)
 			require.NoError(s.T(), err)
-			defer riverClient.Stop(s.ctx)
+			defer func() {
+				if err := riverClient.Stop(s.ctx); err != nil {
+					s.T().Logf("failed to stop River client: %v", err)
+				}
+			}()
 
 			// Setup controller
 			controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
@@ -1078,7 +1082,11 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 		// Start River worker
 		err = riverClient.Start(s.ctx)
 		require.NoError(s.T(), err)
-		defer riverClient.Stop(s.ctx)
+		defer func() {
+			if err := riverClient.Stop(s.ctx); err != nil {
+				s.T().Logf("failed to stop River client: %v", err)
+			}
+		}()
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
@@ -1175,7 +1183,11 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 		// Start River worker
 		err = riverClient.Start(s.ctx)
 		require.NoError(s.T(), err)
-		defer riverClient.Stop(s.ctx)
+		defer func() {
+			if err := riverClient.Stop(s.ctx); err != nil {
+				s.T().Logf("failed to stop River client: %v", err)
+			}
+		}()
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
