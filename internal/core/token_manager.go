@@ -51,6 +51,7 @@ func (tam *TeslaTokenManager) GetOrRefreshAccessToken(ctx context.Context, sd *d
 		if !sd.RefreshExpiresAt.IsZero() && time.Now().Before(sd.RefreshExpiresAt.Time) {
 			tokens, errRefresh := tam.fleetAPISvc.RefreshToken(ctx, refreshToken)
 			if errRefresh != nil {
+				tam.logger.Warn().Err(errRefresh).Int("vehicleTokenId", sd.VehicleTokenID.Int).Msg("Failed to refresh token.")
 				return "", fmt.Errorf("%w: %s", ErrTokenRefreshFailed, errRefresh.Error())
 			}
 			expiryTime := time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second)

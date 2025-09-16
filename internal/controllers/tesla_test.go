@@ -625,6 +625,19 @@ func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 			decryptedToken: "validAccessToken",
 			expectedToken:  "validAccessToken",
 		},
+		{
+			name: "Refresh token expired",
+			syntheticDevice: &models.SyntheticDevice{
+				AccessToken:      null.StringFrom("encryptedExpiredAccessToken"),
+				RefreshToken:     null.StringFrom("encryptedExpiredRefreshToken"),
+				AccessExpiresAt:  null.TimeFrom(time.Now().Add(-1 * time.Hour)),
+				RefreshExpiresAt: null.TimeFrom(time.Now().Add(-1 * time.Hour)),
+			},
+			decryptedToken:    "expiredAccessToken",
+			refreshTokenValid: true,
+			refreshTokenError: fmt.Errorf("refresh token expired"),
+			expectedError:     core.ErrTokenExpired.Error(),
+		},
 	}
 
 	for _, tc := range testCases {
@@ -632,6 +645,7 @@ func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 			// when
 			mockCipher := new(test.MockCipher)
 			mockCipher.On("Decrypt", tc.syntheticDevice.AccessToken.String).Return(tc.decryptedToken, tc.decryptError)
+			mockCipher.On("Decrypt", tc.syntheticDevice.RefreshToken.String).Return(tc.decryptedToken, tc.decryptError)
 
 			mockTeslaService := new(test.MockTeslaFleetAPIService)
 			if tc.refreshTokenValid {
