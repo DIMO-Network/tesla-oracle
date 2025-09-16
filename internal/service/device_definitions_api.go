@@ -10,6 +10,7 @@ import (
 
 	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/rs/zerolog"
 )
 
@@ -82,7 +83,7 @@ func (d *deviceDefinitionsAPIService) DecodeVin(vin, countryCode string) (*Decod
 	}(resp.Body)
 
 	if resp.StatusCode != 200 {
-		return nil, ErrBadRequest
+		return nil, core.ErrBadRequest
 	}
 
 	body, err := io.ReadAll(resp.Body)

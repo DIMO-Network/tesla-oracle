@@ -1,4 +1,4 @@
-package service
+package core
 
 import (
 	"context"
@@ -14,8 +14,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DIMO-Network/tesla-oracle/internal/constants"
-
 	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/goccy/go-json"
@@ -28,6 +26,11 @@ type TeslaVehicle struct {
 	ID        int    `json:"id"`
 	VehicleID int    `json:"vehicle_id"`
 	VIN       string `json:"vin"`
+	State     string `json:"state,omitempty"`
+}
+
+type TrunkReqBody struct {
+	WhichTrunk string `json:"which_trunk"`
 }
 
 //go:generate mockgen -source tesla_fleet_api_service.go -destination mocks/tesla_fleet_api_service_mock.go
@@ -35,13 +38,14 @@ type TeslaFleetAPIService interface {
 	CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*TeslaAuthCodeResponse, error)
 	GetVehicles(ctx context.Context, token string) ([]TeslaVehicle, error)
 	GetVehicle(ctx context.Context, token string, vehicleID int) (*TeslaVehicle, error)
-	WakeUpVehicle(ctx context.Context, token string, vehicleID int) error
+	WakeUpVehicle(ctx context.Context, token string, vin string) (*TeslaVehicle, error)
 	VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*VehicleFleetStatus, error)
 	SubscribeForTelemetryData(ctx context.Context, token, vin string) error
 	UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error
 	GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*VehicleTelemetryStatus, error)
 	GetPartnersToken(ctx context.Context) (*PartnersAccessTokenResponse, error)
 	RefreshToken(ctx context.Context, refreshToken string) (*RefreshTokenResp, error)
+	ExecuteCommand(ctx context.Context, token, vin, command string) error
 }
 
 var teslaScopes = []string{"openid", "offline_access", "user_data", "vehicle_device_data", "vehicle_cmds", "vehicle_charging_cmds"}
@@ -368,7 +372,6 @@ func (t *teslaFleetAPIService) GetVehicle(ctx context.Context, token string, veh
 	if err != nil {
 		return nil, fmt.Errorf("could not fetch vehicles for user: %w", err)
 	}
-
 	var vehicle TeslaResponseWrapper[TeslaVehicle]
 	err = json.Unmarshal(body, &vehicle)
 	if err != nil {
@@ -378,15 +381,22 @@ func (t *teslaFleetAPIService) GetVehicle(ctx context.Context, token string, veh
 	return &vehicle.Response, nil
 }
 
-// WakeUpVehicle Calls Tesla Fleet API to wake a vehicle from sleep
-func (t *teslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vehicleID int) error {
-	url := t.FleetBase.JoinPath("api/1/vehicles", strconv.Itoa(vehicleID), "wake_up")
+// WakeUpVehicle Calls Tesla Fleet API to wake a vehicle from sleep and returns the vehicle state
+func (t *teslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vin string) (*TeslaVehicle, error) {
+	url := t.FleetBase.JoinPath("api/1/vehicles", vin, "wake_up")
 
-	if _, err := t.performRequest(ctx, url, token, http.MethodPost, nil); err != nil {
-		return fmt.Errorf("could not wake vehicle: %w", err)
+	body, err := t.performRequest(ctx, url, token, http.MethodPost, nil)
+	if err != nil {
+		return nil, fmt.Errorf("could not wake vehicle: %w", err)
 	}
 
-	return nil
+	var vehicle TeslaResponseWrapper[TeslaVehicle]
+	err = json.Unmarshal(body, &vehicle)
+	if err != nil {
+		return nil, fmt.Errorf("invalid response encountered while waking vehicle: %w", err)
+	}
+
+	return &vehicle.Response, nil
 }
 
 // TODO(elffjs): This being here is a bad sign.
@@ -413,19 +423,19 @@ func (t *teslaFleetAPIService) GetAvailableCommands(token string) (*UserDeviceAP
 		return nil, fmt.Errorf("couldn't parse JWT: %w", err)
 	}
 
-	enabled := []string{constants.TelemetrySubscribe} // TODO(elffjs): Maybe not a safe assumption.
+	enabled := []string{TelemetrySubscribe} // TODO(elffjs): Maybe not a safe assumption.
 	disabled := []string{}
 
 	if slices.Contains(claims.Scopes, teslaCommandScope) {
-		enabled = append(enabled, constants.DoorsLock, constants.DoorsUnlock, constants.TrunkOpen, constants.FrunkOpen)
+		enabled = append(enabled, CommandDoorsLock, CommandDoorsUnlock, CommandTrunkOpen, CommandFrunkOpen)
 	} else {
-		disabled = append(disabled, constants.DoorsLock, constants.DoorsUnlock, constants.TrunkOpen, constants.FrunkOpen)
+		disabled = append(disabled, CommandDoorsLock, CommandDoorsUnlock, CommandTrunkOpen, CommandFrunkOpen)
 	}
 
 	if slices.Contains(claims.Scopes, teslaCommandScope) || slices.Contains(claims.Scopes, teslaChargingScope) {
-		enabled = append(enabled, constants.ChargeLimit)
+		enabled = append(enabled, ChargeLimit)
 	} else {
-		disabled = append(disabled, constants.ChargeLimit)
+		disabled = append(disabled, ChargeLimit)
 	}
 
 	return &UserDeviceAPIIntegrationsMetadataCommands{
@@ -680,4 +690,48 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 	}
 
 	return b, nil
+}
+
+// ExecuteCommand executes a Tesla vehicle command based on the command type
+func (t *teslaFleetAPIService) ExecuteCommand(ctx context.Context, token, vin, command string) error {
+	var url *url.URL
+	var requestBody []byte
+	var err error
+
+	baseURL := t.FleetBase.JoinPath("api/1/vehicles", vin, "command")
+
+	// Map command to Tesla API endpoint and prepare request body if needed
+	switch command {
+	case CommandDoorsLock:
+		url = baseURL.JoinPath("door_lock")
+	case CommandDoorsUnlock:
+		url = baseURL.JoinPath("door_unlock")
+	case CommandChargeStart:
+		url = baseURL.JoinPath("charge_start")
+	case CommandChargeStop:
+		url = baseURL.JoinPath("charge_stop")
+	case CommandTrunkOpen:
+		url = baseURL.JoinPath("actuate_trunk")
+		trunkReq := TrunkReqBody{WhichTrunk: "rear"}
+		requestBody, err = json.Marshal(trunkReq)
+		if err != nil {
+			return fmt.Errorf("failed to marshal trunk request: %w", err)
+		}
+	case CommandFrunkOpen:
+		url = baseURL.JoinPath("actuate_trunk")
+		frunkReq := TrunkReqBody{WhichTrunk: "front"}
+		requestBody, err = json.Marshal(frunkReq)
+		if err != nil {
+			return fmt.Errorf("failed to marshal frunk request: %w", err)
+		}
+	default:
+		return fmt.Errorf("unsupported command: %s", command)
+	}
+
+	_, err = t.performRequest(ctx, url, token, http.MethodPost, requestBody)
+	if err != nil {
+		return fmt.Errorf("failed to execute command %s: %w", command, err)
+	}
+
+	return nil
 }

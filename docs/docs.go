@@ -15,6 +15,76 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/v1/tesla/commands/{vehicleTokenId}": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Submits a command to a Tesla vehicle using the provided vehicle token ID and command details.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla"
+                ],
+                "summary": "Submit command to Tesla vehicle",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Vehicle token ID that must be set in the request path to identify the vehicle",
+                        "name": "vehicleTokenId",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Command details",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.SubmitCommandRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Command submitted successfully",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.SubmitCommandResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized or vehicle does not belong to the authenticated user.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Vehicle not found or failed to get vehicle by token ID.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error, including command submission failures.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/tesla/settings": {
             "get": {
                 "security": [
@@ -814,6 +884,20 @@ const docTemplate = `{
                 }
             }
         },
+        "github_com_DIMO-Network_tesla-oracle_internal_models.SubmitCommandResponse": {
+            "type": "object",
+            "properties": {
+                "commandId": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "github_com_DIMO-Network_tesla-oracle_internal_models.TeslaVehicleRes": {
             "type": "object",
             "properties": {
@@ -985,6 +1069,14 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_service.VinStatus"
                     }
+                }
+            }
+        },
+        "internal_controllers.SubmitCommandRequest": {
+            "type": "object",
+            "properties": {
+                "command": {
+                    "type": "string"
                 }
             }
         },

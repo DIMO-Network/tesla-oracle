@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
@@ -20,93 +20,28 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// Domain errors
-var (
-	ErrBadRequest               = errors.New("bad request")
-	ErrUnauthorized             = errors.New("unauthorized access")
-	ErrDevLicenseNotAllowed     = errors.New("dev license not allowed for this operation")
-	ErrVehicleNotFound          = errors.New("vehicle not found")
-	ErrSyntheticDeviceNotFound  = errors.New("synthetic device not found")
-	ErrVehicleOwnershipMismatch = errors.New("vehicle does not belong to authenticated user")
-	ErrNoCredentials            = errors.New("no credentials found for vehicle")
-	ErrCredentialDecryption     = errors.New("failed to decrypt credentials")
-	ErrTokenExpired             = errors.New("refresh token has expired")
-	ErrTokenRefreshFailed       = errors.New("failed to refresh access token")
-	ErrFleetStatusCheck         = errors.New("error checking fleet status")
-	ErrTelemetryNotReady        = errors.New("vehicle not ready for telemetry subscription")
-	ErrTelemetryLimitReached    = errors.New("telemetry subscription limit reached")
-	ErrTelemetryConfigFailed    = errors.New("failed to update telemetry configuration")
-	ErrSubscriptionStatusUpdate = errors.New("failed to update subscription status")
-	ErrPartnersToken            = errors.New("failed to get partners token")
-	ErrTelemetryUnsubscribe     = errors.New("failed to unsubscribe from telemetry data")
-	ErrDeviceDefinitionNotFound = errors.New("device definition not found")
-	ErrCredentialStore          = errors.New("failed to store credentials")
-	ErrOAuthVehiclesFetch       = errors.New("failed to fetch vehicles from Tesla")
-	ErrOnboardingRecordCreation = errors.New("failed to create onboarding record")
-	ErrVINDecoding              = errors.New("failed to decode VIN")
-)
-
 type TeslaService struct {
 	settings     *config.Settings
 	logger       *zerolog.Logger
-	Cipher       cipher.Cipher
 	repositories *repository.Repositories
-	fleetAPISvc  TeslaFleetAPIService
+	fleetAPISvc  core.TeslaFleetAPIService
 	identitySvc  IdentityAPIService
 	ddSvc        DeviceDefinitionsAPIService
 	devicesSvc   DevicesGRPCService
+	authManager  core.TeslaTokenManager
 }
 
-func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, cipher cipher.Cipher, repositories *repository.Repositories, fleetAPISvc TeslaFleetAPIService, identitySvc IdentityAPIService, ddSvc DeviceDefinitionsAPIService, devicesService DevicesGRPCService) *TeslaService {
+func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, repositories *repository.Repositories, fleetAPISvc core.TeslaFleetAPIService, identitySvc IdentityAPIService, ddSvc DeviceDefinitionsAPIService, devicesService DevicesGRPCService, authManager core.TeslaTokenManager) *TeslaService {
 	return &TeslaService{
 		settings:     settings,
 		logger:       logger,
-		Cipher:       cipher,
 		repositories: repositories,
 		fleetAPISvc:  fleetAPISvc,
 		identitySvc:  identitySvc,
 		ddSvc:        ddSvc,
 		devicesSvc:   devicesService,
+		authManager:  authManager,
 	}
-}
-
-// GetOrRefreshAccessToken checks if the access token for the given synthetic device has expired.
-// If the access token is expired and the refresh token is still valid, it attempts to refresh the access token.
-// If the refresh token is expired, it returns an unauthorized error.
-func (ts *TeslaService) GetOrRefreshAccessToken(ctx context.Context, sd *dbmodels.SyntheticDevice) (string, error) {
-	accessToken, err := ts.Cipher.Decrypt(sd.AccessToken.String)
-	if err != nil {
-		return "", fmt.Errorf("%w: %s", ErrCredentialDecryption, err.Error())
-	}
-
-	if !sd.AccessExpiresAt.IsZero() && time.Now().After(sd.AccessExpiresAt.Time) {
-		refreshToken, err := ts.Cipher.Decrypt(sd.RefreshToken.String)
-		if err != nil {
-			return "", fmt.Errorf("%w: %s", ErrCredentialDecryption, err.Error())
-		}
-		if !sd.RefreshExpiresAt.IsZero() && time.Now().Before(sd.RefreshExpiresAt.Time) {
-			tokens, errRefresh := ts.fleetAPISvc.RefreshToken(ctx, refreshToken)
-			if errRefresh != nil {
-				return "", fmt.Errorf("%w: %s", ErrTokenRefreshFailed, errRefresh.Error())
-			}
-			expiryTime := time.Now().Add(time.Duration(tokens.ExpiresIn) * time.Second)
-			creds := repository.Credential{
-				AccessToken:   tokens.AccessToken,
-				RefreshToken:  tokens.RefreshToken,
-				AccessExpiry:  expiryTime,
-				RefreshExpiry: time.Now().AddDate(0, 3, 0),
-			}
-			errUpdate := ts.repositories.Vehicle.UpdateSyntheticDeviceCredentials(ctx, sd, &creds)
-			if errUpdate != nil {
-				ts.logger.Warn().Err(errUpdate).Msg("Failed to update credentials after refresh.")
-			}
-			return tokens.AccessToken, nil
-		} else {
-			return "", ErrTokenExpired
-		}
-	}
-
-	return accessToken, nil
 }
 
 // StopTeslaTask stops Tesla task for the given vehicle token ID.
@@ -122,13 +57,13 @@ func (ts *TeslaService) StopTeslaTask(ctx context.Context, tokenID int64) error 
 func (ts *TeslaService) SubscribeToTelemetry(ctx context.Context, tokenID int64, walletAddress common.Address) error {
 	// Validate dev license
 	if walletAddress != ts.settings.MobileAppDevLicense {
-		return ErrDevLicenseNotAllowed
+		return core.ErrDevLicenseNotAllowed
 	}
 
 	// Get synthetic device
 	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrSyntheticDeviceNotFound, err.Error())
+		return fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
 	}
 
 	// Start streaming or polling
@@ -141,7 +76,7 @@ func (ts *TeslaService) SubscribeToTelemetry(ctx context.Context, tokenID int64,
 	err = ts.repositories.Vehicle.UpdateSyntheticDeviceSubscriptionStatus(ctx, sd, "active")
 	if err != nil {
 		ts.logger.Err(err).Msg("Failed to update subscription status.")
-		return fmt.Errorf("%w: %s", ErrSubscriptionStatusUpdate, err.Error())
+		return fmt.Errorf("%w: %s", core.ErrSubscriptionStatusUpdate, err.Error())
 	}
 
 	return nil
@@ -158,7 +93,7 @@ func (ts *TeslaService) StartVehicleDataFlow(ctx context.Context, tokenID int64,
 	// Get synthetic device
 	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
 	if err != nil {
-		return fmt.Errorf("%w: %s", ErrSyntheticDeviceNotFound, err.Error())
+		return fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
 	}
 
 	// Start streaming or polling
@@ -169,18 +104,18 @@ func (ts *TeslaService) StartVehicleDataFlow(ctx context.Context, tokenID int64,
 func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID int64, walletAddress common.Address) error {
 	// Validate dev license
 	if walletAddress != ts.settings.MobileAppDevLicense {
-		return ErrDevLicenseNotAllowed
+		return core.ErrDevLicenseNotAllowed
 	}
 
 	// Get partners token
 	partnersTokenResp, err := ts.fleetAPISvc.GetPartnersToken(ctx)
 	if err != nil {
 		ts.logger.Err(err).Msg("Failed to get partners token.")
-		return fmt.Errorf("%w: %s", ErrPartnersToken, err.Error())
+		return fmt.Errorf("%w: %s", core.ErrPartnersToken, err.Error())
 	}
 
 	if partnersTokenResp.AccessToken == "" {
-		return ErrPartnersToken
+		return core.ErrPartnersToken
 	}
 
 	// Fetch vehicle
@@ -193,14 +128,14 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 	device, err := ts.repositories.Vehicle.GetSyntheticDeviceByAddress(ctx, common.HexToAddress(vehicle.SyntheticDevice.Address))
 	if err != nil {
 		ts.logger.Err(err).Msg("Failed to find synthetic device.")
-		return fmt.Errorf("%w: %s", ErrSyntheticDeviceNotFound, err.Error())
+		return fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
 	}
 
 	// Unsubscribe from telemetry data
 	err = ts.fleetAPISvc.UnSubscribeFromTelemetryData(ctx, partnersTokenResp.AccessToken, device.Vin)
 	if err != nil {
 		ts.logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
-		return fmt.Errorf("%w: %s", ErrTelemetryUnsubscribe, err.Error())
+		return fmt.Errorf("%w: %s", core.ErrTelemetryUnsubscribe, err.Error())
 	}
 
 	// Stop Tesla task
@@ -213,14 +148,14 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 	err = ts.repositories.Vehicle.UpdateSyntheticDeviceSubscriptionStatus(ctx, device, "inactive")
 	if err != nil {
 		ts.logger.Err(err).Msg("Failed to update subscription status.")
-		return fmt.Errorf("%w: %s", ErrSubscriptionStatusUpdate, err.Error())
+		return fmt.Errorf("%w: %s", core.ErrSubscriptionStatusUpdate, err.Error())
 	}
 
 	return nil
 }
 
 // ProcessAuthCodeExchange handles complete auth code exchange and validation flow
-func (ts *TeslaService) ProcessAuthCodeExchange(ctx context.Context, authCode, redirectURI string, requiredScopes []string) (*TeslaAuthCodeResponse, error) {
+func (ts *TeslaService) ProcessAuthCodeExchange(ctx context.Context, authCode, redirectURI string, requiredScopes []string) (*core.TeslaAuthCodeResponse, error) {
 	// Exchange auth code for tokens
 	teslaAuth, err := ts.fleetAPISvc.CompleteTeslaAuthCodeExchange(ctx, authCode, redirectURI)
 	if err != nil {
@@ -241,7 +176,7 @@ func (ts *TeslaService) ProcessAuthCodeExchange(ctx context.Context, authCode, r
 }
 
 // CompleteOAuthFlow handles the complete OAuth flow including vehicle list processing
-func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress common.Address, teslaAuth *TeslaAuthCodeResponse) ([]models.TeslaVehicleRes, error) {
+func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress common.Address, teslaAuth *core.TeslaAuthCodeResponse) ([]models.TeslaVehicleRes, error) {
 	// Store credentials
 	if err := ts.repositories.Credential.Store(ctx, walletAddress, &repository.Credential{
 		AccessToken:   teslaAuth.AccessToken,
@@ -249,16 +184,16 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 		AccessExpiry:  teslaAuth.Expiry,
 		RefreshExpiry: time.Now().AddDate(0, 3, 0),
 	}); err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrCredentialStore, err.Error())
+		return nil, fmt.Errorf("%w: %s", core.ErrCredentialStore, err.Error())
 	}
 
 	// Get vehicle list from Tesla
 	vehicles, err := ts.fleetAPISvc.GetVehicles(ctx, teslaAuth.AccessToken)
 	if err != nil {
-		if errors.Is(err, ErrWrongRegion) {
-			return nil, fmt.Errorf("%w: region detection failed", ErrOAuthVehiclesFetch)
+		if errors.Is(err, core.ErrWrongRegion) {
+			return nil, fmt.Errorf("%w: region detection failed", core.ErrOAuthVehiclesFetch)
 		}
-		return nil, fmt.Errorf("%w: %s", ErrOAuthVehiclesFetch, err.Error())
+		return nil, fmt.Errorf("%w: %s", core.ErrOAuthVehiclesFetch, err.Error())
 	}
 
 	// Process each vehicle
@@ -287,7 +222,7 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 				ExternalID:         null.String{String: strconv.Itoa(v.ID), Valid: true},
 			})
 			if err != nil {
-				return nil, fmt.Errorf("%w: %s", ErrOnboardingRecordCreation, err.Error())
+				return nil, fmt.Errorf("%w: %s", core.ErrOnboardingRecordCreation, err.Error())
 			}
 		}
 
@@ -318,16 +253,16 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, wal
 	// Get synthetic device
 	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrSyntheticDeviceNotFound, err.Error())
+		return nil, fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
 	}
 
 	// Check if we have access token
 	if sd == nil || sd.AccessToken.String == "" || sd.RefreshToken.String == "" {
-		return nil, ErrNoCredentials
+		return nil, core.ErrNoCredentials
 	}
 
 	// Get or refresh access token
-	accessToken, err := ts.GetOrRefreshAccessToken(ctx, sd)
+	accessToken, err := ts.authManager.GetOrRefreshAccessToken(ctx, sd)
 	if err != nil {
 		return nil, err
 	}
@@ -367,13 +302,13 @@ func (ts *TeslaService) GetVirtualKeyStatus(ctx context.Context, vin string, wal
 	// Get credentials from repository
 	teslaAuth, err := ts.repositories.Credential.Retrieve(ctx, walletAddress)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrUnauthorized, err.Error())
+		return nil, fmt.Errorf("%w: %s", core.ErrUnauthorized, err.Error())
 	}
 
 	// Check fleet status
 	fleetStatus, err := ts.fleetAPISvc.VirtualKeyConnectionStatus(ctx, teslaAuth.AccessToken, vin)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrFleetStatusCheck, err.Error())
+		return nil, fmt.Errorf("%w: %s", core.ErrFleetStatusCheck, err.Error())
 	}
 
 	fleetTelemetryCapable := IsFleetTelemetryCapable(fleetStatus)
@@ -391,17 +326,51 @@ func (ts *TeslaService) GetVirtualKeyStatus(ctx context.Context, vin string, wal
 	return &response, nil
 }
 
+// ValidateCommandRequest validates command request and returns synthetic device
+func (ts *TeslaService) ValidateCommandRequest(ctx context.Context, tokenID int64, walletAddress common.Address, command string) (*dbmodels.SyntheticDevice, error) {
+	// Validate vehicle ownership
+	err := ts.validateVehicleOwnership(tokenID, walletAddress)
+	if err != nil {
+		return nil, err
+	}
+
+	err = core.ValidateCommand(command)
+	if err != nil {
+		return nil, err
+	}
+
+	// Get synthetic device
+	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
+	}
+
+	// Check subscription status - commands only allowed for active subscriptions
+	if sd.SubscriptionStatus.String == "inactive" {
+		ts.logger.Warn().
+			Str("subscriptionStatus", sd.SubscriptionStatus.String).
+			Int("vehicleTokenId", sd.VehicleTokenID.Int).
+			Msgf("Dropping command request for vehicle due to subscription status")
+		return nil, core.ErrInactiveSubscription
+	}
+
+	// TODO: Should we check if commands are enabled? Who enables them?
+	ts.logger.Debug().Str("vin", sd.Vin).Msg("Command request validation passed")
+
+	return sd, nil
+}
+
 // fetchVehicle retrieves a vehicle from identity-api by its token ID.
 func (ts *TeslaService) fetchVehicle(vehicleTokenId int64) (*models.Vehicle, error) {
 	vehicle, err := ts.identitySvc.FetchVehicleByTokenID(vehicleTokenId)
 	if err != nil {
 		ts.logger.Err(err).Msg("Failed to fetch vehicle by token ID.")
-		return nil, fmt.Errorf("%w: %s", ErrVehicleNotFound, err.Error())
+		return nil, fmt.Errorf("%w: %s", core.ErrVehicleNotFound, err.Error())
 	}
 
 	if vehicle == nil || vehicle.Owner == "" || vehicle.SyntheticDevice.Address == "" {
 		ts.logger.Warn().Msg("Vehicle not found or owner information or synthetic device address is missing.")
-		return nil, ErrVehicleNotFound
+		return nil, core.ErrVehicleNotFound
 	}
 	return vehicle, nil
 }
@@ -448,7 +417,7 @@ func (ts *TeslaService) validateVehicleOwnership(tokenID int64, walletAddress co
 	}
 
 	if vehicle == nil || vehicle.Owner != walletAddress.Hex() {
-		return ErrVehicleOwnershipMismatch
+		return core.ErrVehicleOwnershipMismatch
 	}
 
 	return nil
@@ -458,7 +427,7 @@ func (ts *TeslaService) validateVehicleOwnership(tokenID int64, walletAddress co
 func (ts *TeslaService) decodeTeslaVIN(vin string) (*models.DeviceDefinition, error) {
 	decodeVIN, err := ts.ddSvc.DecodeVin(vin, "USA")
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrVINDecoding, err.Error())
+		return nil, fmt.Errorf("%w: %s", core.ErrVINDecoding, err.Error())
 	}
 
 	dd, err := ts.getOrWaitForDeviceDefinition(decodeVIN.DeviceDefinitionID)
@@ -482,7 +451,7 @@ func (ts *TeslaService) getOrWaitForDeviceDefinition(deviceDefinitionID string) 
 		return definition, nil
 	}
 
-	return nil, ErrDeviceDefinitionNotFound
+	return nil, core.ErrDeviceDefinitionNotFound
 }
 
 // startStreamingOrPolling determines whether to start streaming telemetry data or polling for a Tesla vehicle.
@@ -490,10 +459,10 @@ func (ts *TeslaService) getOrWaitForDeviceDefinition(deviceDefinitionID string) 
 func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodels.SyntheticDevice, tokenID int64) error {
 	// check if we have access token
 	if sd == nil || sd.AccessToken.String == "" || sd.RefreshToken.String == "" {
-		return ErrNoCredentials
+		return core.ErrNoCredentials
 	}
 
-	accessToken, err := ts.GetOrRefreshAccessToken(ctx, sd)
+	accessToken, err := ts.authManager.GetOrRefreshAccessToken(ctx, sd)
 	if err != nil {
 		return err
 	}
@@ -509,15 +478,15 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 		subStatus, err := ts.fleetAPISvc.GetTelemetrySubscriptionStatus(ctx, accessToken, sd.Vin)
 		if err != nil {
 			ts.logger.Err(err).Msg("Error checking telemetry subscription status")
-			return fmt.Errorf("%w: %s", ErrTelemetryConfigFailed, err.Error())
+			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
 		}
 		if subStatus.LimitReached {
-			return ErrTelemetryLimitReached
+			return core.ErrTelemetryLimitReached
 		}
 
 		if err := ts.fleetAPISvc.SubscribeForTelemetryData(ctx, accessToken, sd.Vin); err != nil {
 			ts.logger.Err(err).Msg("Error registering for telemetry")
-			return fmt.Errorf("%w: %s", ErrTelemetryConfigFailed, err.Error())
+			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
 		}
 
 	case ActionStartPolling:
@@ -527,7 +496,7 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 		}
 
 	default:
-		return ErrTelemetryNotReady
+		return core.ErrTelemetryNotReady
 	}
 
 	return nil
@@ -539,7 +508,7 @@ func (ts *TeslaService) decideOnAction(ctx context.Context, sd *dbmodels.Synthet
 	// get vehicle status
 	connectionStatus, err := ts.fleetAPISvc.VirtualKeyConnectionStatus(ctx, accessToken, sd.Vin)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrFleetStatusCheck, err.Error())
+		return nil, fmt.Errorf("%w: %s", core.ErrFleetStatusCheck, err.Error())
 	}
 
 	// determine action based on status

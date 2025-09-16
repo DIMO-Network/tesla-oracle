@@ -1,14 +1,15 @@
-package service
+package core
 
 import (
 	"context"
 	"fmt"
+	"github.com/rs/zerolog"
 	"net/http"
 	"net/url"
+	"os"
 	"testing"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
-	"github.com/DIMO-Network/tesla-oracle/internal/test"
 	"github.com/jarcoal/httpmock"
 	"github.com/stretchr/testify/suite"
 )
@@ -24,12 +25,15 @@ type TeslaFleetAPIServiceTestSuite struct {
 
 func (t *TeslaFleetAPIServiceTestSuite) SetupSuite() {
 	t.ctx = context.Background()
-	logger := test.Logger()
+	logger := zerolog.New(os.Stdout).With().
+		Timestamp().
+		Str("app", "tesla-oracle").
+		Logger()
 	fleetUrl, _ := url.ParseRequestURI(mockTeslaFleetBaseURL)
 	t.settings = &config.Settings{TeslaFleetURL: *fleetUrl, TeslaTelemetryCACertificate: "Ca-Cert", TeslaTelemetryPort: 443, TeslaTelemetryHostName: "tel.dimo.com"}
 
 	var err error
-	t.SUT, err = NewTeslaFleetAPIService(t.settings, logger)
+	t.SUT, err = NewTeslaFleetAPIService(t.settings, &logger)
 	t.Require().NoError(err)
 }
 

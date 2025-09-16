@@ -53,6 +53,8 @@ func (sm *ServerManager) Initialize() error {
 		sm.logger,
 		sm.services.TeslaService,
 		sm.services.VehicleOnboardService,
+		sm.services.RiverClient,
+		sm.services.Repositories.Command,
 	)
 
 	// Create gRPC server

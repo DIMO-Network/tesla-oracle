@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 )
 
@@ -27,7 +28,7 @@ const (
 )
 
 // DecisionTreeAction determines the appropriate action and message based on vehicle fleet status
-func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (*models.StatusDecision, error) {
+func DecisionTreeAction(fleetStatus *core.VehicleFleetStatus, vehicleTokenID int64) (*models.StatusDecision, error) {
 	var action string
 	var message string
 	var next *models.NextAction
@@ -84,7 +85,7 @@ func DecisionTreeAction(fleetStatus *VehicleFleetStatus, vehicleTokenID int64) (
 }
 
 // IsFleetTelemetryCapable checks if a vehicle is capable of fleet telemetry
-func IsFleetTelemetryCapable(fs *VehicleFleetStatus) bool {
+func IsFleetTelemetryCapable(fs *core.VehicleFleetStatus) bool {
 	// We used to check for the presence of a meaningful value (not ""
 	// or "unknown") for fleet_telemetry_version, but this started
 	// populating on old cars that are not capable of streaming.

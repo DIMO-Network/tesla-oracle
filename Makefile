@@ -48,7 +48,7 @@ deps:
 SOURCE_FILES = $(shell find graph internal models cmd -type f -name "*.go")
 
 
-$(PATHINSTBIN)/%: $(SOURCE_FILES) 
+$(PATHINSTBIN)/%: $(SOURCE_FILES)
 	@go build $(GO_FLAGS) -tags "$(TAGS)" -ldflags "$(LD_FLAGS) " -o $@ ./cmd/$*
 
 $(APPS): %: $(PATHINSTBIN)/%
@@ -93,11 +93,11 @@ migrate: $(APPS) ## Run database migrations.
 
 sql: ## Create a new SQL migration file. Use the NAME variable to set the name: "make sql NAME=dcn_table".
 	@goose -version
-	goose  -dir migrations -s create $(NAME) sql 
+	goose  -dir migrations -s create $(NAME) sql
 
 boil: ## Generate SQLBoiler models.
 	@sqlboiler --version
-	sqlboiler psql --no-tests --wipe
+	./target/bin/sqlboiler psql --no-tests --wipe
 
 tools-golangci-lint: ## Install golangci-lint dependency.
 	@mkdir -p $(PATHINSTBIN)

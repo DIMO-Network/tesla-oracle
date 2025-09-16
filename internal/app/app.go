@@ -9,12 +9,15 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	fiberrecover "github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/swagger"
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
 
@@ -23,6 +26,8 @@ func App(
 	logger *zerolog.Logger,
 	teslaService *service.TeslaService,
 	vehicleOnboardService service.VehicleOnboardService,
+	riverClient *river.Client[pgx.Tx],
+	commandRepo repository.CommandRepository,
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -71,7 +76,7 @@ func App(
 	app.Get("/health", healthCheck)
 
 	// Initialize controllers with services
-	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaService)
+	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaService, riverClient, commandRepo)
 	onboardCtrl := controllers.NewVehicleOnboardController(logger, vehicleOnboardService)
 
 	jwtAuth := jwtware.New(jwtware.Config{
@@ -101,6 +106,9 @@ func App(
 	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
 	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
 	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
+
+	commandsGroup := app.Group("/v1/tesla/commands", jwtAuth, walletMdw)
+	commandsGroup.Post("/:vehicleTokenId", teslaCtrl.SubmitCommand)
 
 	return app
 }

@@ -4,9 +4,11 @@
 package models
 
 var TableNames = struct {
-	Onboarding       string
-	SyntheticDevices string
+	DeviceCommandRequests string
+	Onboarding            string
+	SyntheticDevices      string
 }{
-	Onboarding:       "onboarding",
-	SyntheticDevices: "synthetic_devices",
+	DeviceCommandRequests: "device_command_requests",
+	Onboarding:            "onboarding",
+	SyntheticDevices:      "synthetic_devices",
 }
