@@ -645,8 +645,9 @@ func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 			// when
 			mockCipher := new(test.MockCipher)
 			mockCipher.On("Decrypt", tc.syntheticDevice.AccessToken.String).Return(tc.decryptedToken, tc.decryptError)
-			mockCipher.On("Decrypt", tc.syntheticDevice.RefreshToken.String).Return(tc.decryptedToken, tc.decryptError)
-
+			if tc.refreshTokenValid {
+				mockCipher.On("Decrypt", tc.syntheticDevice.RefreshToken.String).Return(tc.decryptedToken, tc.decryptError)
+			}
 			mockTeslaService := new(test.MockTeslaFleetAPIService)
 			if tc.refreshTokenValid {
 				//mockTeslaService := new(test.MockTeslaFleetAPIService)
