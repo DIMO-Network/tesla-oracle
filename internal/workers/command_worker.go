@@ -31,10 +31,6 @@ func (a TeslaCommandArgs) InsertOpts() river.InsertOpts {
 		MaxAttempts: 3,                // Allow retries for command failures
 		Queue:       "tesla_commands", // Dedicated queue
 		Priority:    1,                // Normal priority
-		UniqueOpts: river.UniqueOpts{
-			ByArgs:  true, // Prevent duplicate commands
-			ByQueue: true, // Within the same queue
-		},
 	}
 }
 
