@@ -337,12 +337,12 @@ func (ts *TeslaService) GetVirtualKeyStatus(ctx context.Context, vin string, wal
 // ValidateCommandRequest validates command request and returns synthetic device
 func (ts *TeslaService) ValidateCommandRequest(ctx context.Context, tokenID int64, walletAddress common.Address, command string) (*dbmodels.SyntheticDevice, error) {
 	// Validate vehicle ownership
-	//err := ts.validateVehicleOwnership(tokenID, walletAddress)
-	//if err != nil {
-	//	return nil, err
-	//}
+	err := ts.validateVehicleOwnership(tokenID, walletAddress)
+	if err != nil {
+		return nil, err
+	}
 
-	err := core.ValidateCommand(command)
+	err = core.ValidateCommand(command)
 	if err != nil {
 		return nil, err
 	}

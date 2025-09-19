@@ -130,12 +130,6 @@ func IsFirmwareFleetTelemetryCapable(v string) (bool, error) {
 	return year > 2025 || (year == 2025 && week >= 20), nil
 }
 
-// TeslaErrorResponse represents the structure of Tesla API error responses
-type TeslaErrorResponse struct {
-	Error            string `json:"error"`
-	ErrorDescription string `json:"error_description"`
-}
-
 // TokenRefreshDecisionTree determines the appropriate action and message based on token refresh error
 func TokenRefreshDecisionTree(refreshError error) (*models.StatusDecision, error) {
 	if refreshError == nil {
@@ -147,7 +141,7 @@ func TokenRefreshDecisionTree(refreshError error) (*models.StatusDecision, error
 	var message string
 
 	// Try to parse as JSON error response
-	var teslaError TeslaErrorResponse
+	var teslaError core.TeslaFleetAPIError
 	if err := json.Unmarshal([]byte(errorMessage), &teslaError); err == nil {
 		// Successfully parsed as JSON, handle Tesla API specific errors
 		if teslaError.Error == "login_required" {
