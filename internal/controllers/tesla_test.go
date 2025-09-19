@@ -673,6 +673,141 @@ func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 	}
 }
 
+func (s *TeslaControllerTestSuite) TestGetStatusWithTokenRefreshErrors() {
+	testCases := []struct {
+		name               string
+		refreshError       error
+		expectedStatusCode int
+		expectedAction     string
+		expectedMessage    string
+	}{
+		{
+			name:               "Tesla API consent revoked error",
+			refreshError:       fmt.Errorf(`{"error": "login_required", "error_description": "User revoked the consent."}`),
+			expectedStatusCode: fiber.StatusOK,
+			expectedAction:     service.ActionLoginRequired,
+			expectedMessage:    service.MessageConsentRevoked,
+		},
+		{
+			name:               "Tesla API invalid refresh token error",
+			refreshError:       fmt.Errorf(`{"error": "login_required", "error_description": "The refresh_token is invalid. Generate a new refresh_token by forcing user to re-authenticate."}`),
+			expectedStatusCode: fiber.StatusOK,
+			expectedAction:     service.ActionLoginRequired,
+			expectedMessage:    service.MessageInvalidRefreshToken,
+		},
+		{
+			name:               "Tesla API refresh token expired error",
+			refreshError:       fmt.Errorf(`{"error": "login_required", "error_description": "The refresh_token is expired."}`),
+			expectedStatusCode: fiber.StatusOK,
+			expectedAction:     service.ActionLoginRequired,
+			expectedMessage:    service.MessageRefreshTokenExpired,
+		},
+		{
+			name:               "Tesla API generic login required error",
+			refreshError:       fmt.Errorf(`{"error": "login_required", "error_description": "Some other authentication issue."}`),
+			expectedStatusCode: fiber.StatusOK,
+			expectedAction:     service.ActionLoginRequired,
+			expectedMessage:    service.MessageGenericLoginRequired,
+		},
+		{
+			name:               "Tesla API server error (should retry)",
+			refreshError:       fmt.Errorf(`{"error": "server_error", "error_description": "Internal server error occurred."}`),
+			expectedStatusCode: fiber.StatusOK,
+			expectedAction:     service.ActionRetryRefresh,
+			expectedMessage:    "Token refresh failed: Internal server error occurred.. Please try again.",
+		},
+		{
+			name:               "Non-JSON token expired error",
+			refreshError:       fmt.Errorf("token has expired"),
+			expectedStatusCode: fiber.StatusOK,
+			expectedAction:     service.ActionLoginRequired,
+			expectedMessage:    service.MessageGenericLoginRequired,
+		},
+		{
+			name:               "Non-JSON network error (should retry)",
+			refreshError:       fmt.Errorf("network connection timeout"),
+			expectedStatusCode: fiber.StatusOK,
+			expectedAction:     service.ActionRetryRefresh,
+			expectedMessage:    "Token refresh failed: network connection timeout. Please try again.",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			// given
+			settings, logger, repos := s.createTestDependencies()
+			mockIdentitySvc := s.setupMockIdentityService()
+
+			// Create mock Tesla service that will return refresh token error
+			mockTeslaService := new(test.MockTeslaFleetAPIService)
+			// Mock RefreshToken to return the specific error we want to test
+			// The second parameter should be the decrypted refresh token value
+			mockTeslaService.On("RefreshToken", mock.Anything, "validRefreshToken").Return(nil, tc.refreshError)
+
+			// Create a synthetic device with expired access token to trigger refresh
+			cip := new(cipher.ROT13Cipher)
+			dbVin := s.createTestSyntheticDeviceWithExpiredTokens(cip)
+			defer func() {
+				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+			}()
+
+			// Create token manager and service following the same pattern as TestGetStatus
+			tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+
+			controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
+			app := s.setupTestApp("/v1/tesla/:vehicleTokenId/status", "GET", controller.GetStatus)
+
+			// when
+			req, _ := createRequest("GET", fmt.Sprintf("/v1/tesla/%d/status", vehicleTokenID), "")
+			req.Header.Set("Authorization", "Bearer mockToken")
+
+			resp, err := app.Test(req, -1)
+
+			// then
+			s.Require().NoError(err)
+			s.Equal(tc.expectedStatusCode, resp.StatusCode)
+
+			// Parse response body to check action and message
+			var response mods.VehicleStatusResponse
+			bodyBytes, err := io.ReadAll(resp.Body)
+			s.Require().NoError(err)
+			err = json.Unmarshal(bodyBytes, &response)
+			s.Require().NoError(err)
+
+			s.Equal(tc.expectedAction, response.Action)
+			s.Equal(tc.expectedMessage, response.Message)
+
+			mockTeslaService.AssertExpectations(s.T())
+			mockIdentitySvc.AssertExpectations(s.T())
+		})
+	}
+}
+
+func (s *TeslaControllerTestSuite) createTestSyntheticDeviceWithExpiredTokens(cipher cipher.Cipher) *models.SyntheticDevice {
+	encryptedAccessToken, _ := cipher.Encrypt("expiredAccessToken")
+	encryptedRefreshToken, _ := cipher.Encrypt("validRefreshToken")
+
+	// Set access token as expired to force refresh, but refresh token still valid
+	accessExpiredTime := time.Now().Add(-1 * time.Hour).UTC()
+	refreshValidTime := time.Now().Add(1 * time.Hour).UTC()
+
+	dbVin := &models.SyntheticDevice{
+		Address:           common.HexToAddress("0xabcdef1234567890abcdef1234567890abcdef12").Bytes(),
+		Vin:               vin,
+		TokenID:           null.NewInt(456, true),
+		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
+		WalletChildNumber: 111,
+		AccessToken:       null.StringFrom(encryptedAccessToken),
+		RefreshToken:      null.StringFrom(encryptedRefreshToken),
+		AccessExpiresAt:   null.TimeFrom(accessExpiredTime),
+		RefreshExpiresAt:  null.TimeFrom(refreshValidTime),
+	}
+
+	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+	return dbVin
+}
+
 func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 	testCases := []struct {
 		name                     string

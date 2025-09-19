@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	er "errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -264,6 +265,13 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, wal
 	// Get or refresh access token
 	accessToken, err := ts.authManager.GetOrRefreshAccessToken(ctx, sd)
 	if err != nil {
+		// Check if this is a token refresh error (either token expired or refresh failed)
+		if er.Is(err, core.ErrTokenExpired) || (!er.Is(err, core.ErrCredentialDecryption) && !er.Is(err, core.ErrNoCredentials)) {
+			decision, decisionErr := TokenRefreshDecisionTree(err)
+			if decisionErr == nil {
+				return decision, nil
+			}
+		}
 		return nil, err
 	}
 
@@ -329,12 +337,12 @@ func (ts *TeslaService) GetVirtualKeyStatus(ctx context.Context, vin string, wal
 // ValidateCommandRequest validates command request and returns synthetic device
 func (ts *TeslaService) ValidateCommandRequest(ctx context.Context, tokenID int64, walletAddress common.Address, command string) (*dbmodels.SyntheticDevice, error) {
 	// Validate vehicle ownership
-	//err := ts.validateVehicleOwnership(tokenID, walletAddress)
-	//if err != nil {
-	//	return nil, err
-	//}
+	err := ts.validateVehicleOwnership(tokenID, walletAddress)
+	if err != nil {
+		return nil, err
+	}
 
-	err := core.ValidateCommand(command)
+	err = core.ValidateCommand(command)
 	if err != nil {
 		return nil, err
 	}

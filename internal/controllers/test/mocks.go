@@ -84,7 +84,11 @@ type MockTeslaFleetAPIService struct {
 }
 
 func (m *MockTeslaFleetAPIService) RefreshToken(ctx context.Context, refreshToken string) (*core.RefreshTokenResp, error) {
-	panic("implement me")
+	args := m.Called(ctx, refreshToken)
+	if args.Get(0) != nil {
+		return args.Get(0).(*core.RefreshTokenResp), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *MockTeslaFleetAPIService) GetPartnersToken(ctx context.Context) (*core.PartnersAccessTokenResponse, error) {
