@@ -1,9 +1,11 @@
 package service
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strconv"
+	"strings"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
@@ -19,12 +21,26 @@ const (
 	ActionTelemetryConfigured = "telemetry_configured"
 )
 
+// Token refresh error actions
+const (
+	ActionRetryRefresh  = "retry_refresh"
+	ActionLoginRequired = "login_required"
+)
+
 const (
 	MessageReadyToStartDataFlow    = "Vehicle ready to start data flow. Call start data flow endpoint"
 	MessageVirtualKeyNotPaired     = "Virtual key not paired. Open Tesla app deeplink for pairing."
 	MessageFirmwareTooOld          = "Firmware too old. Please update to 2025.20 or higher."
 	MessageStreamingToggleDisabled = "Streaming toggle disabled. Prompt user to enable it."
 	MessageTelemetryConfigured     = "Telemetry configuration already set, no need to call /start endpoint"
+)
+
+// Token refresh error messages
+const (
+	MessageRefreshTokenExpired  = "Refresh token has expired. User must re-authenticate through Tesla."
+	MessageConsentRevoked       = "User has revoked consent. User should add it back."
+	MessageInvalidRefreshToken  = "Refresh token is invalid. User must re-authenticate through Tesla."
+	MessageGenericLoginRequired = "Authentication required. User must log in again through Tesla."
 )
 
 // DecisionTreeAction determines the appropriate action and message based on vehicle fleet status
@@ -112,4 +128,63 @@ func IsFirmwareFleetTelemetryCapable(v string) (bool, error) {
 	}
 
 	return year > 2025 || (year == 2025 && week >= 20), nil
+}
+
+// TeslaErrorResponse represents the structure of Tesla API error responses
+type TeslaErrorResponse struct {
+	Error            string `json:"error"`
+	ErrorDescription string `json:"error_description"`
+}
+
+// TokenRefreshDecisionTree determines the appropriate action and message based on token refresh error
+func TokenRefreshDecisionTree(refreshError error) (*models.StatusDecision, error) {
+	if refreshError == nil {
+		return nil, fmt.Errorf("no error provided")
+	}
+
+	errorMessage := refreshError.Error()
+	var action string
+	var message string
+
+	// Try to parse as JSON error response
+	var teslaError TeslaErrorResponse
+	if err := json.Unmarshal([]byte(errorMessage), &teslaError); err == nil {
+		// Successfully parsed as JSON, handle Tesla API specific errors
+		if teslaError.Error == "login_required" {
+			action = ActionLoginRequired
+
+			switch {
+			case strings.Contains(teslaError.ErrorDescription, "refresh_token is expired"):
+				message = MessageRefreshTokenExpired
+			case strings.Contains(teslaError.ErrorDescription, "revoked the consent"):
+				message = MessageConsentRevoked
+			case strings.Contains(teslaError.ErrorDescription, "refresh_token is invalid"):
+				message = MessageInvalidRefreshToken
+			default:
+				message = MessageGenericLoginRequired
+			}
+
+		} else {
+			// Other Tesla API errors - retry might work
+			action = ActionRetryRefresh
+			message = fmt.Sprintf("Token refresh failed: %s. Please try again.", teslaError.ErrorDescription)
+		}
+	} else {
+		// Not a JSON error, handle as generic error
+		if strings.Contains(strings.ToLower(errorMessage), "expired") ||
+			strings.Contains(strings.ToLower(errorMessage), "invalid") ||
+			strings.Contains(strings.ToLower(errorMessage), "unauthorized") {
+			action = ActionLoginRequired
+			message = MessageGenericLoginRequired
+		} else {
+			// Generic error - might be network or temporary issue
+			action = ActionRetryRefresh
+			message = fmt.Sprintf("Token refresh failed: %s. Please try again.", errorMessage)
+		}
+	}
+
+	return &models.StatusDecision{
+		Action:  action,
+		Message: message,
+	}, nil
 }

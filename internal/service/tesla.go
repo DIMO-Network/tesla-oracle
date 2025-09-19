@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	er "errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -264,6 +265,13 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, wal
 	// Get or refresh access token
 	accessToken, err := ts.authManager.GetOrRefreshAccessToken(ctx, sd)
 	if err != nil {
+		// Check if this is a token refresh error (either token expired or refresh failed)
+		if er.Is(err, core.ErrTokenExpired) || (!er.Is(err, core.ErrCredentialDecryption) && !er.Is(err, core.ErrNoCredentials)) {
+			decision, decisionErr := TokenRefreshDecisionTree(err)
+			if decisionErr == nil {
+				return decision, nil
+			}
+		}
 		return nil, err
 	}
 
