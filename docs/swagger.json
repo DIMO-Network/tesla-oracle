@@ -6,7 +6,7 @@
         "version": "1.0"
     },
     "paths": {
-        "/v1/tesla/commands/{vehicleTokenId}": {
+        "/v1/tesla/commands/{tokenID}": {
             "post": {
                 "security": [
                     {

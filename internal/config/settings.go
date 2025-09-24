@@ -39,10 +39,11 @@ type Settings struct {
 	DevicesGRPCEndpoint          string  `yaml:"DEVICES_GRPC_ADDR"`
 	DisableDevicesGRPC           bool    `yaml:"DISABLE_DEVICES_GRPC" default:"false"`
 
-	DimoAuthURL        url.URL        `yaml:"DIMO_AUTH_URL"`
-	DimoAuthClientID   common.Address `yaml:"DIMO_AUTH_CLIENT_ID"`
-	DimoAuthDomain     url.URL        `yaml:"DIMO_AUTH_DOMAIN"`
-	DimoAuthPrivateKey string         `yaml:"DIMO_AUTH_PRIVATE_KEY"`
+	DimoAuthURL               url.URL        `yaml:"DIMO_AUTH_URL"`
+	DimoAuthClientID          common.Address `yaml:"DIMO_AUTH_CLIENT_ID"`
+	DimoAuthDomain            url.URL        `yaml:"DIMO_AUTH_DOMAIN"`
+	DimoAuthPrivateKey        string         `yaml:"DIMO_AUTH_PRIVATE_KEY"`
+	TokenExchangeJWTKeySetURL string         `yaml:"TOKEN_EXCHANGE_JWK_KEY_SET_URL"`
 
 	DeveloperAAWalletAddress common.Address `yaml:"DEVELOPER_AA_WALLET_ADDRESS"`
 	DeveloperPK              string         `yaml:"DEVELOPER_PK"`

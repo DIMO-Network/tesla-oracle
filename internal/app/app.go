@@ -2,6 +2,8 @@ package app
 
 import (
 	"errors"
+	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
+	"github.com/DIMO-Network/shared/pkg/privileges"
 	"os"
 	"strconv"
 
@@ -85,6 +87,13 @@ func App(
 
 	walletMdw := helpers.NewWalletMiddleware()
 
+	// Middleware to check for vehicle commands privilege
+	privilegeAuth := jwtware.New(jwtware.Config{
+		JWKSetURLs: []string{settings.TokenExchangeJWTKeySetURL},
+	})
+
+	privTokenWare := privilegetoken.New(privilegetoken.Config{Log: logger})
+
 	// add v1 swagger to align with other services
 	app.Get("/v1/swagger/*", swagger.HandlerDefault)
 	app.Get("/swagger/*", swagger.HandlerDefault)
@@ -107,8 +116,9 @@ func App(
 	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
 	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
 
-	commandsGroup := app.Group("/v1/tesla/commands", jwtAuth, walletMdw)
-	commandsGroup.Post("/:vehicleTokenId", teslaCtrl.SubmitCommand)
+	// todo fix - pit privTokenWare to post
+	commandsGroup := app.Group("/v1/tesla/commands", privilegeAuth)
+	commandsGroup.Post("/:tokenID", privTokenWare.OneOf(settings.VehicleNftAddress, []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
 
 	return app
 }

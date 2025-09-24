@@ -37,7 +37,6 @@ require (
 	github.com/riverqueue/river/riverdriver/riverdatabasesql v0.23.1
 	github.com/riverqueue/river/riverdriver/riverpgxv5 v0.23.1
 	github.com/rs/zerolog v1.34.0
-	github.com/segmentio/ksuid v1.0.4
 	github.com/stretchr/testify v1.10.0
 	github.com/swaggo/swag v1.16.4
 	github.com/testcontainers/testcontainers-go v0.38.0
@@ -59,6 +58,7 @@ require (
 	github.com/ethereum/c-kzg-4844/v2 v2.1.0 // indirect
 	github.com/moby/go-archive v0.1.0 // indirect
 	github.com/shirou/gopsutil/v4 v4.25.5 // indirect
+	golang.org/x/exp v0.0.0-20250506013437-ce4c2cf36ca6 // indirect
 )
 
 require (
@@ -161,7 +161,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/riverqueue/river/riverdriver v0.23.1 // indirect
 	github.com/riverqueue/river/rivershared v0.23.1 // indirect
-	github.com/riverqueue/river/rivertype v0.23.1 // indirect
+	github.com/riverqueue/river/rivertype v0.23.1
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/sethvargo/go-retry v0.3.0 // indirect
 	github.com/shirou/gopsutil v3.21.11+incompatible // indirect

@@ -20,6 +20,7 @@ env:
   TESLA_FLEET_URL: http://tesla-command-api-prod.prod.svc.cluster.local:8080
   TESLA_TELEMETRY_HOST_NAME: ingest-tesla.drivedimo.com
   TESLA_VIRTUAL_KEY_URL: https://www.tesla.com/_ak/auth.drivedimo.com
+  TOKEN_EXCHANGE_JWK_KEY_SET_URL: http://dex-roles-rights-prod.prod.svc.cluster.local:5556/keys
   REGISTRY_ADDRESS: '0xFA8beC73cebB9D88FF88a2f75E7D7312f2Fd39EC'
   VEHICLE_NFT_ADDRESS: '0xbA5738a18d83D41847dfFbDC6101d37C69c9B0cF'
   SYNTHETIC_NFT_ADDRESS: '0x4804e8D1661cd1a1e5dDdE1ff458A7f878c0aC6D'
