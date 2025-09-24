@@ -14,6 +14,8 @@ import (
 
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
+	"github.com/DIMO-Network/shared/pkg/privileges"
 	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
@@ -27,6 +29,7 @@ import (
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/ethereum/go-ethereum/common"
+	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
@@ -924,10 +927,8 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 
 			// Setup mocks using setupGenericMocks
 			config := MockConfig{
-				NeedsIdentity:        !tc.vehicleOwnerMismatch,
-				VehicleOwnerMismatch: tc.vehicleOwnerMismatch,
-				ExpectedCommandID:    tc.expectedCommandID,
-				CommandRepoError:     tc.saveCommandError,
+				ExpectedCommandID: tc.expectedCommandID,
+				CommandRepoError:  tc.saveCommandError,
 			}
 
 			mockTeslaService, _, mockIdentitySvc, mockDevicesService := s.setupGenericMocks(config)
@@ -956,7 +957,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 			require.NoError(s.T(), err)
 
 			controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
-			app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+			app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 
 			// when
 			var requestBody string
@@ -968,7 +969,12 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 
 			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
-			assert.NoError(s.T(), test.GenerateJWT(req))
+			if tc.vehicleOwnerMismatch {
+				// Generate JWT for a different wallet address
+				assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, "999"))
+			} else {
+				assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
+			}
 
 			resp, err := app.Test(req)
 
@@ -1055,17 +1061,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 
 			// given - setup mocks
 			mockTeslaService := &test.MockTeslaFleetAPIService{}
-			mockIdentitySvc := &test.MockIdentityAPIService{}
-
-			// Mock identity service to return our vehicle using the correct structure
-			vehicle := &mods.Vehicle{
-				Owner:   walletAddress,
-				TokenID: vehicleTokenID,
-				SyntheticDevice: mods.SyntheticDevice{
-					Address: "0xabcdef1234567890abcdef1234567890abcdef12",
-				},
-			}
-			mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
 
 			// Mock Tesla Fleet API calls
 			teslaVehicle := &core.TeslaVehicle{
@@ -1099,7 +1094,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 			settings, logger, repos := s.createTestDependencies()
 			cip := new(cipher.ROT13Cipher)
 			tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
-			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 			// Create synthetic device for the test
 			dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
@@ -1129,13 +1124,13 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 
 			// Setup controller
 			controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
-			app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+			app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 
 			// when - submit command
 			requestBody := fmt.Sprintf(`{"command": "%s"}`, tc.command)
 			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
-			assert.NoError(s.T(), test.GenerateJWT(req))
+			assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
 			// sleep so river job can start
 			time.Sleep(1 * time.Second)
@@ -1174,7 +1169,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 
 			// Verify mock expectations
 			mockTeslaService.AssertExpectations(s.T())
-			mockIdentitySvc.AssertExpectations(s.T())
 		})
 	}
 }
@@ -1185,17 +1179,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 
 		// given - setup mocks
 		mockTeslaService := &test.MockTeslaFleetAPIService{}
-		mockIdentitySvc := &test.MockIdentityAPIService{}
-
-		// Mock identity service to return our vehicle
-		vehicle := &mods.Vehicle{
-			Owner:   walletAddress,
-			TokenID: vehicleTokenID,
-			SyntheticDevice: mods.SyntheticDevice{
-				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
-			},
-		}
-		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
 
 		// Mock Tesla Fleet API - vehicle never wakes up (always returns "asleep")
 		sleepingVehicle := &core.TeslaVehicle{
@@ -1210,7 +1193,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 		settings, logger, repos := s.createTestDependencies()
 		cip := new(cipher.ROT13Cipher)
 		tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
-		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 		// Create synthetic device for the test
 		dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
@@ -1240,13 +1223,13 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
-		app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 
 		// when - submit command
 		requestBody := `{"command": "frunk/open"}`
 		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
-		assert.NoError(s.T(), test.GenerateJWT(req))
+		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
 		resp, err := app.Test(req)
 		assert.NoError(s.T(), err)
@@ -1281,17 +1264,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 
 		// given - setup mocks
 		mockTeslaService := &test.MockTeslaFleetAPIService{}
-		mockIdentitySvc := &test.MockIdentityAPIService{}
-
-		// Mock identity service to return our vehicle
-		vehicle := &mods.Vehicle{
-			Owner:   walletAddress,
-			TokenID: vehicleTokenID,
-			SyntheticDevice: mods.SyntheticDevice{
-				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
-			},
-		}
-		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
 
 		// Mock Tesla Fleet API - vehicle wakes up successfully
 		onlineVehicle := &core.TeslaVehicle{
@@ -1311,7 +1283,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 		settings, logger, repos := s.createTestDependencies()
 		cip := new(cipher.ROT13Cipher)
 		tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
-		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 		// Create synthetic device for the test
 		dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
@@ -1341,13 +1313,13 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
-		app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 
 		// when - submit command
 		requestBody := `{"command": "frunk/open"}`
 		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
-		assert.NoError(s.T(), test.GenerateJWT(req))
+		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
 		resp, err := app.Test(req)
 		assert.NoError(s.T(), err)
@@ -1372,7 +1344,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 
 		// Verify all expected calls were made
 		mockTeslaService.AssertExpectations(s.T())
-		mockIdentitySvc.AssertExpectations(s.T())
 	})
 }
 
@@ -1382,17 +1353,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 
 		// given - setup mocks
 		mockTeslaService := &test.MockTeslaFleetAPIService{}
-		mockIdentitySvc := &test.MockIdentityAPIService{}
-
-		// Mock identity service to return our vehicle
-		vehicle := &mods.Vehicle{
-			Owner:   walletAddress,
-			TokenID: vehicleTokenID,
-			SyntheticDevice: mods.SyntheticDevice{
-				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
-			},
-		}
-		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
 
 		// Setup repositories and token manager
 		settings, logger, repos := s.createTestDependencies()
@@ -1447,17 +1407,17 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		mockTeslaService.On("ExecuteCommand", mock.Anything, mock.AnythingOfType("string"), vin, mock.AnythingOfType("string")).Return(nil).Once()
 
 		// Create Tesla service
-		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
 
 		// when - submit command
-		app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 		requestBody := `{"command": "frunk/open"}`
 		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
-		assert.NoError(s.T(), test.GenerateJWT(req))
+		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
 		resp, err := app.Test(req, -1)
 		require.NoError(s.T(), err)
@@ -1483,7 +1443,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 
 		// Verify all expected calls were made
 		mockTeslaService.AssertExpectations(s.T())
-		mockIdentitySvc.AssertExpectations(s.T())
 	})
 }
 
@@ -1493,17 +1452,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 
 		// given - setup mocks
 		mockTeslaService := &test.MockTeslaFleetAPIService{}
-		mockIdentitySvc := &test.MockIdentityAPIService{}
-
-		// Mock identity service to return our vehicle
-		vehicle := &mods.Vehicle{
-			Owner:   walletAddress,
-			TokenID: vehicleTokenID,
-			SyntheticDevice: mods.SyntheticDevice{
-				Address: "0xabcdef1234567890abcdef1234567890abcdef12",
-			},
-		}
-		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(vehicle, nil)
 
 		// Setup repositories and token manager
 		settings, logger, repos := s.createTestDependencies()
@@ -1540,17 +1488,17 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(nil, fmt.Errorf("some error")).Times(3)
 
 		// Create Tesla service
-		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
 
 		// when - submit command
-		app := s.setupTestApp("/v1/tesla/commands/:vehicleTokenId", "POST", controller.SubmitCommand)
+		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 		requestBody := `{"command": "frunk/open"}`
 		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
-		assert.NoError(s.T(), test.GenerateJWT(req))
+		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
 		resp, err := app.Test(req, -1)
 		require.NoError(s.T(), err)
@@ -1575,7 +1523,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 
 		// Verify all expected calls were made
 		mockTeslaService.AssertExpectations(s.T())
-		mockIdentitySvc.AssertExpectations(s.T())
 	})
 }
 
@@ -1857,6 +1804,34 @@ func (s *TeslaControllerTestSuite) setupTestApp(route string, method string, han
 		app.Post(route, handler)
 	case "GET":
 		app.Get(route, handler)
+	}
+
+	return app
+}
+
+func (s *TeslaControllerTestSuite) setupPrivilegeTestApp(method string, handler func(*fiber.Ctx) error, requiredPrivileges []privileges.Privilege) *fiber.App {
+	app := fiber.New()
+
+	// Use the same privilege middleware as in app.go
+	privilegeAuth := jwtware.New(jwtware.Config{
+		KeyFunc: func(token *jwt.Token) (interface{}, error) {
+			return []byte("your-secret-key"), nil
+		},
+	})
+
+	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
+	privTokenWare := privilegetoken.New(privilegetoken.Config{Log: &logger})
+
+	// Apply JWT middleware to the group, but privilege middleware to individual routes
+	commandsGroup := app.Group("/v1/tesla/commands", privilegeAuth)
+
+	privMiddleware := privTokenWare.OneOf(common.HexToAddress("0x45fbCD3ef7361d156e8b16F5538AE36DEdf61Da8"), requiredPrivileges)
+
+	switch method {
+	case "POST":
+		commandsGroup.Post("/:tokenID", privMiddleware, handler)
+	case "GET":
+		commandsGroup.Get("/:tokenID", privMiddleware, handler)
 	}
 
 	return app

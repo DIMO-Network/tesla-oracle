@@ -255,7 +255,7 @@ paths:
       summary: Get vehicle status
       tags:
       - tesla
-  /v1/tesla/commands/{vehicleTokenId}:
+  /v1/tesla/commands/{tokenID}:
     post:
       consumes:
       - application/json

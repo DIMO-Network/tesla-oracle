@@ -316,15 +316,16 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 // @Failure     401 {object} fiber.Error "Unauthorized or vehicle does not belong to the authenticated user."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
 // @Failure     500 {object} fiber.Error "Internal server error, including command submission failures."
-// @Router      /v1/tesla/commands/{vehicleTokenId} [post]
+// @Router      /v1/tesla/commands/{tokenID} [post]
 func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Tesla/SubmitCommand").
 		Logger()
 
-	tokenID, err := extractVehicleTokenId(c)
-	if err != nil {
-		return err
+	tID := c.Params("tokenID")
+	tokenID, convErr := helpers.StringToInt64(tID)
+	if convErr != nil {
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid vehicle token ID format.")
 	}
 
 	var request SubmitCommandRequest
@@ -335,10 +336,8 @@ func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 
 	logger.Debug().Msgf("Received command submission request for vehicle %d, command: %s", tokenID, request.Command)
 
-	walletAddress := helpers.GetWallet(c)
-
 	// Validate command and get synthetic device
-	syntheticDevice, err := tc.teslaService.ValidateCommandRequest(c.Context(), tokenID, walletAddress, request.Command)
+	syntheticDevice, err := tc.teslaService.ValidateCommandRequest(c.Context(), tokenID, request.Command)
 	if err != nil {
 		logger.Err(err).Msgf("Failed to validate command %s for vehicle %d", request.Command, tokenID)
 		return tc.translateServiceError(err)

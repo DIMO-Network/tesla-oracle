@@ -15,7 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/v1/tesla/commands/{vehicleTokenId}": {
+        "/v1/tesla/commands/{tokenID}": {
             "post": {
                 "security": [
                     {
