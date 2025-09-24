@@ -98,6 +98,15 @@ func App(
 	app.Get("/v1/swagger/*", swagger.HandlerDefault)
 	app.Get("/swagger/*", swagger.HandlerDefault)
 
+	// Test endpoint to debug JWT middleware
+	testGroup := app.Group("/v1/test", privilegeAuth)
+	testGroup.Get("/jwt", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"message": "JWT validation successful",
+			"status":  "ok",
+		})
+	})
+
 	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
