@@ -126,7 +126,7 @@ func App(
 	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
 
 	// todo fix - pit privTokenWare to post
-	commandsGroup := app.Group("/v1/tesla/commands", privilegeAuth)
+	commandsGroup := app.Group("/v1/tesla/commands")
 	commandsGroup.Post("/:tokenID", privTokenWare.OneOf(settings.VehicleNftAddress, []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
 
 	return app
