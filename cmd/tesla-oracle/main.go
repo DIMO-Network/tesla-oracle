@@ -43,6 +43,7 @@ func main() {
 		logger.Fatal().Err(err).Msgf("could not parse LOG_LEVEL: %s", settings.LogLevel)
 	}
 	zerolog.SetGlobalLevel(level)
+	logger.Debug().Msgf("Log level set to %s", level)
 
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
 		handleMigration(&logger, &settings)
