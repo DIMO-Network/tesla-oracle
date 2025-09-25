@@ -15,7 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/v1/tesla/commands/{tokenID}": {
+        "/v1/commands/{tokenID}": {
             "post": {
                 "security": [
                     {
@@ -37,7 +37,7 @@ const docTemplate = `{
                     {
                         "type": "string",
                         "description": "Vehicle token ID that must be set in the request path to identify the vehicle",
-                        "name": "vehicleTokenId",
+                        "name": "tokenID",
                         "in": "path",
                         "required": true
                     },

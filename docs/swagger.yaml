@@ -211,6 +211,54 @@ info:
   title: DIMO Tesla Oracle API
   version: "1.0"
 paths:
+  /v1/commands/{tokenID}:
+    post:
+      consumes:
+      - application/json
+      description: Submits a command to a Tesla vehicle using the provided vehicle
+        token ID and command details.
+      parameters:
+      - description: Vehicle token ID that must be set in the request path to identify
+          the vehicle
+        in: path
+        name: tokenID
+        required: true
+        type: string
+      - description: Command details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.SubmitCommandRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Command submitted successfully
+          schema:
+            $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.SubmitCommandResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized or vehicle does not belong to the authenticated
+            user.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "404":
+          description: Vehicle not found or failed to get vehicle by token ID.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error, including command submission failures.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Submit command to Tesla vehicle
+      tags:
+      - tesla
   /v1/tesla/{vehicleTokenId}/status:
     get:
       consumes:
@@ -253,54 +301,6 @@ paths:
       security:
       - BearerAuth: []
       summary: Get vehicle status
-      tags:
-      - tesla
-  /v1/tesla/commands/{tokenID}:
-    post:
-      consumes:
-      - application/json
-      description: Submits a command to a Tesla vehicle using the provided vehicle
-        token ID and command details.
-      parameters:
-      - description: Vehicle token ID that must be set in the request path to identify
-          the vehicle
-        in: path
-        name: vehicleTokenId
-        required: true
-        type: string
-      - description: Command details
-        in: body
-        name: payload
-        required: true
-        schema:
-          $ref: '#/definitions/internal_controllers.SubmitCommandRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Command submitted successfully
-          schema:
-            $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.SubmitCommandResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "401":
-          description: Unauthorized or vehicle does not belong to the authenticated
-            user.
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "404":
-          description: Vehicle not found or failed to get vehicle by token ID.
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "500":
-          description: Internal server error, including command submission failures.
-          schema:
-            $ref: '#/definitions/fiber.Error'
-      security:
-      - BearerAuth: []
-      summary: Submit command to Tesla vehicle
       tags:
       - tesla
   /v1/tesla/settings:
