@@ -308,7 +308,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 // @Tags        tesla
 // @Accept      json
 // @Produce     json
-// @Param       vehicleTokenId path string true "Vehicle token ID that must be set in the request path to identify the vehicle"
+// @Param       tokenID path string true "Vehicle token ID that must be set in the request path to identify the vehicle"
 // @Param       payload body controllers.SubmitCommandRequest true "Command details"
 // @Security    BearerAuth
 // @Success     200 {object} models.SubmitCommandResponse "Command submitted successfully"
@@ -316,7 +316,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 // @Failure     401 {object} fiber.Error "Unauthorized or vehicle does not belong to the authenticated user."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
 // @Failure     500 {object} fiber.Error "Internal server error, including command submission failures."
-// @Router      /v1/tesla/commands/{tokenID} [post]
+// @Router      /v1/commands/{tokenID} [post]
 func (tc *TeslaController) SubmitCommand(c *fiber.Ctx) error {
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Tesla/SubmitCommand").
