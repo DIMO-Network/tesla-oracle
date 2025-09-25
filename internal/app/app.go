@@ -133,6 +133,11 @@ func App(
 	commandsGroup1 := app.Group("/v1/tesla/commands1", privilegeAuth)
 	commandsGroup1.Post("/:tokenID", internal.AllOf(settings.VehicleNftAddress, "tokenID", []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
 
+	commandsGroup2 := app.Group("/v1/commands2", privilegeAuth)
+	commandsGroup2.Post("/:tokenID", internal.AllOf(settings.VehicleNftAddress, "tokenID", []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
+
+	commandsGroup3 := app.Group("/v1/commands3", privilegeAuth)
+	commandsGroup3.Post("/:tokenID", privTokenWare.OneOf(settings.VehicleNftAddress, []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
 	return app
 }
 
