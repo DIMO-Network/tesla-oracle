@@ -4,7 +4,6 @@ import (
 	"errors"
 	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
 	"github.com/DIMO-Network/shared/pkg/privileges"
-	"github.com/DIMO-Network/tesla-oracle/internal"
 	"os"
 	"strconv"
 
@@ -99,15 +98,6 @@ func App(
 	app.Get("/v1/swagger/*", swagger.HandlerDefault)
 	app.Get("/swagger/*", swagger.HandlerDefault)
 
-	// Test endpoint to debug JWT middleware
-	testGroup := app.Group("/v1/test", privilegeAuth)
-	testGroup.Get("/jwt", func(c *fiber.Ctx) error {
-		return c.JSON(fiber.Map{
-			"message": "JWT validation successful",
-			"status":  "ok",
-		})
-	})
-
 	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
@@ -126,18 +116,10 @@ func App(
 	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
 	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
 
-	// todo fix - pit privTokenWare to post
-	commandsGroup := app.Group("/v1/tesla/commands", privilegeAuth)
+	// we can't use /v1/tesla prefix here because the privilegeAuth middleware requires a different JWT key set URL,
+	// if we inherit the same prefix - we also inherit the jwtAuth middleware which uses a different key set URL
+	commandsGroup := app.Group("/v1/commands", privilegeAuth)
 	commandsGroup.Post("/:tokenID", privTokenWare.OneOf(settings.VehicleNftAddress, []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
-
-	commandsGroup1 := app.Group("/v1/tesla/commands1", privilegeAuth)
-	commandsGroup1.Post("/:tokenID", internal.AllOf(settings.VehicleNftAddress, "tokenID", []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
-
-	commandsGroup2 := app.Group("/v1/commands2", privilegeAuth)
-	commandsGroup2.Post("/:tokenID", internal.AllOf(settings.VehicleNftAddress, "tokenID", []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
-
-	commandsGroup3 := app.Group("/v1/commands3", privilegeAuth)
-	commandsGroup3.Post("/:tokenID", privTokenWare.OneOf(settings.VehicleNftAddress, []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
 	return app
 }
 
