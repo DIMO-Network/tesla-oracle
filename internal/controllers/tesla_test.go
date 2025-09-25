@@ -967,7 +967,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 				requestBody = `{"command": "frunk/open"` // Invalid JSON - missing closing brace
 			}
 
-			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
 			if tc.vehicleOwnerMismatch {
 				// Generate JWT for a different wallet address
@@ -1128,7 +1128,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 
 			// when - submit command
 			requestBody := fmt.Sprintf(`{"command": "%s"}`, tc.command)
-			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
 			assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1227,7 +1227,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 
 		// when - submit command
 		requestBody := `{"command": "frunk/open"}`
-		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
 		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1317,7 +1317,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 
 		// when - submit command
 		requestBody := `{"command": "frunk/open"}`
-		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
 		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1415,7 +1415,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		// when - submit command
 		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 		requestBody := `{"command": "frunk/open"}`
-		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
 		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1496,7 +1496,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		// when - submit command
 		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 		requestBody := `{"command": "frunk/open"}`
-		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/tesla/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
 		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1823,7 +1823,7 @@ func (s *TeslaControllerTestSuite) setupPrivilegeTestApp(method string, handler 
 	privTokenWare := privilegetoken.New(privilegetoken.Config{Log: &logger})
 
 	// Apply JWT middleware to the group, but privilege middleware to individual routes
-	commandsGroup := app.Group("/v1/tesla/commands", privilegeAuth)
+	commandsGroup := app.Group("/v1/commands", privilegeAuth)
 
 	privMiddleware := privTokenWare.OneOf(common.HexToAddress("0x45fbCD3ef7361d156e8b16F5538AE36DEdf61Da8"), requiredPrivileges)
 
