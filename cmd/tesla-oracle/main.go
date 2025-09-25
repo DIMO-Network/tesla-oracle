@@ -38,6 +38,12 @@ func main() {
 		logger.Fatal().Err(err).Msg("could not load settings")
 	}
 
+	level, err := zerolog.ParseLevel(settings.LogLevel)
+	if err != nil {
+		logger.Fatal().Err(err).Msgf("could not parse LOG_LEVEL: %s", settings.LogLevel)
+	}
+	zerolog.SetGlobalLevel(level)
+
 	if len(os.Args) > 1 && os.Args[1] == "migrate" {
 		handleMigration(&logger, &settings)
 		return
