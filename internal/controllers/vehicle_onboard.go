@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofiber/fiber/v2"
@@ -76,7 +77,8 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 		})
 	}
 
-	mintingData, err := v.vehicleOnboardService.GetMintDataForVins(c.Context(), params.Vins)
+	wallet := helpers.GetWallet(c)
+	mintingData, err := v.vehicleOnboardService.GetMintDataForVins(c.Context(), params.Vins, wallet)
 	if err != nil {
 		v.logger.Error().Err(err).Msg("Failed to get mint data for VINs")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
