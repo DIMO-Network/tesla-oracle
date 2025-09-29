@@ -84,6 +84,8 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 		})
 	}
 
+	v.logger.Info().Interface("mintingData", mintingData).Msgf("Returning minting data for %d VINs", len(mintingData))
+
 	return c.JSON(MintDataForVins{
 		VinMintingData: mintingData,
 	})
@@ -111,6 +113,9 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 			"error": "Failed to parse minting data",
 		})
 	}
+
+	// let's log all params here for debugging
+	v.logger.Info().Interface("params", params).Msgf("Submitting mint data for %d VINs for wallet %s", len(params.VinMintingData), walletAddress.Hex())
 
 	statuses, err := v.vehicleOnboardService.SubmitMintDataForVins(c.Context(), params.VinMintingData, walletAddress)
 	if err != nil {
