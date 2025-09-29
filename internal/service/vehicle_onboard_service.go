@@ -125,7 +125,7 @@ func (OnboardingArgs) Kind() string {
 // VehicleOnboardService handles all business logic for vehicle onboarding operations
 type VehicleOnboardService interface {
 	VerifyVins(ctx context.Context, vinsData []VinWithTokenID, walletAddress common.Address) ([]VinStatus, error)
-	GetMintDataForVins(ctx context.Context, vins []string) ([]VinTransactionData, error)
+	GetMintDataForVins(ctx context.Context, vins []string, ownerAddress common.Address) ([]VinTransactionData, error)
 	SubmitMintDataForVins(ctx context.Context, mintingData []VinTransactionData, walletAddress common.Address) ([]VinStatus, error)
 	GetMintStatusForVins(ctx context.Context, vins []string) ([]VinStatus, error)
 	FinalizeOnboarding(ctx context.Context, vins []string, walletAddress common.Address) ([]OnboardedVehicle, error)
@@ -305,8 +305,8 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 }
 
 // GetMintDataForVins gets minting payload for signing
-func (s *vehicleOnboardService) GetMintDataForVins(ctx context.Context, vins []string) ([]VinTransactionData, error) {
-	localLog := s.logger.With().Interface("vins", vins).Str(logfields.FunctionName, "GetMintDataForVins").Logger()
+func (s *vehicleOnboardService) GetMintDataForVins(ctx context.Context, vins []string, ownerAddress common.Address) ([]VinTransactionData, error) {
+	localLog := s.logger.With().Interface("vins", vins).Str("owner_address", ownerAddress.Hex()).Str(logfields.FunctionName, "GetMintDataForVins").Logger()
 	localLog.Debug().Msg("Checking Verification Status for Vins")
 
 	validVins := make([]string, 0, len(vins))
@@ -362,7 +362,7 @@ func (s *vehicleOnboardService) GetMintDataForVins(ctx context.Context, vins []s
 				// Need to mint vehicle first
 				typedData = s.transactions.GetMintVehicleWithDDTypedData(
 					new(big.Int).SetUint64(definition.Manufacturer.TokenID),
-					common.HexToAddress("0x0000000000000000000000000000000000000000"), // Will be replaced by actual wallet
+					ownerAddress, // Use actual wallet address from JWT token
 					definition.DeviceDefinitionID,
 					[]registry.AttributeInfoPair{
 						{
