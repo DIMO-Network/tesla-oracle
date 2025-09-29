@@ -76,7 +76,8 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 		})
 	}
 
-	mintingData, err := v.vehicleOnboardService.GetMintDataForVins(c.Context(), params.Vins)
+	walletAddress := c.Locals("wallet").(common.Address)
+	mintingData, err := v.vehicleOnboardService.GetMintDataForVins(c.Context(), params.Vins, walletAddress)
 	if err != nil {
 		v.logger.Error().Err(err).Msg("Failed to get mint data for VINs")
 		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
