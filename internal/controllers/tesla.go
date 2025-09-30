@@ -315,7 +315,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 // @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
 // @Failure     500 {object} fiber.Error "Internal server error, including decryption or fleet status retrieval failures."
-// @Router      /v1/tesla/{vehicleTokenId}/status/admin [get]
+// @Router      /v1/admin/tesla/{vehicleTokenId}/status [get]
 func (tc *TeslaController) GetStatusAdmin(c *fiber.Ctx) error {
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
