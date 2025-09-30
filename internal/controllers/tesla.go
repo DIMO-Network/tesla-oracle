@@ -287,7 +287,43 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	}
 
 	walletAddress := helpers.GetWallet(c)
-	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, walletAddress)
+	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, walletAddress, true)
+	if err != nil {
+		return tc.translateServiceError(err)
+	}
+
+	// do not return internal action to client
+	resp := &models.VehicleStatusResponse{
+		Message: statusDecision.Message,
+		Next:    statusDecision.Next,
+		Action:  statusDecision.Action,
+	}
+
+	return c.JSON(resp)
+}
+
+// GetStatusAdmin godoc
+// @Summary     Get vehicle status (Admin)
+// @Description Gets information about vehicle status for admin users. Bypasses ownership validation.
+// @Tags        tesla
+// @Accept      json
+// @Produce     json
+// @Param       vehicleTokenId	path int true "Vehicle Token ID"
+// @Security    BearerAuth
+// @Success     200 {object} models.VehicleStatusResponse
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
+// @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
+// @Failure     500 {object} fiber.Error "Internal server error, including decryption or fleet status retrieval failures."
+// @Router      /v1/admin/tesla/{vehicleTokenId}/status [get]
+func (tc *TeslaController) GetStatusAdmin(c *fiber.Ctx) error {
+	tokenID, err := extractVehicleTokenId(c)
+	if err != nil {
+		return err
+	}
+
+	walletAddress := helpers.GetWallet(c)
+	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, walletAddress, false)
 	if err != nil {
 		return tc.translateServiceError(err)
 	}
