@@ -289,12 +289,20 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, wal
 		if err != nil {
 			// Log error but don't fail the request - telemetry status is optional
 			ts.logger.Warn().Err(err).Str("vin", sd.Vin).Msg("Failed to get telemetry subscription status")
-		} else if telemetryStatus != nil && telemetryStatus.Configured {
-			// Telemetry is already configured, return telemetry_configured status
-			return &models.StatusDecision{
-				Action:  ActionTelemetryConfigured,
-				Message: MessageTelemetryConfigured,
-			}, nil
+		} else {
+			// Log telemetryStatus for debugging
+			ts.logger.Debug().
+				Interface("telemetryStatus", telemetryStatus).
+				Str("vin", sd.Vin).
+				Msg("Fetched telemetry subscription status")
+
+			if telemetryStatus != nil && telemetryStatus.Configured {
+				// Telemetry is already configured, return telemetry_configured status
+				return &models.StatusDecision{
+					Action:  ActionTelemetryConfigured,
+					Message: MessageTelemetryConfigured,
+				}, nil
+			}
 		}
 	case ActionStartPolling:
 		// For polling, we consider telemetry already started be devices-api
@@ -484,6 +492,13 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 			ts.logger.Err(err).Msg("Error checking telemetry subscription status")
 			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
 		}
+
+		// Log the subscription status for debugging
+		ts.logger.Debug().
+			Interface("subStatus", subStatus).
+			Str("vin", sd.Vin).
+			Msg("Fetched telemetry subscription status")
+
 		if subStatus.LimitReached {
 			return core.ErrTelemetryLimitReached
 		}
