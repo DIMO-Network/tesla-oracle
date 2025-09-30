@@ -244,11 +244,13 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 }
 
 // GetVehicleStatus handles the complete vehicle status check workflow
-func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, walletAddress common.Address) (*models.StatusDecision, error) {
-	// Validate vehicle ownership
-	err := ts.validateVehicleOwnership(tokenID, walletAddress)
-	if err != nil {
-		return nil, err
+func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, walletAddress common.Address, validateVehicleOwnership bool) (*models.StatusDecision, error) {
+	// Validate vehicle ownership (disabled for admin)
+	if validateVehicleOwnership {
+		err := ts.validateVehicleOwnership(tokenID, walletAddress)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Get synthetic device
@@ -512,6 +514,11 @@ func (ts *TeslaService) decideOnAction(ctx context.Context, sd *dbmodels.Synthet
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", core.ErrFleetStatusCheck, err.Error())
 	}
+
+	ts.logger.Debug().
+		Interface("connectionStatus", connectionStatus).
+		Str("vin", sd.Vin).
+		Msg("Fetched virtual key connection status")
 
 	// determine action based on status
 	resp, err := DecisionTreeAction(connectionStatus, tokenID)
