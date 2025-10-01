@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"github.com/ethereum/go-ethereum/common"
 	"strconv"
 	"strings"
 	"time"
@@ -336,6 +337,36 @@ func (tc *TeslaController) GetStatusAdmin(c *fiber.Ctx) error {
 	}
 
 	return c.JSON(resp)
+}
+
+// WakeUpVehicleAdmin godoc
+// @Summary     Wake up Tesla vehicle (Admin)
+// @Description Wakes up a Tesla vehicle from sleep for admin users. Bypasses ownership validation.
+// @Tags        tesla
+// @Accept      json
+// @Produce     json
+// @Param       vehicleTokenId	path int true "Vehicle Token ID"
+// @Security    BearerAuth
+// @Success     200 {object} core.TeslaVehicle "Vehicle wake up response"
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
+// @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
+// @Failure     500 {object} fiber.Error "Internal server error, including wake up failures."
+// @Router      /v1/admin/tesla/{vehicleTokenId}/wakeup [post]
+func (tc *TeslaController) WakeUpVehicleAdmin(c *fiber.Ctx) error {
+	tokenID, err := extractVehicleTokenId(c)
+	if err != nil {
+		return err
+	}
+
+	// Admin endpoint - use zero address to bypass ownership validation
+	var zeroAddress common.Address
+	vehicle, err := tc.teslaService.WakeUpVehicle(c.Context(), tokenID, zeroAddress)
+	if err != nil {
+		return tc.translateServiceError(err)
+	}
+
+	return c.JSON(vehicle)
 }
 
 // SubmitCommand godoc

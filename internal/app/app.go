@@ -104,9 +104,10 @@ func App(
 	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
 	teslaGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
 
-	// Admin route for status without ownership validation
+	// Admin routes without ownership validation
 	adminGroup := app.Group("/v1/admin/tesla", jwtAuth, walletMdw)
 	adminGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatusAdmin)
+	adminGroup.Post("/:vehicleTokenId/wakeup", teslaCtrl.WakeUpVehicleAdmin)
 
 	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
 	vehicleGroup.Post("/verify", onboardCtrl.VerifyVins)
