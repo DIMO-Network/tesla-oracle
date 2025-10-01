@@ -372,6 +372,33 @@ func (ts *TeslaService) ValidateCommandRequest(ctx context.Context, tokenID int6
 	return sd, nil
 }
 
+// WakeUpVehicle wakes up a Tesla vehicle from sleep
+func (ts *TeslaService) WakeUpVehicle(ctx context.Context, tokenID int64) (*core.TeslaVehicle, error) {
+
+	// Get synthetic device
+	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
+	}
+
+	// Get and refresh access token
+	accessToken, err := ts.authManager.GetOrRefreshAccessToken(ctx, sd)
+	if err != nil {
+		ts.logger.Err(err).Msg("Failed to get access token for wake up")
+		return nil, fmt.Errorf("%w: %s", core.ErrNoCredentials, err.Error())
+	}
+
+	// Wake up the vehicle via Tesla Fleet API
+	vehicle, err := ts.fleetAPISvc.WakeUpVehicle(ctx, accessToken, sd.Vin)
+	if err != nil {
+		ts.logger.Err(err).Str("vin", sd.Vin).Msg("Failed to wake up vehicle")
+		return nil, fmt.Errorf("failed to wake up vehicle: %w", err)
+	}
+
+	ts.logger.Info().Str("vin", sd.Vin).Str("state", vehicle.State).Msg("Vehicle wake up completed")
+	return vehicle, nil
+}
+
 // fetchVehicle retrieves a vehicle from identity-api by its token ID.
 func (ts *TeslaService) fetchVehicle(vehicleTokenId int64) (*models.Vehicle, error) {
 	vehicle, err := ts.identitySvc.FetchVehicleByTokenID(vehicleTokenId)
