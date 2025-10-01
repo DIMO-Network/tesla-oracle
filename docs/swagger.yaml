@@ -46,6 +46,17 @@ definitions:
       message:
         type: string
     type: object
+  github_com_DIMO-Network_tesla-oracle_internal_core.TeslaVehicle:
+    properties:
+      id:
+        type: integer
+      state:
+        type: string
+      vehicle_id:
+        type: integer
+      vin:
+        type: string
+    type: object
   github_com_DIMO-Network_tesla-oracle_internal_models.DeviceDefinitionRes:
     properties:
       id:
@@ -250,6 +261,46 @@ paths:
       security:
       - BearerAuth: []
       summary: Get vehicle status (Admin)
+      tags:
+      - tesla
+  /v1/admin/tesla/{vehicleTokenId}/wakeup:
+    post:
+      consumes:
+      - application/json
+      description: Wakes up a Tesla vehicle from sleep for admin users. Bypasses ownership
+        validation.
+      parameters:
+      - description: Vehicle Token ID
+        in: path
+        name: vehicleTokenId
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Vehicle wake up response
+          schema:
+            $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_core.TeslaVehicle'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized or no credentials found for the vehicle.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "404":
+          description: Vehicle not found or failed to get vehicle by token ID.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error, including wake up failures.
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Wake up Tesla vehicle (Admin)
       tags:
       - tesla
   /v1/commands/{tokenID}:
