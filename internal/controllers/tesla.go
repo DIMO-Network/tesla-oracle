@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"github.com/ethereum/go-ethereum/common"
 	"strconv"
 	"strings"
 	"time"
@@ -360,8 +359,7 @@ func (tc *TeslaController) WakeUpVehicleAdmin(c *fiber.Ctx) error {
 	}
 
 	// Admin endpoint - use zero address to bypass ownership validation
-	var zeroAddress common.Address
-	vehicle, err := tc.teslaService.WakeUpVehicle(c.Context(), tokenID, zeroAddress)
+	vehicle, err := tc.teslaService.WakeUpVehicle(c.Context(), tokenID)
 	if err != nil {
 		return tc.translateServiceError(err)
 	}

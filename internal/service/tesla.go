@@ -373,7 +373,7 @@ func (ts *TeslaService) ValidateCommandRequest(ctx context.Context, tokenID int6
 }
 
 // WakeUpVehicle wakes up a Tesla vehicle from sleep
-func (ts *TeslaService) WakeUpVehicle(ctx context.Context, tokenID int64, walletAddress common.Address) (*core.TeslaVehicle, error) {
+func (ts *TeslaService) WakeUpVehicle(ctx context.Context, tokenID int64) (*core.TeslaVehicle, error) {
 
 	// Get synthetic device
 	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
