@@ -395,6 +395,47 @@ paths:
       summary: Get vehicle status
       tags:
       - tesla
+  /v1/tesla/reauthenticate:
+    post:
+      consumes:
+      - application/json
+      description: Completes OAuth flow and returns Tesla vehicles without creating
+        onboarding records. Use this to refresh credentials.
+      parameters:
+      - description: Authorization details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeResponseWrapper'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "424":
+          description: Failed Dependency
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Reauthenticate and get user vehicles
+      tags:
+      - tesla
   /v1/tesla/settings:
     get:
       description: Get config params for frontend app
