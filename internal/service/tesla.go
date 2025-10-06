@@ -176,15 +176,41 @@ func (ts *TeslaService) ProcessAuthCodeExchange(ctx context.Context, authCode, r
 	return teslaAuth, nil
 }
 
+// processVehicleOnboarding handles onboarding record creation for a vehicle
+func (ts *TeslaService) processVehicleOnboarding(ctx context.Context, vin string, externalID int, deviceDefinitionID string) error {
+	// Check/create onboarding record
+	record, err := ts.repositories.Onboarding.GetOnboardingByVin(ctx, vin)
+	if err != nil {
+		if !errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
+			ts.logger.Err(err).Str("vin", vin).Msg("Failed to fetch onboarding record.")
+		}
+	}
+
+	if record == nil {
+		err = ts.repositories.Onboarding.InsertOnboarding(ctx, &dbmodels.Onboarding{
+			Vin:                vin,
+			DeviceDefinitionID: null.String{String: deviceDefinitionID, Valid: true},
+			OnboardingStatus:   23, // OnboardingStatusVendorValidationSuccess
+			ExternalID:         null.String{String: strconv.Itoa(externalID), Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("%w: %s", core.ErrOnboardingRecordCreation, err.Error())
+		}
+	}
+
+	return nil
+}
+
 // CompleteOAuthFlow handles the complete OAuth flow including vehicle list processing
-func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress common.Address, teslaAuth *core.TeslaAuthCodeResponse) ([]models.TeslaVehicleRes, error) {
-	// Store credentials
-	if err := ts.repositories.Credential.Store(ctx, walletAddress, &repository.Credential{
+func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress common.Address, teslaAuth *core.TeslaAuthCodeResponse, withOnboarding bool, updateDBCredentials bool) ([]models.TeslaVehicleRes, error) {
+	// Store credentials in cache
+	creds := &repository.Credential{
 		AccessToken:   teslaAuth.AccessToken,
 		RefreshToken:  teslaAuth.RefreshToken,
 		AccessExpiry:  teslaAuth.Expiry,
 		RefreshExpiry: time.Now().AddDate(0, 3, 0),
-	}); err != nil {
+	}
+	if err := ts.repositories.Credential.Store(ctx, walletAddress, creds); err != nil {
 		return nil, fmt.Errorf("%w: %s", core.ErrCredentialStore, err.Error())
 	}
 
@@ -207,23 +233,23 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 			return nil, err
 		}
 
-		// Check/create onboarding record
-		record, err := ts.repositories.Onboarding.GetOnboardingByVin(ctx, v.VIN)
-		if err != nil {
-			if !errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
-				ts.logger.Err(err).Str("vin", v.VIN).Msg("Failed to fetch record.")
+		// Handle onboarding if requested
+		if withOnboarding {
+			if err := ts.processVehicleOnboarding(ctx, v.VIN, v.ID, ddRes.DeviceDefinitionID); err != nil {
+				return nil, err
 			}
 		}
 
-		if record == nil {
-			err = ts.repositories.Onboarding.InsertOnboarding(ctx, &dbmodels.Onboarding{
-				Vin:                v.VIN,
-				DeviceDefinitionID: null.String{String: ddRes.DeviceDefinitionID, Valid: true},
-				OnboardingStatus:   23, // OnboardingStatusVendorValidationSuccess
-				ExternalID:         null.String{String: strconv.Itoa(v.ID), Valid: true},
-			})
+		// Update DB credentials if requested (for reauthentication)
+		if updateDBCredentials {
+			sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByVin(ctx, v.VIN)
 			if err != nil {
-				return nil, fmt.Errorf("%w: %s", core.ErrOnboardingRecordCreation, err.Error())
+				ts.logger.Warn().Err(err).Str("vin", v.VIN).Msg("Failed to get synthetic device for credential update, skipping.")
+			} else if sd != nil {
+				err = ts.repositories.Vehicle.UpdateSyntheticDeviceCredentials(ctx, sd, creds)
+				if err != nil {
+					ts.logger.Warn().Err(err).Str("vin", v.VIN).Msg("Failed to update synthetic device credentials.")
+				}
 			}
 		}
 
