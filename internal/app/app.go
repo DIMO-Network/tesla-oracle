@@ -101,6 +101,7 @@ func App(
 	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
 	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
+	teslaGroup.Post("/reauthenticate", teslaCtrl.Reauthenticate)
 	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
 	teslaGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
 

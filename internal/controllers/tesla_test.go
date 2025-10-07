@@ -374,6 +374,73 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	mockDDService.AssertExpectations(s.T())
 }
 
+func (s *TeslaControllerTestSuite) TestReauthenticate() {
+	// given
+	wallet := common.HexToAddress(walletAddress)
+	settings := &config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+	vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+	onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+
+	// Create existing synthetic device to simulate re-authentication scenario
+	synthDevice := models.SyntheticDevice{
+		Address:           common.HexToAddress(walletAddress).Bytes(),
+		Vin:               vin,
+		WalletChildNumber: 1,
+		VehicleTokenID:    null.IntFrom(vehicleTokenID),
+		TokenID:           null.IntFrom(456),
+	}
+	require.NoError(s.T(), synthDevice.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+	defer func() {
+		_, _ = synthDevice.Delete(s.ctx, s.pdb.DBS().Writer)
+	}()
+
+	redisContainer, credStore, err := s.setupRedisContainer()
+	require.NoError(s.T(), err)
+	defer func() {
+		if err := redisContainer.Terminate(s.ctx); err != nil {
+			s.T().Logf("failed to terminate Redis container: %v", err)
+		}
+	}()
+
+	// when
+	mockIdentitySvc, mockTeslaService, mockDDService := s.setupListVehiclesMocks()
+	repos := &repository.Repositories{
+		Vehicle:    vehicleRepo,
+		Credential: credStore,
+		Onboarding: onboardingRepo,
+	}
+	tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, &logger)
+	teslaSvc := service.NewTeslaService(settings, &logger, repos, mockTeslaService, mockIdentitySvc, mockDDService, nil, *tokenManager)
+	controller := NewTeslaController(settings, &logger, teslaSvc, nil, nil)
+	app := s.setupTestAppForReauthenticate(controller)
+
+	// then
+	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
+	req, _ := http.NewRequest("POST", "/v1/tesla/reauthenticate", strings.NewReader(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	assert.NoError(s.T(), test.GenerateJWT(req))
+
+	resp, err := app.Test(req)
+
+	// verify
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+	s.assertListVehiclesResponse(resp)
+
+	// Verify that credentials were updated in DB
+	updatedDevice, err := vehicleRepo.GetSyntheticDeviceByVin(s.ctx, vin)
+	require.NoError(s.T(), err)
+	assert.True(s.T(), updatedDevice.AccessToken.Valid)
+	assert.NotEmpty(s.T(), updatedDevice.AccessToken.String)
+	assert.True(s.T(), updatedDevice.RefreshToken.Valid)
+	assert.NotEmpty(s.T(), updatedDevice.RefreshToken.String)
+
+	mockIdentitySvc.AssertExpectations(s.T())
+	mockTeslaService.AssertExpectations(s.T())
+	mockDDService.AssertExpectations(s.T())
+}
+
 func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	// given
 	settings, logger, repos := s.createTestDependencies()
@@ -1722,6 +1789,28 @@ func (s *TeslaControllerTestSuite) setupTestAppForListVehicles(controller *Tesla
 	})
 	app.Use(helpers.NewWalletMiddleware())
 	app.Post("/v1/tesla/vehicles", controller.ListVehicles)
+	return app
+}
+
+func (s *TeslaControllerTestSuite) setupTestAppForReauthenticate(controller *TeslaController) *fiber.App {
+	app := fiber.New()
+	app.Use(func(c *fiber.Ctx) error {
+		// Simulate JWT middleware setting the user in Locals with more comprehensive claims
+		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+			"ethereum_address": walletAddress,
+			"iss":              "tesla-oracle",
+			"sub":              "user123",
+			"aud":              "tesla-api",
+			"exp":              time.Now().Add(time.Hour).Unix(),
+			"iat":              time.Now().Unix(),
+			"scp":              []string{"read:vehicles", "write:telemetry"},
+			"ou_code":          "OU12345",
+		})
+		c.Locals("user", token)
+		return c.Next()
+	})
+	app.Use(helpers.NewWalletMiddleware())
+	app.Post("/v1/tesla/reauthenticate", controller.Reauthenticate)
 	return app
 }
 

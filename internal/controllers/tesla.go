@@ -221,13 +221,52 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	}
 
 	decodeStart := time.Now()
-	response, err := tc.teslaService.CompleteOAuthFlow(c.Context(), walletAddress, teslaAuth)
+	response, err := tc.teslaService.CompleteOAuthFlow(c.Context(), walletAddress, teslaAuth, true, false)
 	if err != nil {
 		logger.Err(err).Msg("Error completing OAuth flow.")
 		teslaCodeFailureCount.WithLabelValues("oauth_flow").Inc()
 		return tc.translateServiceError(err)
 	}
 	logger.Info().Msgf("Took %s to complete OAuth flow and decode %d Tesla VINs.", time.Since(decodeStart), len(response))
+
+	vehicleResp := &CompleteOAuthExchangeResponseWrapper{
+		Vehicles: response,
+	}
+
+	return c.JSON(vehicleResp)
+}
+
+// Reauthenticate godoc
+// @Summary     Reauthenticate and get user vehicles
+// @Description Completes OAuth flow and returns Tesla vehicles without creating onboarding records. Use this to refresh credentials.
+// @Tags        tesla
+// @Accept      json
+// @Produce     json
+// @Param       payload body controllers.CompleteOAuthExchangeRequest true "Authorization details"
+// @Security    BearerAuth
+// @Success     200 {object} controllers.CompleteOAuthExchangeResponseWrapper
+// @Failure     400 {object} fiber.Error "Bad Request"
+// @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     424 {object} fiber.Error "Failed Dependency"
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/reauthenticate [post]
+func (tc *TeslaController) Reauthenticate(c *fiber.Ctx) error {
+	walletAddress := helpers.GetWallet(c)
+	logger := helpers.GetLogger(c, tc.logger)
+
+	teslaAuth, err := tc.getAccessToken(c)
+	if err != nil {
+		return err
+	}
+
+	decodeStart := time.Now()
+	response, err := tc.teslaService.CompleteOAuthFlow(c.Context(), walletAddress, teslaAuth, false, true)
+	if err != nil {
+		logger.Err(err).Msg("Error completing OAuth flow during re-authentication.")
+		teslaCodeFailureCount.WithLabelValues("oauth_flow").Inc()
+		return tc.translateServiceError(err)
+	}
+	logger.Info().Msgf("Took %s to complete OAuth flow and decode %d Tesla VINs (reauthenticate).", time.Since(decodeStart), len(response))
 
 	vehicleResp := &CompleteOAuthExchangeResponseWrapper{
 		Vehicles: response,
