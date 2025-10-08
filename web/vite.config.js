@@ -19,7 +19,7 @@ export default defineConfig({
     server: {
         port: 4443, // Use custom port, e.g., 3000
         host: 'localtesla.dimo.org',
-        https: false,
+        https: true,
     },
     resolve: {
         alias: {

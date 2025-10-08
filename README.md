@@ -185,3 +185,27 @@ Tesla Oracle uses [River](https://riverqueue.com/) job queue system for asynchro
 
 We use https://github.com/swaggo/swag with the fiber support. 
 
+## Running locally
+
+Frontend:
+
+1. Add an entry to hosts file: `127.0.0.1 localtesla.dimo.org`. This is the host used in vite.config.js
+2. `cd web`
+3. `npm i` - used to install all deps in package.json
+4. `npm run dev` - runs the local web server - but still need local backend
+
+If you don't want to run a local backend, you can point this to the production oracle by changing the `api-service.ts` file under
+`getBaseUrl()` to `return "https://tesla-oracle.dimo.zone"`. For this to work, the backend must have localtesla.dimo.org:4443 as an 
+allowed origin for CORS in go fiber and/or in helm charts `nginx.ingress.kubernetes.io/cors-allow-origin: ... https://localtesla.dimo.org:4443`.
+
+Dev background:
+Uses lit framework: https://lit.dev/playground/ thin layer on top of native web components. 
+
+Backend:
+
+1. `cp settings.sample.yaml settings.yaml`
+2. Update settings.yaml with required secrets from production or dev
+3. Run the db migrations `make migrate`
+4. `go run ./cmd/tesla-oracle`
+5. Update the `api-service.ts` -> `getBaseUrl()` function to return the locally running url.
+6. Note that backend must be running under https using the same certs as in vite.config
