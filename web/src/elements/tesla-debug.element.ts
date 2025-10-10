@@ -38,8 +38,8 @@ interface VirtualKeyResponse {
     status: string;
 }
 
-@customElement('tesla-element')
-export class TeslaElement extends BaseOnboardingElement {
+@customElement('tesla-debug-element')
+export class TeslaDebugElement extends BaseOnboardingElement {
     static styles = css`${unsafeCSS(styles)}`;
 
     @consume({context: teslaSettingsContext, subscribe: true})
@@ -170,9 +170,14 @@ export class TeslaElement extends BaseOnboardingElement {
     render() {
         return html`
             <div>
-                <div class="mb-6">
-                    <a href="${this.getAuthUrl()}" class="button">
-                        Connect Tesla Account
+                <div>
+                    <button type="button" class="button" @click=${() => this.handleTestVirtualKeyClick()}>
+                        Test Virtual Key
+                    </button>
+                </div>
+                <div>
+                    <a href="${this.getAuthUrl()}" type="button" class="button">
+                        Onboard my Tesla
                     </a>
                 </div>
                 <div>
@@ -222,6 +227,15 @@ export class TeslaElement extends BaseOnboardingElement {
         }
 
         this.virtualKeyChecked = true;
+    }
+
+    async handleTestVirtualKeyClick() {
+        if (!this.teslaSettings?.virtualKeyUrl) {
+            return;
+        }
+
+        const openedUrl = await this.linkingService.openLink(this.teslaSettings.virtualKeyUrl);
+        console.log(openedUrl);
     }
 
     async handleVirtualKeyClick(_: string) {

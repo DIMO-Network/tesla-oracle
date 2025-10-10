@@ -21,10 +21,10 @@ export class ApiService {
     }
 
     private getBaseUrl(): string {
-        // FIXME: get the proper non-local logic
-        return ""//window.origin;
-        // this was used for testing locally from mobile app.
-        // return "https://192.168.50.215:8080"//window.origin;
+        // Using remote production backend for local UI development
+        return "https://tesla-oracle.dimo.zone";
+        // Local development alternative:
+        // return ""  // Uses window.origin (same domain)
     }
 
     private getAuthorizationHeader(auth: boolean): Record<string, string> {
