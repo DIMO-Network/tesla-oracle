@@ -138,7 +138,7 @@ ingress:
     nginx.ingress.kubernetes.io/auth-tls-secret: ingress/cf-origin-ca
     nginx.ingress.kubernetes.io/auth-tls-verify-client: 'on'
     nginx.ingress.kubernetes.io/enable-cors: 'true'
-    nginx.ingress.kubernetes.io/cors-allow-origin: https://tesla-oracle.dev.dimo.zone, https://app.dev.dimo.zone
+    nginx.ingress.kubernetes.io/cors-allow-origin: https://tesla-oracle.dev.dimo.zone, https://app.dev.dimo.zone, https://localtesla.dimo.org:4443
     external-dns.alpha.kubernetes.io/hostname: tesla-oracle.dev.dimo.zone
   hosts:
     - host: tesla-oracle.dev.dimo.zone
