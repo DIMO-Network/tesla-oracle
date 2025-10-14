@@ -3,9 +3,9 @@
 .button {
     @apply
     block
-        m-3
-        w-full
-        text-center
+    m-3
+    w-full
+    text-center
     items-center
     rounded-md
     bg-red-600
@@ -29,4 +29,37 @@
     text-white
     hover:bg-red-400
     focus-visible:outline-red-400
+}
+
+.button-primary {
+    @apply
+    block
+    w-full
+    text-center
+    items-center
+    rounded-2xl
+    bg-[#A0F4E8]
+    px-6
+    py-4
+    text-base
+    font-semibold
+    text-black
+    shadow-none
+    no-underline
+    hover:bg-[#8de3d3]
+    hover:cursor-pointer
+    focus-visible:outline-2
+    focus-visible:outline-offset-2
+    focus-visible:outline-[#A0F4E8]
+    transition-colors
+    duration-200
+}
+
+.button-primary.disabled {
+    @apply
+    bg-gray-600
+    text-gray-400
+    hover:bg-gray-600
+    focus-visible:outline-gray-600
+    cursor-not-allowed
 }
