@@ -123,44 +123,45 @@ export class TeslaElement extends BaseOnboardingElement {
     private renderVehicles(vehicles: TeslaVehicle[] | readonly[]) {
         return html`
             ${repeat(vehicles, (_, i) => i, (item) => html`
-                <div class="grid-cols-12">
-                    <div class="col-span-9">
-                        ${item.vin}: ${item.definition.model} ${item.definition.year}
+                <div class="mb-6">
+                    <div class="text-white mb-4">
+                        <div class="text-sm text-gray-400 mb-1">VIN: ${item.vin}</div>
+                        <div class="text-lg font-medium">${item.definition.model} ${item.definition.year}</div>
                     </div>
-                    <div class="col-span-3">
+                    <div class="space-y-3">
                         <button
-                                class="button ${this.virtualKeyChecked ? 'disabled' : ''}"
+                                class="button-primary ${this.virtualKeyChecked ? 'disabled' : ''}"
                                 @click=${() => this.handleOnboardClick(item.vin)}
                                 ?disabled=${this.virtualKeyChecked}
                         >Start onboarding</button>
-                    </div>
-                    <div class="col-span-3">
-                        ${this.checkVirtualKeyTask.render({
-                            initial: () => html``,
-                            pending: () => html`<span>Checking virtual key status</span>`,
-                            complete: () => html`<span>Virtual key status: ${(this.checkVirtualKeyTask.value as VirtualKeyResponse).status}</span>`,
-                            error: () => html`<span>Failed to check virtual key status</span>`,
-                        })}
-                    </div>
-                    <div class="col-span-3" ?hidden=${!this.virtualKeyChecked || !this.canSetupVirtualKey}>
-                        <button 
-                                class="button ${!this.canSetupVirtualKey ? 'disabled' : ''}" 
-                                @click=${() => this.handleVirtualKeyClick(item.vin)}
-                                
-                        >Setup Virtual Key</button>
-                    </div>
-                    <div class="col-span-3" ?hidden=${!this.linkOpened}>
+
+                        <div class="text-gray-400 text-sm">
+                            ${this.checkVirtualKeyTask.render({
+                                initial: () => html``,
+                                pending: () => html`<span>Checking virtual key status...</span>`,
+                                complete: () => html`<span>Virtual key status: ${(this.checkVirtualKeyTask.value as VirtualKeyResponse).status}</span>`,
+                                error: () => html`<span>Failed to check virtual key status</span>`,
+                            })}
+                        </div>
+
                         <button
-                                class="button"
+                                class="button-primary ${!this.canSetupVirtualKey ? 'disabled' : ''}"
+                                @click=${() => this.handleVirtualKeyClick(item.vin)}
+                                ?hidden=${!this.virtualKeyChecked || !this.canSetupVirtualKey}
+                        >Setup Virtual Key</button>
+
+                        <button
+                                class="button-primary"
                                 @click=${() => this.handleOnboardClick(item.vin)}
                                 ?disabled=${this.virtualKeyChecked}
+                                ?hidden=${!this.linkOpened}
                         >Verify virtual key setup</button>
-                    </div>
-                    <div class="col-span-3" ?hidden=${!this.virtualKeyChecked}>
+
                         <button
-                                class="button ${!this.virtualKeyChecked || this.canSetupVirtualKey ? 'disabled' : ''}"
+                                class="button-primary ${!this.virtualKeyChecked || this.canSetupVirtualKey ? 'disabled' : ''}"
                                 @click=${() => this.handleContinueClick(item.vin)}
                                 ?disabled=${!this.virtualKeyChecked || this.canSetupVirtualKey}
+                                ?hidden=${!this.virtualKeyChecked}
                         >Continue</button>
                     </div>
                 </div>`)}
@@ -170,15 +171,15 @@ export class TeslaElement extends BaseOnboardingElement {
     render() {
         return html`
             <div>
-                <div class="mb-6">
-                    <a href="${this.getAuthUrl()}" class="button">
+                <div class="mb-8">
+                    <a href="${this.getAuthUrl()}" class="button-primary no-underline">
                         Connect Tesla Account
                     </a>
                 </div>
                 <div>
                     ${this.loadVehiclesTask.render({
                         pending: () => html`
-                            <div class="font-mono">Loading vehicles...</div>`,
+                            <div class="text-gray-400 text-center py-4">Loading vehicles...</div>`,
                         complete: (vehicles) => this.renderVehicles(vehicles),
                     })}
                 </div>

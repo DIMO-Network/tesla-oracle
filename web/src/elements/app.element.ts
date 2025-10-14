@@ -23,8 +23,9 @@ export class AppElement extends LitElement {
 
     render() {
         return html`
-            <div>
-                <h2 class="text-2xl font-semibold mb-6">Connect your Tesla</h2>
+            <div class="text-white">
+                <h1 class="text-4xl font-bold mb-4 leading-tight">Let's get your Tesla connected</h1>
+                <p class="text-gray-400 text-base mb-8">Connect your Tesla from the app, no DIMO device required.</p>
                 <tesla-element></tesla-element>
             </div>
         `;
