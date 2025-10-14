@@ -32,6 +32,7 @@ export default defineConfig({
             // Define multiple entry points
             input: {
                 main: resolve(__dirname, 'index.html'),
+                debug: resolve(__dirname, 'debug.html'),
             }
         }
     },
