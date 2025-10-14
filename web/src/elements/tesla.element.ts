@@ -172,7 +172,7 @@ export class TeslaElement extends BaseOnboardingElement {
         return html`
             <div>
                 <div class="mb-8">
-                    <a href="${this.getAuthUrl()}" class="button-primary no-underline">
+                    <a href="${this.getAuthUrl()}" class="button-primary">
                         Connect Tesla Account
                     </a>
                 </div>

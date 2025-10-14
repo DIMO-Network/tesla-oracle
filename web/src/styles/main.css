@@ -45,6 +45,7 @@
     font-semibold
     text-black
     shadow-none
+    no-underline
     hover:bg-[#8de3d3]
     hover:cursor-pointer
     focus-visible:outline-2
