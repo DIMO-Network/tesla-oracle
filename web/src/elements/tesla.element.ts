@@ -120,6 +120,20 @@ export class TeslaElement extends BaseOnboardingElement {
         autoRun: false
     });
 
+    private renderConnectPrompt() {
+        return html`
+            <div>
+                <h1 class="text-4xl font-bold mb-4 leading-tight text-white">Let's get your Tesla connected</h1>
+                <p class="text-gray-400 text-base mb-8">Connect your Tesla from the app, no DIMO device required.</p>
+                <div class="mb-8">
+                    <a href="${this.getAuthUrl()}" class="button-primary">
+                        Connect Tesla Account
+                    </a>
+                </div>
+            </div>
+        `;
+    }
+
     private renderVehicles(vehicles: TeslaVehicle[] | readonly[]) {
         return html`
             ${repeat(vehicles, (_, i) => i, (item) => html`
@@ -172,34 +186,14 @@ export class TeslaElement extends BaseOnboardingElement {
         return html`
             <div>
                 ${this.loadVehiclesTask.render({
-                    initial: () => html`
-                        <div>
-                            <h1 class="text-4xl font-bold mb-4 leading-tight text-white">Let's get your Tesla connected</h1>
-                            <p class="text-gray-400 text-base mb-8">Connect your Tesla from the app, no DIMO device required.</p>
-                            <div class="mb-8">
-                                <a href="${this.getAuthUrl()}" class="button-primary">
-                                    Connect Tesla Account
-                                </a>
-                            </div>
-                        </div>
-                    `,
+                    initial: () => this.renderConnectPrompt(),
                     pending: () => html`
                         <div class="text-gray-400 text-center py-4">Loading vehicles...</div>
                     `,
                     complete: (vehicles) => {
                         // If no vehicles, show the connect button
                         if (!vehicles || vehicles.length === 0) {
-                            return html`
-                                <div>
-                                    <h1 class="text-4xl font-bold mb-4 leading-tight text-white">Let's get your Tesla connected</h1>
-                                    <p class="text-gray-400 text-base mb-8">Connect your Tesla from the app, no DIMO device required.</p>
-                                    <div class="mb-8">
-                                        <a href="${this.getAuthUrl()}" class="button-primary">
-                                            Connect Tesla Account
-                                        </a>
-                                    </div>
-                                </div>
-                            `;
+                            return this.renderConnectPrompt();
                         }
                         return this.renderVehicles(vehicles);
                     },
