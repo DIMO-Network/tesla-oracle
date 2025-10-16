@@ -52,7 +52,7 @@ export class MessageService {
         if (!!window.ReactNativeWebView) {
             console.log('[MessageService Debug] Sending via ReactNativeWebView.postMessage');
             // @ts-ignore
-hm            // React Native WebView uses its own postMessage API that doesn't require targetOrigin
+            // React Native WebView uses its own postMessage API that doesn't require targetOrigin
             window.ReactNativeWebView.postMessage(JSON.stringify(message));
             console.log('[MessageService Debug] ReactNativeWebView.postMessage called');
         } else if (window.top && window.top !== window) {
