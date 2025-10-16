@@ -68,20 +68,10 @@ export class TeslaElement extends BaseOnboardingElement {
     @state()
     private linkOpened = false;
 
-    @state()
-    private debugLogs: string[] = [];
-
     connectedCallback() {
         super.connectedCallback();
 
         this.linkingService.useMessageService(this.messageService);
-    }
-
-    private addDebugLog(message: string, data?: any) {
-        const timestamp = new Date().toISOString().split('T')[1].substring(0, 12);
-        const logLine = data ? `${timestamp} ${message} ${JSON.stringify(data)}` : `${timestamp} ${message}`;
-        this.debugLogs = [...this.debugLogs, logLine].slice(-10); // Keep last 10 logs
-        console.log(`[Debug] ${message}`, data || '');
     }
 
     private loadVehiclesTask = new Task(this, {
@@ -115,35 +105,40 @@ export class TeslaElement extends BaseOnboardingElement {
 
     private onboardVehicleTask = new Task(this, {
         task: async ([vin, vehicleTokenId]: [string, number?], {}) => {
-            this.addDebugLog('1. Task started', {vin});
+            console.log('[Tesla Oracle Debug] onboardVehicleTask started', {vin, vehicleTokenId});
 
             if (!vin) {
-                this.addDebugLog('ERROR: No VIN');
+                console.error('[Tesla Oracle Debug] No VIN provided');
                 return;
             }
 
-            this.addDebugLog('2. Calling onboardVINs...');
+            console.log('[Tesla Oracle Debug] Calling onboardVINs...');
             const finalized = await this.onboardVINs([{vin, vehicleTokenId}]);
 
-            this.addDebugLog('3. Got response', {ok: !!finalized, vehCount: finalized?.vehicles?.length});
+            console.log('[Tesla Oracle Debug] onboardVINs response:', JSON.stringify(finalized, null, 2));
 
             if (!finalized) {
-                this.addDebugLog('ERROR: Finalized null');
+                console.error('[Tesla Oracle Debug] Finalized is null/undefined');
                 return;
             }
 
             if (!(finalized?.vehicles?.length > 0)) {
-                this.addDebugLog('ERROR: No vehicles');
+                console.error('[Tesla Oracle Debug] No vehicles in finalized response', {
+                    hasVehicles: !!finalized?.vehicles,
+                    vehiclesLength: finalized?.vehicles?.length
+                });
                 return;
             }
 
-            const hasRN = !!(window as any).ReactNativeWebView;
-            const vTokenId = finalized.vehicles[0].vehicleTokenId;
-            this.addDebugLog('4. Sending msg', {RN: hasRN, vTokenId});
+            console.log('[Tesla Oracle Debug] SUCCESS! Sending onboarded message', {
+                type: 'onboarded',
+                data: finalized.vehicles,
+                ReactNativeWebView: !!(window as any).ReactNativeWebView
+            });
 
             this.messageService.sendMessage({type: 'onboarded', data: finalized.vehicles})
 
-            this.addDebugLog('5. ✅ Message sent!');
+            console.log('[Tesla Oracle Debug] Message sent successfully!');
         },
         autoRun: false
     });
@@ -226,13 +221,6 @@ export class TeslaElement extends BaseOnboardingElement {
                         return this.renderVehicles(vehicles);
                     },
                 })}
-
-                ${this.debugLogs.length > 0 ? html`
-                    <div style="position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.95); color: #00ff00; padding: 8px; font-size: 10px; font-family: monospace; max-height: 150px; overflow-y: auto; border-top: 2px solid #00ff00; z-index: 9999;">
-                        <div style="font-weight: bold; margin-bottom: 4px; color: #ffff00;">DEBUG:</div>
-                        ${this.debugLogs.map(log => html`<div style="margin: 2px 0;">${log}</div>`)}
-                    </div>
-                ` : ''}
             </div>
         `;
     }
