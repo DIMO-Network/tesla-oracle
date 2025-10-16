@@ -677,7 +677,7 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 		}
 	}
 
-	localLog.Info().Int("totalVehicles", len(vehicles)).Interface("vehicles", vehicles).Msg("[Finalize Debug] Finalization complete, returning vehicles")
+	localLog.Debug().Int("totalVehicles", len(vehicles)).Interface("vehicles", vehicles).Msg("[Finalize Debug] Finalization complete, returning vehicles")
 	return vehicles, nil
 }
 
