@@ -52,11 +52,14 @@ export class MessageService {
         if (!!window.ReactNativeWebView) {
             console.log('[MessageService Debug] Sending via ReactNativeWebView.postMessage');
             // @ts-ignore
+hm            // React Native WebView uses its own postMessage API that doesn't require targetOrigin
             window.ReactNativeWebView.postMessage(JSON.stringify(message));
             console.log('[MessageService Debug] ReactNativeWebView.postMessage called');
-        } else if (window.top) {
+        } else if (window.top && window.top !== window) {
             console.log('[MessageService Debug] Sending via window.top.postMessage');
-            window.top.postMessage(JSON.stringify(message));
+            // For browser iframe communication, specify targetOrigin for security
+            // Use '*' since we don't know the parent origin, but this should only be used in development
+            window.top.postMessage(JSON.stringify(message), '*');
             console.log('[MessageService Debug] window.top.postMessage called');
         } else {
             console.error('[MessageService Debug] No available postMessage target!');
