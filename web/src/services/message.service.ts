@@ -42,12 +42,24 @@ export class MessageService {
     }
 
     public sendMessage(message: Message) {
+        console.log('[MessageService Debug] sendMessage called', {
+            messageType: message.type,
+            hasReactNativeWebView: !!(window as any).ReactNativeWebView,
+            hasWindowTop: !!window.top
+        });
+
         // @ts-ignore
         if (!!window.ReactNativeWebView) {
+            console.log('[MessageService Debug] Sending via ReactNativeWebView.postMessage');
             // @ts-ignore
             window.ReactNativeWebView.postMessage(JSON.stringify(message));
+            console.log('[MessageService Debug] ReactNativeWebView.postMessage called');
         } else if (window.top) {
+            console.log('[MessageService Debug] Sending via window.top.postMessage');
             window.top.postMessage(JSON.stringify(message));
+            console.log('[MessageService Debug] window.top.postMessage called');
+        } else {
+            console.error('[MessageService Debug] No available postMessage target!');
         }
     }
 

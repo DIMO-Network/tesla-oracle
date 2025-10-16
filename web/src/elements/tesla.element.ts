@@ -105,17 +105,40 @@ export class TeslaElement extends BaseOnboardingElement {
 
     private onboardVehicleTask = new Task(this, {
         task: async ([vin, vehicleTokenId]: [string, number?], {}) => {
+            console.log('[Tesla Oracle Debug] onboardVehicleTask started', {vin, vehicleTokenId});
+
             if (!vin) {
+                console.error('[Tesla Oracle Debug] No VIN provided');
                 return;
             }
 
+            console.log('[Tesla Oracle Debug] Calling onboardVINs...');
             const finalized = await this.onboardVINs([{vin, vehicleTokenId}]);
 
-            if (!finalized || !(finalized?.vehicles.length > 0)) {
+            console.log('[Tesla Oracle Debug] onboardVINs response:', JSON.stringify(finalized, null, 2));
+
+            if (!finalized) {
+                console.error('[Tesla Oracle Debug] Finalized is null/undefined');
                 return;
             }
 
+            if (!(finalized?.vehicles?.length > 0)) {
+                console.error('[Tesla Oracle Debug] No vehicles in finalized response', {
+                    hasVehicles: !!finalized?.vehicles,
+                    vehiclesLength: finalized?.vehicles?.length
+                });
+                return;
+            }
+
+            console.log('[Tesla Oracle Debug] SUCCESS! Sending onboarded message', {
+                type: 'onboarded',
+                data: finalized.vehicles,
+                ReactNativeWebView: !!(window as any).ReactNativeWebView
+            });
+
             this.messageService.sendMessage({type: 'onboarded', data: finalized.vehicles})
+
+            console.log('[Tesla Oracle Debug] Message sent successfully!');
         },
         autoRun: false
     });
