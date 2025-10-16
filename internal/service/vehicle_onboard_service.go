@@ -604,13 +604,18 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 	vehicles := make([]OnboardedVehicle, 0, len(validVins))
 
 	if len(validVins) > 0 {
+		localLog.Debug().Msg("[Finalize Debug] Fetching onboarding records from database")
 		dbVins, err := s.repositories.Onboarding.GetOnboardingsByVins(ctx, validVins)
 		if err != nil {
 			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
+				localLog.Error().Err(err).Msg("[Finalize Debug] Could not find vehicles in onboarding table")
 				return nil, errors.New("could not find vehicles")
 			}
+			localLog.Error().Err(err).Msg("[Finalize Debug] Failed to load vehicles from database")
 			return nil, fmt.Errorf("failed to load vehicles from database: %w", err)
 		}
+
+		localLog.Debug().Int("count", len(dbVins)).Msg("[Finalize Debug] Found onboarding records")
 
 		indexedVins := make(map[string]*dbmodels.Onboarding)
 		for _, vin := range dbVins {
@@ -620,6 +625,7 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 		for _, vin := range validVins {
 			dbVin, ok := indexedVins[vin]
 			if !ok {
+				localLog.Warn().Str("vin", vin).Msg("[Finalize Debug] VIN not found in indexed vins, skipping")
 				continue
 			}
 
@@ -671,6 +677,7 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 		}
 	}
 
+	localLog.Debug().Int("totalVehicles", len(vehicles)).Interface("vehicles", vehicles).Msg("[Finalize Debug] Finalization complete, returning vehicles")
 	return vehicles, nil
 }
 
