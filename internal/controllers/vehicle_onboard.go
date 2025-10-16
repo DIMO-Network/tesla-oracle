@@ -180,7 +180,6 @@ func (v *VehicleController) GetMintStatusForVins(c *fiber.Ctx) error {
 // @Router      /v1/vehicle/finalize [post]
 func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 	walletAddress := c.Locals("wallet").(common.Address)
-	v.logger.Debug().Str("wallet", walletAddress.Hex()).Msg("[Finalize Debug] FinalizeOnboarding called")
 
 	params := new(VinsGetParams)
 	if err := c.BodyParser(params); err != nil {
@@ -197,13 +196,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 		})
 	}
 
-	v.logger.Debug().Interface("vehicles", vehicles).Int("count", len(vehicles)).Msg("[Finalize Debug] Successfully finalized onboarding")
-
-	response := FinalizeResponse{
+	return c.JSON(FinalizeResponse{
 		Vehicles: vehicles,
-	}
-
-	v.logger.Debug().Interface("response", response).Msg("[Finalize Debug] Returning finalize response")
-
-	return c.JSON(response)
+	})
 }
