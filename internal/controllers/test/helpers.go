@@ -4,12 +4,15 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DIMO-Network/cloudevent"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/token-exchange-api/pkg/tokenclaims"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
@@ -164,27 +167,35 @@ func BuildRequest(method, url, body string) *http.Request {
 }
 
 func GenerateJWT(req *http.Request) error {
-	return GenerateJWTWithPrivileges(req, []int{1}, "")
+	return GenerateJWTWithPermissions(req, []string{tokenclaims.PermissionGetNonLocationHistory}, "")
 }
 
-func GenerateJWTWithPrivileges(req *http.Request, privilegeIds []int, tokenID string) error {
+func GenerateJWTWithPermissions(req *http.Request, permissions []string, tokenID string) error {
 	// Define the secret key for signing the token
 	secretKey := []byte("your-secret-key")
 
-	// Create claims with the new JWT structure
-	claims := jwt.MapClaims{
-		"aud":              []string{"dimo.zone"},
-		"contract_address": "0x45fbCD3ef7361d156e8b16F5538AE36DEdf61Da8",
-		"exp":              time.Now().Add(time.Hour).Unix(),
-		"iat":              time.Now().Unix(),
-		"iss":              "https://auth-roles-rights.dimo.zone",
-		"privilege_ids":    privilegeIds,
-		"sub":              "0x1D18E561cF294829a7AB7a052a64F282fe245aFb",
+	bigTokenId := new(big.Int) // Add token_id if provided
+	if tokenID != "" {
+		var ok bool
+		bigTokenId, ok = big.NewInt(0).SetString(tokenID, 10)
+		if !ok {
+			return errors.New("failed to parse token ID")
+		}
 	}
 
-	// Add token_id if provided
-	if tokenID != "" {
-		claims["token_id"] = tokenID
+	// Create claims with the new JWT structure
+	claims := jwt.MapClaims{
+		"aud":         []string{"dimo.zone"},
+		"exp":         time.Now().Add(time.Hour).Unix(),
+		"iat":         time.Now().Unix(),
+		"iss":         "https://auth-roles-rights.dimo.zone",
+		"permissions": permissions,
+		"sub":         "0x1D18E561cF294829a7AB7a052a64F282fe245aFb",
+		"asset": cloudevent.ERC721DID{
+			ContractAddress: common.HexToAddress("0x45fbCD3ef7361d156e8b16F5538AE36DEdf61Da8"),
+			TokenID:         bigTokenId,
+			ChainID:         0,
+		},
 	}
 
 	// Create a new token with the claims

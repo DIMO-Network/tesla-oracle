@@ -2,17 +2,17 @@ package app
 
 import (
 	"errors"
-	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
-	"github.com/DIMO-Network/shared/pkg/privileges"
 	"os"
 	"strconv"
 
+	"github.com/DIMO-Network/server-garage/pkg/fibercommon/jwtmiddleware"
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	"github.com/DIMO-Network/token-exchange-api/pkg/tokenclaims"
 	jwtware "github.com/gofiber/contrib/jwt"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -81,9 +81,7 @@ func App(
 	teslaCtrl := controllers.NewTeslaController(settings, logger, teslaService, riverClient, commandRepo)
 	onboardCtrl := controllers.NewVehicleOnboardController(logger, vehicleOnboardService)
 
-	jwtAuth := jwtware.New(jwtware.Config{
-		JWKSetURLs: []string{settings.JwtKeySetURL},
-	})
+	jwtAuth := jwtmiddleware.NewJWTMiddleware(settings.JwtKeySetURL)
 
 	walletMdw := helpers.NewWalletMiddleware()
 
@@ -91,8 +89,6 @@ func App(
 	privilegeAuth := jwtware.New(jwtware.Config{
 		JWKSetURLs: []string{settings.TokenExchangeJWTKeySetURL},
 	})
-
-	privTokenWare := privilegetoken.New(privilegetoken.Config{Log: logger})
 
 	// add v1 swagger to align with other services
 	app.Get("/v1/swagger/*", swagger.HandlerDefault)
@@ -125,7 +121,7 @@ func App(
 	// we can't use /v1/tesla prefix here because the privilegeAuth middleware requires a different JWT key set URL,
 	// if we inherit the same prefix - we also inherit the jwtAuth middleware which uses a different key set URL
 	commandsGroup := app.Group("/v1/commands", privilegeAuth)
-	commandsGroup.Post("/:tokenID", privTokenWare.OneOf(settings.VehicleNftAddress, []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)
+	commandsGroup.Post("/:tokenID", jwtmiddleware.OneOfPermissions(settings.VehicleNftAddress, "tokenID", []string{tokenclaims.PermissionExecuteCommands}), teslaCtrl.SubmitCommand)
 	return app
 }
 
