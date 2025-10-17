@@ -12,10 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DIMO-Network/server-garage/pkg/fibercommon/jwtmiddleware"
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
-	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
-	"github.com/DIMO-Network/shared/pkg/privileges"
 	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
@@ -26,6 +25,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	work "github.com/DIMO-Network/tesla-oracle/internal/workers"
 	"github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/DIMO-Network/token-exchange-api/pkg/tokenclaims"
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/ethereum/go-ethereum/common"
@@ -1024,7 +1024,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 			require.NoError(s.T(), err)
 
 			controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
-			app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
+			app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []string{tokenclaims.PermissionExecuteCommands})
 
 			// when
 			var requestBody string
@@ -1038,9 +1038,9 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 			req.Header.Set("Content-Type", "application/json")
 			if tc.vehicleOwnerMismatch {
 				// Generate JWT for a different wallet address
-				assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, "999"))
+				assert.NoError(s.T(), test.GenerateJWTWithPermissions(req, []string{tokenclaims.PermissionExecuteCommands}, "999"))
 			} else {
-				assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
+				assert.NoError(s.T(), test.GenerateJWTWithPermissions(req, []string{tokenclaims.PermissionExecuteCommands}, fmt.Sprintf("%d", vehicleTokenID)))
 			}
 
 			resp, err := app.Test(req)
@@ -1191,13 +1191,13 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 
 			// Setup controller
 			controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
-			app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
+			app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []string{tokenclaims.PermissionExecuteCommands})
 
 			// when - submit command
 			requestBody := fmt.Sprintf(`{"command": "%s"}`, tc.command)
 			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
-			assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
+			assert.NoError(s.T(), test.GenerateJWTWithPermissions(req, []string{tokenclaims.PermissionExecuteCommands}, fmt.Sprintf("%d", vehicleTokenID)))
 
 			// sleep so river job can start
 			time.Sleep(1 * time.Second)
@@ -1290,13 +1290,13 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
-		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
+		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []string{tokenclaims.PermissionExecuteCommands})
 
 		// when - submit command
 		requestBody := `{"command": "frunk/open"}`
 		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
-		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
+		assert.NoError(s.T(), test.GenerateJWTWithPermissions(req, []string{tokenclaims.PermissionExecuteCommands}, fmt.Sprintf("%d", vehicleTokenID)))
 
 		resp, err := app.Test(req)
 		assert.NoError(s.T(), err)
@@ -1380,13 +1380,13 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
-		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
+		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []string{tokenclaims.PermissionExecuteCommands})
 
 		// when - submit command
 		requestBody := `{"command": "frunk/open"}`
 		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
-		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
+		assert.NoError(s.T(), test.GenerateJWTWithPermissions(req, []string{tokenclaims.PermissionExecuteCommands}, fmt.Sprintf("%d", vehicleTokenID)))
 
 		resp, err := app.Test(req)
 		assert.NoError(s.T(), err)
@@ -1480,11 +1480,11 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
 
 		// when - submit command
-		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
+		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []string{tokenclaims.PermissionExecuteCommands})
 		requestBody := `{"command": "frunk/open"}`
 		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
-		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
+		assert.NoError(s.T(), test.GenerateJWTWithPermissions(req, []string{tokenclaims.PermissionExecuteCommands}, fmt.Sprintf("%d", vehicleTokenID)))
 
 		resp, err := app.Test(req, -1)
 		require.NoError(s.T(), err)
@@ -1561,11 +1561,11 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
 
 		// when - submit command
-		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
+		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []string{tokenclaims.PermissionExecuteCommands})
 		requestBody := `{"command": "frunk/open"}`
 		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
-		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
+		assert.NoError(s.T(), test.GenerateJWTWithPermissions(req, []string{tokenclaims.PermissionExecuteCommands}, fmt.Sprintf("%d", vehicleTokenID)))
 
 		resp, err := app.Test(req, -1)
 		require.NoError(s.T(), err)
@@ -1898,23 +1898,21 @@ func (s *TeslaControllerTestSuite) setupTestApp(route string, method string, han
 	return app
 }
 
-func (s *TeslaControllerTestSuite) setupPrivilegeTestApp(method string, handler func(*fiber.Ctx) error, requiredPrivileges []privileges.Privilege) *fiber.App {
+func (s *TeslaControllerTestSuite) setupPrivilegeTestApp(method string, handler func(*fiber.Ctx) error, requiredPermissions []string) *fiber.App {
 	app := fiber.New()
 
 	// Use the same privilege middleware as in app.go
 	privilegeAuth := jwtware.New(jwtware.Config{
+		Claims: &tokenclaims.Token{},
 		KeyFunc: func(token *jwt.Token) (interface{}, error) {
 			return []byte("your-secret-key"), nil
 		},
 	})
 
-	logger := zerolog.New(os.Stdout).With().Timestamp().Logger()
-	privTokenWare := privilegetoken.New(privilegetoken.Config{Log: &logger})
-
 	// Apply JWT middleware to the group, but privilege middleware to individual routes
 	commandsGroup := app.Group("/v1/commands", privilegeAuth)
 
-	privMiddleware := privTokenWare.OneOf(common.HexToAddress("0x45fbCD3ef7361d156e8b16F5538AE36DEdf61Da8"), requiredPrivileges)
+	privMiddleware := jwtmiddleware.OneOfPermissions(common.HexToAddress("0x45fbCD3ef7361d156e8b16F5538AE36DEdf61Da8"), "tokenID", requiredPermissions)
 
 	switch method {
 	case "POST":
