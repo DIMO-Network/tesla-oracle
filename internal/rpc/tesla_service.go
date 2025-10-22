@@ -2,6 +2,8 @@ package rpc
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/DIMO-Network/shared/pkg/db"
@@ -146,4 +148,18 @@ func (t *TeslaRPCService) GetSyntheticDevicesByVIN(ctx context.Context, req *grp
 	return &grpc.GetSyntheticDevicesByVINResponse{
 		SyntheticDevices: all,
 	}, nil
+}
+
+func (t *TeslaRPCService) GetVinByTokenId(ctx context.Context, req *grpc.GetVinByTokenIdRequest) (*grpc.GetVinByTokenIdResponse, error) {
+	sd, err := models.SyntheticDevices(
+		models.SyntheticDeviceWhere.TokenID.EQ(null.IntFrom(int(req.TokenId))),
+	).One(ctx, t.dbs().Reader)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "No known synthetic device with that token id.")
+		}
+		return nil, err
+	}
+
+	return &grpc.GetVinByTokenIdResponse{Vin: sd.Vin}, nil
 }

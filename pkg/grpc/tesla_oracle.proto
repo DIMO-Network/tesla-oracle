@@ -13,6 +13,16 @@ service TeslaOracle {
   rpc RegisterNewSyntheticDevice(RegisterNewSyntheticDeviceRequest) returns (RegisterNewSyntheticDeviceResponse);
   rpc RegisterNewSyntheticDeviceV2(RegisterNewSyntheticDeviceV2Request) returns (RegisterNewSyntheticDeviceV2Response);
   rpc GetSyntheticDevicesByVIN(GetSyntheticDevicesByVINRequest) returns (GetSyntheticDevicesByVINResponse);
+
+  rpc GetVinByTokenId(GetVinByTokenIdRequest) returns (GetVinByTokenIdResponse);
+}
+
+message GetVinByTokenIdRequest {
+  uint32 token_id = 1;
+}
+
+message GetVinByTokenIdResponse {
+  string vin = 1;
 }
 
 message RegisterNewSyntheticDeviceRequest {
