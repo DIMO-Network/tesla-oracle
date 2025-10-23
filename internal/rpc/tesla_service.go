@@ -46,7 +46,7 @@ func (t *TeslaRPCService) RegisterNewSyntheticDevice(ctx context.Context, req *g
 	partial := models.SyntheticDevice{
 		Vin:               req.Vin,
 		Address:           req.SyntheticDeviceAddress,
-		WalletChildNumber: int(req.GetWalletChildNum()),
+		WalletChildNumber: null.IntFrom(int(req.GetWalletChildNum())),
 	}
 
 	if err := partial.Insert(
@@ -100,7 +100,7 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 	sd := models.SyntheticDevice{
 		Address:           sdAddr.Bytes(),
 		Vin:               req.Vin,
-		WalletChildNumber: int(walletIndex),
+		WalletChildNumber: null.IntFrom(int(walletIndex)),
 		AccessToken:       null.StringFrom(req.EncryptedAccessToken),
 		RefreshToken:      null.StringFrom(req.EncryptedRefreshToken),
 		AccessExpiresAt:   null.TimeFrom(req.AccessTokenExpiry.AsTime()),
@@ -137,7 +137,7 @@ func (t *TeslaRPCService) GetSyntheticDevicesByVIN(ctx context.Context, req *grp
 			&grpc.SyntheticDevice{
 				Vin:                dev.Vin,
 				Address:            dev.Address,
-				WalletChildNum:     uint64(dev.WalletChildNumber),
+				WalletChildNum:     uint64(dev.WalletChildNumber.Int),
 				VehicleTokenId:     uint64(dev.VehicleTokenID.Int),
 				TokenId:            uint64(dev.TokenID.Int),
 				SubscriptionStatus: dev.SubscriptionStatus.String,

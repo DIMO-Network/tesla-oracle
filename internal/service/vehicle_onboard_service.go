@@ -645,7 +645,7 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 				Vin:               vin,
 				TokenID:           null.Int{Int: int(dbVin.SyntheticTokenID.Int64), Valid: true},
 				VehicleTokenID:    null.Int{Int: int(dbVin.VehicleTokenID.Int64), Valid: true},
-				WalletChildNumber: int(dbVin.WalletIndex.Int64),
+				WalletChildNumber: null.IntFrom(int(dbVin.WalletIndex.Int64)),
 				AccessToken:       null.StringFrom(encryptedCreds.AccessToken),
 				AccessExpiresAt:   null.TimeFrom(encryptedCreds.AccessExpiry),
 				RefreshToken:      null.StringFrom(encryptedCreds.RefreshToken),
