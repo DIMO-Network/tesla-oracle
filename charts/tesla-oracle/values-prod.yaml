@@ -2,7 +2,7 @@ replicaCount: 2
 image:
   repository: dimozone/tesla-oracle
   pullPolicy: IfNotPresent
-  tag: 0.4.18
+  tag: 0.4.19
 env:
   LOG_LEVEL: info
   ENVIRONMENT: prod
