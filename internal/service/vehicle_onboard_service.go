@@ -231,6 +231,15 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 	statuses := make([]VinStatus, 0, len(validVins))
 
 	if len(validVins) > 0 {
+		// Check for reconnection cases - create onboarding records for disconnected devices
+		for _, vehicle := range vinsData {
+			if vehicle.VehicleTokenID != 0 {
+				if err := s.createOnboardingRecordForReconnection(ctx, vehicle, walletAddress); err != nil {
+					return nil, err
+				}
+			}
+		}
+
 		// fetch all the onboarding records that could still be moved forward
 		dbVins, err := s.repositories.Onboarding.GetOnboardingsByVinsAndStatusRange(
 			ctx,
@@ -302,6 +311,73 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 	}
 
 	return statuses, nil
+}
+
+// createOnboardingRecordForReconnection creates an onboarding record for a disconnected vehicle that needs reconnection
+func (s *vehicleOnboardService) createOnboardingRecordForReconnection(ctx context.Context, vehicle VinWithTokenID, walletAddress common.Address) error {
+	localLog := s.logger.With().
+		Str("vin", vehicle.Vin).
+		Int64("vehicleTokenId", vehicle.VehicleTokenID).
+		Str(logfields.FunctionName, "createOnboardingRecordForReconnection").
+		Logger()
+
+	// Check if this is a reconnection (disconnected device exists in synthetic_devices)
+	disconnectedDevice, err := s.repositories.Vehicle.GetSyntheticDeviceByVin(ctx, vehicle.Vin)
+	isDisconnected := err == nil && disconnectedDevice != nil &&
+		!disconnectedDevice.TokenID.Valid &&
+		disconnectedDevice.VehicleTokenID.Valid
+
+	if !isDisconnected {
+		// Not a reconnection case, skip
+		return nil
+	}
+
+	localLog.Info().Msg("Detected reconnection request - creating onboarding record")
+
+	// Fetch vehicle from Identity API to get device definition and verify ownership
+	identityVehicle, err := s.identitySvc.FetchVehicleByTokenID(vehicle.VehicleTokenID)
+	if err != nil {
+		localLog.Error().Err(err).Msg("Failed to fetch vehicle from Identity API")
+		return fmt.Errorf("failed to fetch vehicle %d from identity: %w", vehicle.VehicleTokenID, err)
+	}
+
+	// Verify ownership
+	if identityVehicle.Owner != walletAddress.String() {
+		localLog.Warn().
+			Str("expectedOwner", walletAddress.String()).
+			Str("actualOwner", identityVehicle.Owner).
+			Msg("Vehicle not owned by wallet")
+		return fmt.Errorf("vehicle %d is not owned by wallet %s", vehicle.VehicleTokenID, walletAddress.String())
+	}
+
+	// Verify the vehicle is truly disconnected (no SD minted)
+	if identityVehicle.SyntheticDevice.TokenID != 0 {
+		localLog.Warn().
+			Int64("syntheticTokenId", identityVehicle.SyntheticDevice.TokenID).
+			Msg("Vehicle already has synthetic device connected")
+		return fmt.Errorf("vehicle %d is already connected with synthetic device %d", vehicle.VehicleTokenID, identityVehicle.SyntheticDevice.TokenID)
+	}
+
+	// Create onboarding record for reconnection
+	onboardingRecord := &dbmodels.Onboarding{
+		Vin:                vehicle.Vin,
+		VehicleTokenID:     null.Int64From(vehicle.VehicleTokenID),
+		SyntheticTokenID:   null.Int64{Valid: false}, // NULL - needs minting
+		DeviceDefinitionID: null.StringFrom(identityVehicle.Definition.ID),
+		OnboardingStatus:   OnboardingStatusVendorValidationSuccess, // 23 - ready to mint
+	}
+
+	err = s.repositories.Onboarding.InsertOrUpdateOnboarding(ctx, onboardingRecord)
+	if err != nil {
+		localLog.Error().Err(err).Msg("Failed to create onboarding record for reconnection")
+		return fmt.Errorf("failed to create onboarding record for reconnection: %w", err)
+	}
+
+	localLog.Info().
+		Str("deviceDefinitionId", identityVehicle.Definition.ID).
+		Msg("Successfully created onboarding record for reconnection")
+
+	return nil
 }
 
 // GetMintDataForVins gets minting payload for signing
@@ -640,22 +716,59 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 				return nil, fmt.Errorf("failed to encrypt credentials: %w", err)
 			}
 
+			// Check if this is a reconnection (existing disconnected device)
+			existingDevice, err := s.repositories.Vehicle.GetSyntheticDeviceByVin(ctx, vin)
+			isReconnection := err == nil && existingDevice != nil &&
+				!existingDevice.TokenID.Valid &&
+				existingDevice.VehicleTokenID.Valid
+
+			var subscriptionStatus null.String
+			if isReconnection {
+				localLog.Info().
+					Str("vin", vin).
+					Int("oldVehicleTokenId", existingDevice.VehicleTokenID.Int).
+					Msg("Reconnection detected - preserving subscription status and vehicle data")
+
+				// Preserve subscription_status from old disconnected device
+				subscriptionStatus = existingDevice.SubscriptionStatus
+
+				// Delete old disconnected row
+				err = s.repositories.Vehicle.DeleteSyntheticDevice(ctx, existingDevice.Address)
+				if err != nil {
+					localLog.Error().Err(err).Msg("Failed to delete old disconnected device")
+					return nil, fmt.Errorf("failed to delete old disconnected device: %w", err)
+				}
+			} else {
+				// New onboarding - default subscription status
+				subscriptionStatus = null.StringFrom("pending")
+			}
+
 			sdRecord := &dbmodels.SyntheticDevice{
-				Address:           address.Bytes(),
-				Vin:               vin,
-				TokenID:           null.Int{Int: int(dbVin.SyntheticTokenID.Int64), Valid: true},
-				VehicleTokenID:    null.Int{Int: int(dbVin.VehicleTokenID.Int64), Valid: true},
-				WalletChildNumber: null.IntFrom(int(dbVin.WalletIndex.Int64)),
-				AccessToken:       null.StringFrom(encryptedCreds.AccessToken),
-				AccessExpiresAt:   null.TimeFrom(encryptedCreds.AccessExpiry),
-				RefreshToken:      null.StringFrom(encryptedCreds.RefreshToken),
-				RefreshExpiresAt:  null.TimeFrom(encryptedCreds.RefreshExpiry),
+				Address:            address.Bytes(),
+				Vin:                vin,
+				TokenID:            null.Int{Int: int(dbVin.SyntheticTokenID.Int64), Valid: true},
+				VehicleTokenID:     null.Int{Int: int(dbVin.VehicleTokenID.Int64), Valid: true},
+				WalletChildNumber:  null.IntFrom(int(dbVin.WalletIndex.Int64)),
+				AccessToken:        null.StringFrom(encryptedCreds.AccessToken),
+				AccessExpiresAt:    null.TimeFrom(encryptedCreds.AccessExpiry),
+				RefreshToken:       null.StringFrom(encryptedCreds.RefreshToken),
+				RefreshExpiresAt:   null.TimeFrom(encryptedCreds.RefreshExpiry),
+				SubscriptionStatus: subscriptionStatus, // Preserved for reconnection, default for new
 			}
 
 			err = s.repositories.Vehicle.InsertSyntheticDevice(ctx, sdRecord)
 			if err != nil {
 				localLog.Error().Err(err).Msg("Failed to insert Synthetic Device")
 				return nil, fmt.Errorf("failed to insert synthetic device: %w", err)
+			}
+
+			if isReconnection {
+				localLog.Info().
+					Str("vin", vin).
+					Int("vehicleTokenId", int(dbVin.VehicleTokenID.Int64)).
+					Int("newSyntheticTokenId", int(dbVin.SyntheticTokenID.Int64)).
+					Str("subscriptionStatus", subscriptionStatus.String).
+					Msg("Successfully reconnected vehicle with preserved subscription status")
 			}
 
 			err = s.repositories.Onboarding.DeleteOnboarding(ctx, dbVin)

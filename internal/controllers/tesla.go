@@ -307,22 +307,35 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 
 // GetDisconnectedVehicles godoc
 // @Summary     Get disconnected vehicles
-// @Description Gets all disconnected Tesla vehicles (vehicles that were previously connected but had their SD burned).
+// @Description Checks which of the provided VINs are disconnected (vehicles that were previously connected but had their SD burned).
 // @Tags        tesla
 // @Accept      json
 // @Produce     json
+// @Param       request body controllers.DisconnectedVehiclesRequest true "List of VINs to check"
 // @Security    BearerAuth
 // @Success     200 {object} controllers.DisconnectedVehiclesResponse
+// @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     500 {object} fiber.Error "Internal server error"
-// @Router      /v1/tesla/disconnected [get]
+// @Router      /v1/tesla/disconnected [post]
 func (tc *TeslaController) GetDisconnectedVehicles(c *fiber.Ctx) error {
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Tesla/GetDisconnectedVehicles").
 		Logger()
 
-	logger.Debug().Msg("Fetching disconnected vehicles")
+	var req DisconnectedVehiclesRequest
+	if err := c.BodyParser(&req); err != nil {
+		logger.Err(err).Msg("Failed to parse request body")
+		return fiber.NewError(fiber.StatusBadRequest, "Invalid request body")
+	}
 
-	disconnectedVehicles, err := tc.teslaService.GetDisconnectedVehicles(c.Context())
+	if len(req.Vins) == 0 {
+		logger.Debug().Msg("No VINs provided, returning empty list")
+		return c.JSON(DisconnectedVehiclesResponse{Vehicles: []DisconnectedVehicle{}})
+	}
+
+	logger.Debug().Interface("vins", req.Vins).Msg("Checking disconnected vehicles for VINs")
+
+	disconnectedVehicles, err := tc.teslaService.GetDisconnectedVehiclesByVins(c.Context(), req.Vins)
 	if err != nil {
 		logger.Err(err).Msg("Failed to fetch disconnected vehicles")
 		return tc.translateServiceError(err)
@@ -340,7 +353,7 @@ func (tc *TeslaController) GetDisconnectedVehicles(c *fiber.Ctx) error {
 		})
 	}
 
-	logger.Info().Msgf("Found %d disconnected vehicles", len(disconnectedVehicles))
+	logger.Info().Msgf("Found %d disconnected vehicles out of %d VINs", len(disconnectedVehicles), len(req.Vins))
 	return c.JSON(response)
 }
 

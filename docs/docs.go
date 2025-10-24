@@ -208,13 +208,13 @@ const docTemplate = `{
             }
         },
         "/v1/tesla/disconnected": {
-            "get": {
+            "post": {
                 "security": [
                     {
                         "BearerAuth": []
                     }
                 ],
-                "description": "Gets all disconnected Tesla vehicles (vehicles that were previously connected but had their SD burned).",
+                "description": "Checks which of the provided VINs are disconnected (vehicles that were previously connected but had their SD burned).",
                 "consumes": [
                     "application/json"
                 ],
@@ -225,11 +225,28 @@ const docTemplate = `{
                     "tesla"
                 ],
                 "summary": "Get disconnected vehicles",
+                "parameters": [
+                    {
+                        "description": "List of VINs to check",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.DisconnectedVehiclesRequest"
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_controllers.DisconnectedVehiclesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
                         }
                     },
                     "500": {
@@ -1286,6 +1303,17 @@ const docTemplate = `{
                 },
                 "vin": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_controllers.DisconnectedVehiclesRequest": {
+            "type": "object",
+            "properties": {
+                "vins": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },

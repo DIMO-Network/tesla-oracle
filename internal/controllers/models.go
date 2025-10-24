@@ -49,6 +49,10 @@ type DisconnectedVehicle struct {
 	SubscriptionStatus string `json:"subscriptionStatus,omitempty"`
 }
 
+type DisconnectedVehiclesRequest struct {
+	Vins []string `json:"vins"`
+}
+
 type DisconnectedVehiclesResponse struct {
 	Vehicles []DisconnectedVehicle `json:"vehicles"`
 }

@@ -425,16 +425,47 @@ func (ts *TeslaService) WakeUpVehicle(ctx context.Context, tokenID int64) (*core
 	return vehicle, nil
 }
 
-// GetDisconnectedVehicles retrieves all disconnected vehicles
-func (ts *TeslaService) GetDisconnectedVehicles(ctx context.Context) (dbmodels.SyntheticDeviceSlice, error) {
-	devices, err := ts.repositories.Vehicle.GetDisconnectedDevices(ctx)
-	if err != nil {
-		ts.logger.Err(err).Msg("Failed to query disconnected vehicles")
-		return nil, fmt.Errorf("failed to query disconnected vehicles: %w", err)
+// GetDisconnectedVehiclesByVins checks which of the provided VINs are disconnected in our database
+func (ts *TeslaService) GetDisconnectedVehiclesByVins(ctx context.Context, vins []string) (dbmodels.SyntheticDeviceSlice, error) {
+	if len(vins) == 0 {
+		return dbmodels.SyntheticDeviceSlice{}, nil
 	}
 
-	ts.logger.Debug().Msgf("Found %d disconnected vehicles", len(devices))
-	return devices, nil
+	ts.logger.Debug().Interface("vins", vins).Msg("Checking which VINs are disconnected")
+
+	disconnectedDevices := make(dbmodels.SyntheticDeviceSlice, 0)
+
+	// Check each VIN to see if it's disconnected in our database
+	for _, vin := range vins {
+		device, err := ts.repositories.Vehicle.GetSyntheticDeviceByVin(ctx, vin)
+		if err != nil {
+			if errors.Is(err, repository.ErrVehicleNotFound) {
+				// VIN not in our database at all - not disconnected, just never onboarded
+				ts.logger.Debug().Str("vin", vin).Msg("VIN not found in database, skipping")
+				continue
+			}
+			ts.logger.Warn().Err(err).Str("vin", vin).Msg("Failed to query synthetic device")
+			continue
+		}
+
+		// Check if it's actually disconnected (token_id = NULL, vehicle_token_id NOT NULL)
+		if !device.TokenID.Valid && device.VehicleTokenID.Valid {
+			disconnectedDevices = append(disconnectedDevices, device)
+			ts.logger.Debug().
+				Str("vin", vin).
+				Int("vehicleTokenId", device.VehicleTokenID.Int).
+				Msg("Found disconnected vehicle")
+		} else {
+			ts.logger.Debug().
+				Str("vin", vin).
+				Bool("hasTokenId", device.TokenID.Valid).
+				Bool("hasVehicleTokenId", device.VehicleTokenID.Valid).
+				Msg("VIN is not in disconnected state")
+		}
+	}
+
+	ts.logger.Info().Msgf("Found %d disconnected vehicles out of %d VINs", len(disconnectedDevices), len(vins))
+	return disconnectedDevices, nil
 }
 
 // fetchVehicle retrieves a vehicle from identity-api by its token ID.
