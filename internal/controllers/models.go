@@ -42,3 +42,13 @@ type FinalizeResponse struct {
 type SubmitCommandRequest struct {
 	Command string `json:"command"`
 }
+
+type DisconnectedVehicle struct {
+	VIN                string `json:"vin"`
+	VehicleTokenID     int    `json:"vehicleTokenId"`
+	SubscriptionStatus string `json:"subscriptionStatus,omitempty"`
+}
+
+type DisconnectedVehiclesResponse struct {
+	Vehicles []DisconnectedVehicle `json:"vehicles"`
+}

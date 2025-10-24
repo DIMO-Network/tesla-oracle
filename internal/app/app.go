@@ -99,6 +99,7 @@ func App(
 	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
 	teslaGroup.Post("/reauthenticate", teslaCtrl.Reauthenticate)
 	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
+	teslaGroup.Get("/disconnected", teslaCtrl.GetDisconnectedVehicles)
 	teslaGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
 
 	// Admin routes without ownership validation
