@@ -184,6 +184,13 @@ definitions:
       vin:
         type: string
     type: object
+  internal_controllers.DisconnectedVehiclesRequest:
+    properties:
+      vins:
+        items:
+          type: string
+        type: array
+    type: object
   internal_controllers.DisconnectedVehiclesResponse:
     properties:
       vehicles:
@@ -412,11 +419,18 @@ paths:
       tags:
       - tesla
   /v1/tesla/disconnected:
-    get:
+    post:
       consumes:
       - application/json
-      description: Gets all disconnected Tesla vehicles (vehicles that were previously
-        connected but had their SD burned).
+      description: Checks which of the provided VINs are disconnected (vehicles that
+        were previously connected but had their SD burned).
+      parameters:
+      - description: List of VINs to check
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.DisconnectedVehiclesRequest'
       produces:
       - application/json
       responses:
@@ -424,6 +438,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/internal_controllers.DisconnectedVehiclesResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
         "500":
           description: Internal server error
           schema:
