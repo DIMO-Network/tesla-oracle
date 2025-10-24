@@ -26,7 +26,7 @@ import (
 type SyntheticDevice struct {
 	Address            []byte      `boil:"address" json:"address" toml:"address" yaml:"address"`
 	Vin                string      `boil:"vin" json:"vin" toml:"vin" yaml:"vin"`
-	WalletChildNumber  int         `boil:"wallet_child_number" json:"wallet_child_number" toml:"wallet_child_number" yaml:"wallet_child_number"`
+	WalletChildNumber  null.Int    `boil:"wallet_child_number" json:"wallet_child_number,omitempty" toml:"wallet_child_number" yaml:"wallet_child_number,omitempty"`
 	VehicleTokenID     null.Int    `boil:"vehicle_token_id" json:"vehicle_token_id,omitempty" toml:"vehicle_token_id" yaml:"vehicle_token_id,omitempty"`
 	TokenID            null.Int    `boil:"token_id" json:"token_id,omitempty" toml:"token_id" yaml:"token_id,omitempty"`
 	AccessToken        null.String `boil:"access_token" json:"access_token,omitempty" toml:"access_token" yaml:"access_token,omitempty"`
@@ -163,7 +163,7 @@ func (w whereHelpernull_Time) IsNotNull() qm.QueryMod { return qmhelper.WhereIsN
 var SyntheticDeviceWhere = struct {
 	Address            whereHelper__byte
 	Vin                whereHelperstring
-	WalletChildNumber  whereHelperint
+	WalletChildNumber  whereHelpernull_Int
 	VehicleTokenID     whereHelpernull_Int
 	TokenID            whereHelpernull_Int
 	AccessToken        whereHelpernull_String
@@ -174,7 +174,7 @@ var SyntheticDeviceWhere = struct {
 }{
 	Address:            whereHelper__byte{field: "\"tesla_oracle\".\"synthetic_devices\".\"address\""},
 	Vin:                whereHelperstring{field: "\"tesla_oracle\".\"synthetic_devices\".\"vin\""},
-	WalletChildNumber:  whereHelperint{field: "\"tesla_oracle\".\"synthetic_devices\".\"wallet_child_number\""},
+	WalletChildNumber:  whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"wallet_child_number\""},
 	VehicleTokenID:     whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"vehicle_token_id\""},
 	TokenID:            whereHelpernull_Int{field: "\"tesla_oracle\".\"synthetic_devices\".\"token_id\""},
 	AccessToken:        whereHelpernull_String{field: "\"tesla_oracle\".\"synthetic_devices\".\"access_token\""},
@@ -222,8 +222,8 @@ type syntheticDeviceL struct{}
 
 var (
 	syntheticDeviceAllColumns            = []string{"address", "vin", "wallet_child_number", "vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at", "subscription_status"}
-	syntheticDeviceColumnsWithoutDefault = []string{"address", "vin", "wallet_child_number"}
-	syntheticDeviceColumnsWithDefault    = []string{"vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at", "subscription_status"}
+	syntheticDeviceColumnsWithoutDefault = []string{"address", "vin"}
+	syntheticDeviceColumnsWithDefault    = []string{"wallet_child_number", "vehicle_token_id", "token_id", "access_token", "access_expires_at", "refresh_token", "refresh_expires_at", "subscription_status"}
 	syntheticDevicePrimaryKeyColumns     = []string{"address"}
 	syntheticDeviceGeneratedColumns      = []string{}
 )

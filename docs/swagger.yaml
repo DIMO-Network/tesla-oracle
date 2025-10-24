@@ -175,6 +175,22 @@ definitions:
           $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.TeslaVehicleRes'
         type: array
     type: object
+  internal_controllers.DisconnectedVehicle:
+    properties:
+      subscriptionStatus:
+        type: string
+      vehicleTokenId:
+        type: integer
+      vin:
+        type: string
+    type: object
+  internal_controllers.DisconnectedVehiclesResponse:
+    properties:
+      vehicles:
+        items:
+          $ref: '#/definitions/internal_controllers.DisconnectedVehicle'
+        type: array
+    type: object
   internal_controllers.FinalizeResponse:
     properties:
       vehicles:
@@ -393,6 +409,28 @@ paths:
       security:
       - BearerAuth: []
       summary: Get vehicle status
+      tags:
+      - tesla
+  /v1/tesla/disconnected:
+    get:
+      consumes:
+      - application/json
+      description: Gets all disconnected Tesla vehicles (vehicles that were previously
+        connected but had their SD burned).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.DisconnectedVehiclesResponse'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Get disconnected vehicles
       tags:
       - tesla
   /v1/tesla/reauthenticate:

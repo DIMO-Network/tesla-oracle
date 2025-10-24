@@ -159,17 +159,42 @@ func (p Processor) handleSyntheticDeviceNodeBurned(ctx context.Context, data jso
 		return fmt.Errorf("failed to parse device burn event: %w", err)
 	}
 
-	delCount, err := models.SyntheticDevices(
+	// Find the device to disconnect (soft delete)
+	device, err := models.SyntheticDevices(
 		models.SyntheticDeviceWhere.TokenID.EQ(
 			null.IntFrom(int(args.SyntheticDeviceNode.Int64()))),
-	).DeleteAll(ctx, p.pdb.DBS().Writer)
+	).One(ctx, p.pdb.DBS().Reader)
 	if err != nil {
-		return fmt.Errorf("failed to delete synthetic device node %d: %w", args.SyntheticDeviceNode.Int64(), err)
+		return fmt.Errorf("failed to find synthetic device node %d: %w", args.SyntheticDeviceNode.Int64(), err)
 	}
 
-	if delCount != 1 {
-		p.logger.Warn().Int64("syntheticDeviceNode", args.SyntheticDeviceNode.Int64()).Int64("count", delCount).Msg("unexpected number of deletions on burn event")
+	p.logger.Info().
+		Str("vin", device.Vin).
+		Int("tokenId", device.TokenID.Int).
+		Int("vehicleTokenId", device.VehicleTokenID.Int).
+		Msg("Disconnecting synthetic device - performing soft delete")
+
+	// TODO: Stop telemetry streaming/polling for this vehicle
+	// This will be implemented when telemetry service is located
+
+	// Soft delete: clear SD-specific fields but keep vehicle data
+	device.TokenID = null.Int{Valid: false}           // Clear SD token
+	device.WalletChildNumber = null.Int{Valid: false} // Clear wallet child number
+	device.AccessToken = null.String{Valid: false}    // Clear credentials
+	device.RefreshToken = null.String{Valid: false}   // Clear credentials
+	device.AccessExpiresAt = null.Time{Valid: false}  // Clear credentials
+	device.RefreshExpiresAt = null.Time{Valid: false} // Clear credentials
+	// KEEP: address (old SD address), vin, vehicle_token_id, subscription_status
+
+	_, err = device.Update(ctx, p.pdb.DBS().Writer, boil.Infer())
+	if err != nil {
+		return fmt.Errorf("failed to soft delete (disconnect) synthetic device node %d: %w", args.SyntheticDeviceNode.Int64(), err)
 	}
+
+	p.logger.Info().
+		Str("vin", device.Vin).
+		Int("vehicleTokenId", device.VehicleTokenID.Int).
+		Msg("Successfully disconnected synthetic device - vehicle data preserved for reconnection")
 
 	return nil
 }

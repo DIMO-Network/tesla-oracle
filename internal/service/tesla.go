@@ -425,6 +425,18 @@ func (ts *TeslaService) WakeUpVehicle(ctx context.Context, tokenID int64) (*core
 	return vehicle, nil
 }
 
+// GetDisconnectedVehicles retrieves all disconnected vehicles
+func (ts *TeslaService) GetDisconnectedVehicles(ctx context.Context) (dbmodels.SyntheticDeviceSlice, error) {
+	devices, err := ts.repositories.Vehicle.GetDisconnectedDevices(ctx)
+	if err != nil {
+		ts.logger.Err(err).Msg("Failed to query disconnected vehicles")
+		return nil, fmt.Errorf("failed to query disconnected vehicles: %w", err)
+	}
+
+	ts.logger.Debug().Msgf("Found %d disconnected vehicles", len(devices))
+	return devices, nil
+}
+
 // fetchVehicle retrieves a vehicle from identity-api by its token ID.
 func (ts *TeslaService) fetchVehicle(vehicleTokenId int64) (*models.Vehicle, error) {
 	vehicle, err := ts.identitySvc.FetchVehicleByTokenID(vehicleTokenId)

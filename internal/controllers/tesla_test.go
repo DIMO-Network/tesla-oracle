@@ -386,7 +386,7 @@ func (s *TeslaControllerTestSuite) TestReauthenticate() {
 	synthDevice := models.SyntheticDevice{
 		Address:           common.HexToAddress(walletAddress).Bytes(),
 		Vin:               vin,
-		WalletChildNumber: 1,
+		WalletChildNumber: null.IntFrom(1),
 		VehicleTokenID:    null.IntFrom(vehicleTokenID),
 		TokenID:           null.IntFrom(456),
 	}
@@ -655,7 +655,7 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
 		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
-		WalletChildNumber: 111,
+		WalletChildNumber: null.IntFrom(111),
 	}
 
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
@@ -867,7 +867,7 @@ func (s *TeslaControllerTestSuite) createTestSyntheticDeviceWithExpiredTokens(ci
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
 		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
-		WalletChildNumber: 111,
+		WalletChildNumber: null.IntFrom(111),
 		AccessToken:       null.StringFrom(encryptedAccessToken),
 		RefreshToken:      null.StringFrom(encryptedRefreshToken),
 		AccessExpiresAt:   null.TimeFrom(accessExpiredTime),
@@ -2143,7 +2143,7 @@ func (s *TeslaControllerTestSuite) createTestSyntheticDeviceWithStatus(cipher ci
 		Vin:               vin,
 		TokenID:           null.NewInt(456, true),
 		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
-		WalletChildNumber: 111,
+		WalletChildNumber: null.IntFrom(111),
 		AccessToken:       null.StringFrom(encryptedAccessToken),
 		RefreshToken:      null.StringFrom(encryptedRefreshToken),
 		AccessExpiresAt:   null.TimeFrom(accessExpireAt.In(time.UTC)),

@@ -305,6 +305,45 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 	return c.JSON(response)
 }
 
+// GetDisconnectedVehicles godoc
+// @Summary     Get disconnected vehicles
+// @Description Gets all disconnected Tesla vehicles (vehicles that were previously connected but had their SD burned).
+// @Tags        tesla
+// @Accept      json
+// @Produce     json
+// @Security    BearerAuth
+// @Success     200 {object} controllers.DisconnectedVehiclesResponse
+// @Failure     500 {object} fiber.Error "Internal server error"
+// @Router      /v1/tesla/disconnected [get]
+func (tc *TeslaController) GetDisconnectedVehicles(c *fiber.Ctx) error {
+	logger := helpers.GetLogger(c, tc.logger).With().
+		Str("Name", "Tesla/GetDisconnectedVehicles").
+		Logger()
+
+	logger.Debug().Msg("Fetching disconnected vehicles")
+
+	disconnectedVehicles, err := tc.teslaService.GetDisconnectedVehicles(c.Context())
+	if err != nil {
+		logger.Err(err).Msg("Failed to fetch disconnected vehicles")
+		return tc.translateServiceError(err)
+	}
+
+	response := DisconnectedVehiclesResponse{
+		Vehicles: make([]DisconnectedVehicle, 0, len(disconnectedVehicles)),
+	}
+
+	for _, vehicle := range disconnectedVehicles {
+		response.Vehicles = append(response.Vehicles, DisconnectedVehicle{
+			VIN:                vehicle.Vin,
+			VehicleTokenID:     vehicle.VehicleTokenID.Int,
+			SubscriptionStatus: vehicle.SubscriptionStatus.String,
+		})
+	}
+
+	logger.Info().Msgf("Found %d disconnected vehicles", len(disconnectedVehicles))
+	return c.JSON(response)
+}
+
 // GetStatus godoc
 // @Summary     Get vehicle status
 // @Description Get vehicle status and determines the next action for a Tesla vehicle based on its fleet status, including telemetry compatibility, virtual key pairing, firmware version, and streaming toggle settings. Provides appropriate instructions or actions for the user to enable telemetry or resolve issues.

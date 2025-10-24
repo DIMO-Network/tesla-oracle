@@ -138,3 +138,39 @@ func (r *vehicleRepository) InsertSyntheticDevice(ctx context.Context, device *d
 	}
 	return nil
 }
+
+// GetDisconnectedDevices retrieves all disconnected synthetic devices
+// Disconnected devices have token_id = NULL and vehicle_token_id IS NOT NULL
+func (r *vehicleRepository) GetDisconnectedDevices(ctx context.Context) (dbmodels.SyntheticDeviceSlice, error) {
+	devices, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.TokenID.IsNull(),
+		dbmodels.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
+	).All(ctx, r.db.DBS().Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query disconnected vehicles: %w", err)
+	}
+	return devices, nil
+}
+
+// DeleteSyntheticDevice deletes a synthetic device by its address (primary key)
+// Used during reconnection to remove the old disconnected device before inserting the new one
+func (r *vehicleRepository) DeleteSyntheticDevice(ctx context.Context, address []byte) error {
+	device, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.Address.EQ(address),
+	).One(ctx, r.db.DBS().Reader)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrVehicleNotFound
+		}
+		return fmt.Errorf("failed to find synthetic device for deletion: %w", err)
+	}
+
+	_, err = device.Delete(ctx, r.db.DBS().Writer)
+	if err != nil {
+		r.logger.Error().Err(err).Msg("Failed to delete synthetic device")
+		return fmt.Errorf("failed to delete synthetic device: %w", err)
+	}
+
+	r.logger.Info().Str("vin", device.Vin).Msg("Successfully deleted disconnected synthetic device")
+	return nil
+}

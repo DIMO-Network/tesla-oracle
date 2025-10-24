@@ -198,6 +198,40 @@
                 }
             }
         },
+        "/v1/tesla/disconnected": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gets all disconnected Tesla vehicles (vehicles that were previously connected but had their SD burned).",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla"
+                ],
+                "summary": "Get disconnected vehicles",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.DisconnectedVehiclesResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/tesla/reauthenticate": {
             "post": {
                 "security": [
@@ -1228,6 +1262,31 @@
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.TeslaVehicleRes"
+                    }
+                }
+            }
+        },
+        "internal_controllers.DisconnectedVehicle": {
+            "type": "object",
+            "properties": {
+                "subscriptionStatus": {
+                    "type": "string"
+                },
+                "vehicleTokenId": {
+                    "type": "integer"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_controllers.DisconnectedVehiclesResponse": {
+            "type": "object",
+            "properties": {
+                "vehicles": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_controllers.DisconnectedVehicle"
                     }
                 }
             }
