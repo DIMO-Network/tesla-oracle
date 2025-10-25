@@ -723,7 +723,9 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 
 			if dbVin.VehicleTokenID.Valid && dbVin.VehicleTokenID.Int64 > 0 {
 				existingDevice, err = s.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, dbVin.VehicleTokenID.Int64)
-				if err == nil && existingDevice != nil && !existingDevice.TokenID.Valid {
+				if err == nil && existingDevice != nil &&
+					!existingDevice.TokenID.Valid &&
+					existingDevice.VehicleTokenID.Valid {
 					// Found existing disconnected device (has vehicle_token_id but no sd token_id)
 					isReconnection = true
 					localLog.Debug().
