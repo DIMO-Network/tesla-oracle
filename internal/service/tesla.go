@@ -425,47 +425,156 @@ func (ts *TeslaService) WakeUpVehicle(ctx context.Context, tokenID int64) (*core
 	return vehicle, nil
 }
 
-// GetDisconnectedVehiclesByVins checks which of the provided VINs are disconnected in our database
-func (ts *TeslaService) GetDisconnectedVehiclesByVins(ctx context.Context, vins []string) (dbmodels.SyntheticDeviceSlice, error) {
+// GetDisconnectedVehiclesByVins checks which of the provided VINs are disconnected and owned by the wallet
+func (ts *TeslaService) GetDisconnectedVehiclesByVins(ctx context.Context, vins []string, walletAddress common.Address) (dbmodels.SyntheticDeviceSlice, error) {
 	if len(vins) == 0 {
 		return dbmodels.SyntheticDeviceSlice{}, nil
 	}
 
-	ts.logger.Debug().Interface("vins", vins).Msg("Checking which VINs are disconnected")
+	ts.logger.Debug().Interface("vins", vins).Str("wallet", walletAddress.String()).Msg("Checking which VINs are disconnected and owned by wallet")
 
+	// Step 1: Query ALL synthetic devices matching the provided VINs
+	allDevices, err := ts.repositories.Vehicle.GetSyntheticDevicesByVins(ctx, vins)
+	if err != nil {
+		ts.logger.Error().Err(err).Msg("Failed to query synthetic devices by VINs")
+		return nil, fmt.Errorf("failed to query synthetic devices: %w", err)
+	}
+
+	if len(allDevices) == 0 {
+		ts.logger.Debug().Msg("No synthetic devices found for provided VINs")
+		return dbmodels.SyntheticDeviceSlice{}, nil
+	}
+
+	// Step 2: Filter for disconnected devices (token_id = NULL AND vehicle_token_id NOT NULL)
 	disconnectedDevices := make(dbmodels.SyntheticDeviceSlice, 0)
-
-	// Check each VIN to see if it's disconnected in our database
-	for _, vin := range vins {
-		device, err := ts.repositories.Vehicle.GetSyntheticDeviceByVin(ctx, vin)
-		if err != nil {
-			if errors.Is(err, repository.ErrVehicleNotFound) {
-				// VIN not in our database at all - not disconnected, just never onboarded
-				ts.logger.Debug().Str("vin", vin).Msg("VIN not found in database, skipping")
-				continue
-			}
-			ts.logger.Warn().Err(err).Str("vin", vin).Msg("Failed to query synthetic device")
-			continue
-		}
-
-		// Check if it's actually disconnected (token_id = NULL, vehicle_token_id NOT NULL)
+	for _, device := range allDevices {
 		if !device.TokenID.Valid && device.VehicleTokenID.Valid {
 			disconnectedDevices = append(disconnectedDevices, device)
-			ts.logger.Debug().
-				Str("vin", vin).
-				Int("vehicleTokenId", device.VehicleTokenID.Int).
-				Msg("Found disconnected vehicle")
-		} else {
-			ts.logger.Debug().
-				Str("vin", vin).
-				Bool("hasTokenId", device.TokenID.Valid).
-				Bool("hasVehicleTokenId", device.VehicleTokenID.Valid).
-				Msg("VIN is not in disconnected state")
 		}
 	}
 
-	ts.logger.Info().Msgf("Found %d disconnected vehicles out of %d VINs", len(disconnectedDevices), len(vins))
-	return disconnectedDevices, nil
+	if len(disconnectedDevices) == 0 {
+		ts.logger.Debug().Msg("No disconnected devices found")
+		return dbmodels.SyntheticDeviceSlice{}, nil
+	}
+
+	ts.logger.Debug().Msgf("Found %d disconnected devices", len(disconnectedDevices))
+
+	// Step 3: Make ONE Identity API call to get all vehicles owned by the wallet
+	ownedVehicles, err := ts.identitySvc.FetchVehiclesByWalletAddress(walletAddress.String())
+	if err != nil {
+		ts.logger.Error().Err(err).Str("wallet", walletAddress.String()).Msg("Failed to fetch vehicles from Identity API")
+		return nil, fmt.Errorf("failed to fetch owned vehicles: %w", err)
+	}
+
+	// Step 4: Build a map of owned vehicle_token_ids for quick lookup
+	ownedTokenIDs := make(map[int64]bool)
+	for _, vehicle := range ownedVehicles {
+		ownedTokenIDs[vehicle.TokenID] = true
+	}
+
+	ts.logger.Debug().Msgf("User owns %d vehicles", len(ownedVehicles))
+
+	// Step 5: Filter disconnected devices to only include those owned by the wallet
+	ownedDisconnectedDevices := make(dbmodels.SyntheticDeviceSlice, 0)
+	for _, device := range disconnectedDevices {
+		vehicleTokenID := int64(device.VehicleTokenID.Int)
+		if ownedTokenIDs[vehicleTokenID] {
+			ownedDisconnectedDevices = append(ownedDisconnectedDevices, device)
+			ts.logger.Debug().
+				Str("vin", device.Vin).
+				Int64("vehicleTokenId", vehicleTokenID).
+				Msg("Found disconnected vehicle owned by wallet")
+		} else {
+			ts.logger.Debug().
+				Str("vin", device.Vin).
+				Int64("vehicleTokenId", vehicleTokenID).
+				Msg("Disconnected device not owned by wallet, skipping")
+		}
+	}
+
+	ts.logger.Info().Msgf("Found %d owned disconnected vehicles out of %d VINs for wallet %s", len(ownedDisconnectedDevices), len(vins), walletAddress.String())
+	return ownedDisconnectedDevices, nil
+}
+
+// GetVehicleStatusesByVins returns comprehensive status (active/disconnected/new) for all provided VINs
+func (ts *TeslaService) GetVehicleStatusesByVins(ctx context.Context, vins []string, walletAddress common.Address) (active, disconnected dbmodels.SyntheticDeviceSlice, new []string, err error) {
+	if len(vins) == 0 {
+		return dbmodels.SyntheticDeviceSlice{}, dbmodels.SyntheticDeviceSlice{}, []string{}, nil
+	}
+
+	ts.logger.Debug().Interface("vins", vins).Str("wallet", walletAddress.String()).Msg("Getting vehicle statuses")
+
+	// Step 1: Query ALL synthetic devices matching the provided VINs
+	allDevices, err := ts.repositories.Vehicle.GetSyntheticDevicesByVins(ctx, vins)
+	if err != nil {
+		ts.logger.Error().Err(err).Msg("Failed to query synthetic devices by VINs")
+		return nil, nil, nil, fmt.Errorf("failed to query synthetic devices: %w", err)
+	}
+
+	// Step 2: Get all vehicles owned by the wallet from Identity API
+	ownedVehicles, err := ts.identitySvc.FetchVehiclesByWalletAddress(walletAddress.String())
+	if err != nil {
+		ts.logger.Error().Err(err).Str("wallet", walletAddress.String()).Msg("Failed to fetch vehicles from Identity API")
+		return nil, nil, nil, fmt.Errorf("failed to fetch owned vehicles: %w", err)
+	}
+
+	// Step 3: Build maps of owned token IDs for quick lookup
+	ownedVehicleTokenIDs := make(map[int64]bool)
+	ownedSDTokenIDs := make(map[int64]bool)
+	for _, vehicle := range ownedVehicles {
+		ownedVehicleTokenIDs[vehicle.TokenID] = true
+		if vehicle.SyntheticDevice.TokenID != 0 {
+			ownedSDTokenIDs[vehicle.SyntheticDevice.TokenID] = true
+		}
+	}
+
+	ts.logger.Debug().Msgf("User owns %d vehicles, %d with synthetic devices", len(ownedVehicles), len(ownedSDTokenIDs))
+
+	// Step 4: Categorize devices found in database
+	foundVins := make(map[string]bool)
+	activeDevices := make(dbmodels.SyntheticDeviceSlice, 0)
+	disconnectedDevices := make(dbmodels.SyntheticDeviceSlice, 0)
+
+	for _, device := range allDevices {
+		foundVins[device.Vin] = true
+
+		// Active: has SD token AND owned by wallet
+		if device.TokenID.Valid {
+			sdTokenID := int64(device.TokenID.Int)
+			if ownedSDTokenIDs[sdTokenID] {
+				activeDevices = append(activeDevices, device)
+				ts.logger.Debug().
+					Str("vin", device.Vin).
+					Int64("sdTokenId", sdTokenID).
+					Msg("Found active vehicle owned by wallet")
+			}
+		} else if device.VehicleTokenID.Valid {
+			// Disconnected: no SD token, has vehicle token, owned by wallet
+			vehicleTokenID := int64(device.VehicleTokenID.Int)
+			if ownedVehicleTokenIDs[vehicleTokenID] {
+				disconnectedDevices = append(disconnectedDevices, device)
+				ts.logger.Debug().
+					Str("vin", device.Vin).
+					Int64("vehicleTokenId", vehicleTokenID).
+					Msg("Found disconnected vehicle owned by wallet")
+			}
+		}
+	}
+
+	// Step 5: Identify new VINs (not in database at all)
+	newVins := make([]string, 0)
+	for _, vin := range vins {
+		if !foundVins[vin] {
+			newVins = append(newVins, vin)
+			ts.logger.Debug().Str("vin", vin).Msg("VIN not found in database (new)")
+		}
+	}
+
+	ts.logger.Info().Msgf("Vehicle statuses for wallet %s: %d active, %d disconnected, %d new",
+		walletAddress.String(), len(activeDevices), len(disconnectedDevices), len(newVins))
+
+	return activeDevices, disconnectedDevices, newVins, nil
 }
 
 // fetchVehicle retrieves a vehicle from identity-api by its token ID.

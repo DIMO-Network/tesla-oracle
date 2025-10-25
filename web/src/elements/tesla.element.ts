@@ -38,14 +38,23 @@ interface VirtualKeyResponse {
     status: string;
 }
 
+interface ActiveVehicle {
+    vin: string;
+    vehicleTokenId: number;
+    sdTokenId: number;
+    subscriptionStatus: string;
+}
+
 interface DisconnectedVehicle {
     vin: string;
     vehicleTokenId: number;
     subscriptionStatus: string;
 }
 
-interface DisconnectedVehiclesResponse {
-    vehicles: DisconnectedVehicle[];
+interface VehicleStatusesResponse {
+    active: ActiveVehicle[];
+    disconnected: DisconnectedVehicle[];
+    new: string[];
 }
 
 @customElement('tesla-element')
@@ -101,21 +110,21 @@ export class TeslaElement extends BaseOnboardingElement {
         args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri]
     });
 
-    private loadDisconnectedVehiclesTask = new Task(this, {
+    private loadVehicleStatusesTask = new Task(this, {
         task: async ([vehicles], {}) => {
             if (!vehicles || vehicles.length === 0) {
-                return [];
+                return {active: [], disconnected: [], new: []};
             }
 
             // Extract VINs from Tesla vehicles
             const vins = vehicles.map((v: TeslaVehicle) => v.vin);
 
-            // Call disconnected endpoint with VINs
-            const response = await this.api.callApi<DisconnectedVehiclesResponse>("POST", "/v1/tesla/disconnected", {
+            // Call status endpoint with VINs
+            const response = await this.api.callApi<VehicleStatusesResponse>("POST", "/v1/tesla/disconnected", {
                 vins
             }, true);
 
-            return response.data?.vehicles || [];
+            return response.data || {active: [], disconnected: [], new: []};
         },
         args: () => [this.loadVehiclesTask.value]
     });
@@ -163,6 +172,27 @@ export class TeslaElement extends BaseOnboardingElement {
         `;
     }
 
+    private renderActiveVehicles(vehicles: ActiveVehicle[] | readonly[]) {
+        if (!vehicles || vehicles.length === 0) {
+            return html``;
+        }
+
+        return html`
+            <div class="mb-8">
+                <h2 class="text-2xl font-bold mb-4 text-white">Your Connected Vehicles</h2>
+                ${repeat(vehicles, (v) => v.vin, (vehicle) => html`
+                    <div class="mb-6 p-4 border border-green-700 rounded-lg bg-green-900 bg-opacity-10">
+                        <div class="text-white mb-2">
+                            <div class="text-sm text-gray-400 mb-1">VIN: ${vehicle.vin}</div>
+                            <div class="text-lg font-medium">Tesla Vehicle</div>
+                        </div>
+                        <div class="text-green-400 text-sm">✓ Already onboarded</div>
+                    </div>
+                `)}
+            </div>
+        `;
+    }
+
     private renderDisconnectedVehicles(vehicles: DisconnectedVehicle[] | readonly[]) {
         if (!vehicles || vehicles.length === 0) {
             return html``;
@@ -170,14 +200,12 @@ export class TeslaElement extends BaseOnboardingElement {
 
         return html`
             <div class="mb-8">
-                <h2 class="text-2xl font-bold mb-2 text-white">Reconnect Your Tesla</h2>
-                <p class="text-gray-400 text-sm mb-6">Your vehicle was disconnected. Reconnect to resume data streaming.</p>
+                <h2 class="text-2xl font-bold mb-4 text-white">Reconnect Your Tesla</h2>
                 ${repeat(vehicles, (v) => v.vin, (vehicle) => html`
                     <div class="mb-6 p-4 border border-gray-700 rounded-lg">
                         <div class="text-white mb-4">
                             <div class="text-sm text-gray-400 mb-1">VIN: ${vehicle.vin}</div>
                             <div class="text-lg font-medium">Tesla Vehicle</div>
-                            <div class="text-xs text-gray-500 mt-1">Status: ${vehicle.subscriptionStatus || 'unknown'}</div>
                         </div>
                         <button
                             class="button-primary"
@@ -240,10 +268,6 @@ export class TeslaElement extends BaseOnboardingElement {
     render() {
         return html`
             <div>
-                ${this.loadDisconnectedVehiclesTask.render({
-                    complete: (disconnectedVehicles) => this.renderDisconnectedVehicles(disconnectedVehicles),
-                })}
-
                 ${this.loadVehiclesTask.render({
                     initial: () => this.renderConnectPrompt(),
                     pending: () => html`
@@ -254,18 +278,30 @@ export class TeslaElement extends BaseOnboardingElement {
                             return this.renderConnectPrompt();
                         }
 
-                        // Filter out disconnected vehicles from the regular list
-                        const disconnectedVehicles = this.loadDisconnectedVehiclesTask.value || [];
-                        const disconnectedVINs = new Set(disconnectedVehicles.map((v: DisconnectedVehicle) => v.vin));
-
-                        const newVehicles = vehicles.filter((v: TeslaVehicle) => !disconnectedVINs.has(v.vin));
-
-                        // If all vehicles are disconnected, don't show the regular section
-                        if (newVehicles.length === 0) {
+                        // Get vehicle statuses
+                        const statuses = this.loadVehicleStatusesTask.value;
+                        if (!statuses) {
                             return html``;
                         }
 
-                        return this.renderVehicles(newVehicles);
+                        // Render active vehicles
+                        const activeSection = this.renderActiveVehicles(statuses.active);
+
+                        // Render disconnected vehicles
+                        const disconnectedSection = this.renderDisconnectedVehicles(statuses.disconnected);
+
+                        // Filter vehicles to only show new ones (not in active or disconnected)
+                        const activeVINs = new Set(statuses.active.map((v: ActiveVehicle) => v.vin));
+                        const disconnectedVINs = new Set(statuses.disconnected.map((v: DisconnectedVehicle) => v.vin));
+                        const newVehicles = vehicles.filter((v: TeslaVehicle) =>
+                            !activeVINs.has(v.vin) && !disconnectedVINs.has(v.vin)
+                        );
+
+                        return html`
+                            ${activeSection}
+                            ${disconnectedSection}
+                            ${newVehicles.length > 0 ? this.renderVehicles(newVehicles) : html``}
+                        `;
                     },
                 })}
             </div>

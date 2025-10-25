@@ -161,6 +161,17 @@ definitions:
       vin:
         type: string
     type: object
+  internal_controllers.ActiveVehicle:
+    properties:
+      sdTokenId:
+        type: integer
+      subscriptionStatus:
+        type: string
+      vehicleTokenId:
+        type: integer
+      vin:
+        type: string
+    type: object
   internal_controllers.CompleteOAuthExchangeRequest:
     properties:
       authorizationCode:
@@ -191,13 +202,6 @@ definitions:
           type: string
         type: array
     type: object
-  internal_controllers.DisconnectedVehiclesResponse:
-    properties:
-      vehicles:
-        items:
-          $ref: '#/definitions/internal_controllers.DisconnectedVehicle'
-        type: array
-    type: object
   internal_controllers.FinalizeResponse:
     properties:
       vehicles:
@@ -223,6 +227,24 @@ definitions:
     properties:
       command:
         type: string
+    type: object
+  internal_controllers.VehicleStatusesResponse:
+    properties:
+      active:
+        description: Fully onboarded (has SD token)
+        items:
+          $ref: '#/definitions/internal_controllers.ActiveVehicle'
+        type: array
+      disconnected:
+        description: Burned/disconnected (no SD token, has vehicle token)
+        items:
+          $ref: '#/definitions/internal_controllers.DisconnectedVehicle'
+        type: array
+      new:
+        description: Not in database at all
+        items:
+          type: string
+        type: array
     type: object
   internal_controllers.VinsGetParams:
     properties:
@@ -422,8 +444,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Checks which of the provided VINs are disconnected (vehicles that
-        were previously connected but had their SD burned).
+      description: 'Returns comprehensive status for all VINs: active (fully onboarded
+        with SD), disconnected (burned SD), or new (not in database). Used by frontend
+        to determine which buttons to show.'
       parameters:
       - description: List of VINs to check
         in: body
@@ -437,7 +460,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/internal_controllers.DisconnectedVehiclesResponse'
+            $ref: '#/definitions/internal_controllers.VehicleStatusesResponse'
         "400":
           description: Bad Request
           schema:
@@ -448,7 +471,7 @@ paths:
             $ref: '#/definitions/fiber.Error'
       security:
       - BearerAuth: []
-      summary: Get disconnected vehicles
+      summary: Get vehicle statuses
       tags:
       - tesla
   /v1/tesla/reauthenticate:

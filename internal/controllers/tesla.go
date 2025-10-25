@@ -306,14 +306,14 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 }
 
 // GetDisconnectedVehicles godoc
-// @Summary     Get disconnected vehicles
-// @Description Checks which of the provided VINs are disconnected (vehicles that were previously connected but had their SD burned).
+// @Summary     Get vehicle statuses
+// @Description Returns comprehensive status for all VINs: active (fully onboarded with SD), disconnected (burned SD), or new (not in database). Used by frontend to determine which buttons to show.
 // @Tags        tesla
 // @Accept      json
 // @Produce     json
 // @Param       request body controllers.DisconnectedVehiclesRequest true "List of VINs to check"
 // @Security    BearerAuth
-// @Success     200 {object} controllers.DisconnectedVehiclesResponse
+// @Success     200 {object} controllers.VehicleStatusesResponse
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/tesla/disconnected [post]
@@ -329,31 +329,50 @@ func (tc *TeslaController) GetDisconnectedVehicles(c *fiber.Ctx) error {
 	}
 
 	if len(req.Vins) == 0 {
-		logger.Debug().Msg("No VINs provided, returning empty list")
-		return c.JSON(DisconnectedVehiclesResponse{Vehicles: []DisconnectedVehicle{}})
-	}
-
-	logger.Debug().Interface("vins", req.Vins).Msg("Checking disconnected vehicles for VINs")
-
-	disconnectedVehicles, err := tc.teslaService.GetDisconnectedVehiclesByVins(c.Context(), req.Vins)
-	if err != nil {
-		logger.Err(err).Msg("Failed to fetch disconnected vehicles")
-		return tc.translateServiceError(err)
-	}
-
-	response := DisconnectedVehiclesResponse{
-		Vehicles: make([]DisconnectedVehicle, 0, len(disconnectedVehicles)),
-	}
-
-	for _, vehicle := range disconnectedVehicles {
-		response.Vehicles = append(response.Vehicles, DisconnectedVehicle{
-			VIN:                vehicle.Vin,
-			VehicleTokenID:     vehicle.VehicleTokenID.Int,
-			SubscriptionStatus: vehicle.SubscriptionStatus.String,
+		logger.Debug().Msg("No VINs provided, returning empty response")
+		return c.JSON(VehicleStatusesResponse{
+			Active:       []ActiveVehicle{},
+			Disconnected: []DisconnectedVehicle{},
+			New:          []string{},
 		})
 	}
 
-	logger.Info().Msgf("Found %d disconnected vehicles out of %d VINs", len(disconnectedVehicles), len(req.Vins))
+	logger.Debug().Interface("vins", req.Vins).Msg("Checking vehicle statuses for VINs")
+
+	walletAddress := helpers.GetWallet(c)
+	activeDevices, disconnectedDevices, newVins, err := tc.teslaService.GetVehicleStatusesByVins(c.Context(), req.Vins, walletAddress)
+	if err != nil {
+		logger.Err(err).Msg("Failed to fetch vehicle statuses")
+		return tc.translateServiceError(err)
+	}
+
+	response := VehicleStatusesResponse{
+		Active:       make([]ActiveVehicle, 0, len(activeDevices)),
+		Disconnected: make([]DisconnectedVehicle, 0, len(disconnectedDevices)),
+		New:          newVins,
+	}
+
+	// Convert active devices
+	for _, device := range activeDevices {
+		response.Active = append(response.Active, ActiveVehicle{
+			VIN:                device.Vin,
+			VehicleTokenID:     int64(device.VehicleTokenID.Int),
+			SDTokenID:          int64(device.TokenID.Int),
+			SubscriptionStatus: device.SubscriptionStatus.String,
+		})
+	}
+
+	// Convert disconnected devices
+	for _, device := range disconnectedDevices {
+		response.Disconnected = append(response.Disconnected, DisconnectedVehicle{
+			VIN:                device.Vin,
+			VehicleTokenID:     device.VehicleTokenID.Int,
+			SubscriptionStatus: device.SubscriptionStatus.String,
+		})
+	}
+
+	logger.Info().Msgf("Vehicle statuses: %d active, %d disconnected, %d new out of %d VINs",
+		len(response.Active), len(response.Disconnected), len(response.New), len(req.Vins))
 	return c.JSON(response)
 }
 
