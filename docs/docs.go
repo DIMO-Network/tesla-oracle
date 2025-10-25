@@ -214,7 +214,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "Checks which of the provided VINs are disconnected (vehicles that were previously connected but had their SD burned).",
+                "description": "Returns comprehensive status for all VINs: active (fully onboarded with SD), disconnected (burned SD), or new (not in database). Used by frontend to determine which buttons to show.",
                 "consumes": [
                     "application/json"
                 ],
@@ -224,7 +224,7 @@ const docTemplate = `{
                 "tags": [
                     "tesla"
                 ],
-                "summary": "Get disconnected vehicles",
+                "summary": "Get vehicle statuses",
                 "parameters": [
                     {
                         "description": "List of VINs to check",
@@ -240,7 +240,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/internal_controllers.DisconnectedVehiclesResponse"
+                            "$ref": "#/definitions/internal_controllers.VehicleStatusesResponse"
                         }
                     },
                     "400": {
@@ -1270,6 +1270,23 @@ const docTemplate = `{
                 }
             }
         },
+        "internal_controllers.ActiveVehicle": {
+            "type": "object",
+            "properties": {
+                "sdTokenId": {
+                    "type": "integer"
+                },
+                "subscriptionStatus": {
+                    "type": "string"
+                },
+                "vehicleTokenId": {
+                    "type": "integer"
+                },
+                "vin": {
+                    "type": "string"
+                }
+            }
+        },
         "internal_controllers.CompleteOAuthExchangeRequest": {
             "type": "object",
             "properties": {
@@ -1317,17 +1334,6 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_controllers.DisconnectedVehiclesResponse": {
-            "type": "object",
-            "properties": {
-                "vehicles": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/internal_controllers.DisconnectedVehicle"
-                    }
-                }
-            }
-        },
         "internal_controllers.FinalizeResponse": {
             "type": "object",
             "properties": {
@@ -1366,6 +1372,32 @@ const docTemplate = `{
             "properties": {
                 "command": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_controllers.VehicleStatusesResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "description": "Fully onboarded (has SD token)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_controllers.ActiveVehicle"
+                    }
+                },
+                "disconnected": {
+                    "description": "Burned/disconnected (no SD token, has vehicle token)",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_controllers.DisconnectedVehicle"
+                    }
+                },
+                "new": {
+                    "description": "Not in database at all",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
