@@ -56,3 +56,18 @@ type DisconnectedVehiclesRequest struct {
 type DisconnectedVehiclesResponse struct {
 	Vehicles []DisconnectedVehicle `json:"vehicles"`
 }
+
+// ActiveVehicle represents a vehicle that is fully onboarded (has SD token)
+type ActiveVehicle struct {
+	VIN                string `json:"vin"`
+	VehicleTokenID     int64  `json:"vehicleTokenId"`
+	SDTokenID          int64  `json:"sdTokenId"`
+	SubscriptionStatus string `json:"subscriptionStatus,omitempty"`
+}
+
+// VehicleStatusesResponse returns comprehensive status for all VINs
+type VehicleStatusesResponse struct {
+	Active       []ActiveVehicle       `json:"active"`       // Fully onboarded (has SD token)
+	Disconnected []DisconnectedVehicle `json:"disconnected"` // Burned/disconnected (no SD token, has vehicle token)
+	New          []string              `json:"new"`          // Not in database at all
+}

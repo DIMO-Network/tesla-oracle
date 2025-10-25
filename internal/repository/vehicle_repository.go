@@ -45,6 +45,22 @@ func (r *vehicleRepository) GetSyntheticDeviceByVin(ctx context.Context, vin str
 	return sd, nil
 }
 
+// GetSyntheticDevicesByVins retrieves all synthetic devices matching the provided VINs
+func (r *vehicleRepository) GetSyntheticDevicesByVins(ctx context.Context, vins []string) (dbmodels.SyntheticDeviceSlice, error) {
+	if len(vins) == 0 {
+		return dbmodels.SyntheticDeviceSlice{}, nil
+	}
+
+	devices, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.Vin.IN(vins),
+	).All(ctx, r.db.DBS().Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query vehicles with VINs: %w", err)
+	}
+
+	return devices, nil
+}
+
 // GetSyntheticDeviceByTokenID retrieves a synthetic device by its token ID
 func (r *vehicleRepository) GetSyntheticDeviceByTokenID(ctx context.Context, tokenID int64) (*dbmodels.SyntheticDevice, error) {
 	sd, err := dbmodels.SyntheticDevices(
