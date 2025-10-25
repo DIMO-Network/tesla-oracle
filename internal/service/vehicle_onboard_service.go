@@ -717,10 +717,23 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 			}
 
 			// Check if this is a reconnection (existing disconnected device)
-			existingDevice, err := s.repositories.Vehicle.GetSyntheticDeviceByVin(ctx, vin)
-			isReconnection := err == nil && existingDevice != nil &&
-				!existingDevice.TokenID.Valid &&
-				existingDevice.VehicleTokenID.Valid
+			// Query by vehicle_token_id (not VIN) since multiple users can have same VIN
+			var existingDevice *dbmodels.SyntheticDevice
+			var isReconnection bool
+
+			if dbVin.VehicleTokenID.Valid && dbVin.VehicleTokenID.Int64 > 0 {
+				existingDevice, err = s.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, dbVin.VehicleTokenID.Int64)
+				if err == nil && existingDevice != nil && !existingDevice.TokenID.Valid {
+					// Found existing disconnected device (has vehicle_token_id but no sd token_id)
+					isReconnection = true
+					localLog.Debug().
+						Str("vin", vin).
+						Int64("vehicleTokenId", dbVin.VehicleTokenID.Int64).
+						Msg("Found disconnected device for reconnection")
+				} else if err != nil && !errors.Is(err, repository.ErrVehicleNotFound) {
+					localLog.Warn().Err(err).Int64("vehicleTokenId", dbVin.VehicleTokenID.Int64).Msg("Error checking for existing device by vehicle token ID")
+				}
+			}
 
 			var subscriptionStatus null.String
 			if isReconnection {
