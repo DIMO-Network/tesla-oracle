@@ -56,7 +56,7 @@ func (cm *ConsumerManager) startContractEventConsumer(ctx context.Context, group
 		return fmt.Errorf("error creating consumer group: %w", err)
 	}
 
-	proc := consumer.New(*cm.services.DB, cm.settings.TopicContractEvent, cm.settings.VehicleNftAddress, cm.logger)
+	proc := consumer.New(*cm.services.DB, cm.services.TeslaService, cm.settings.TopicContractEvent, cm.settings.VehicleNftAddress, cm.logger)
 
 	group.Go(func() error {
 		return cm.runContractEventConsumer(ctx, proc, cGroup, cm.settings.TopicContractEvent)

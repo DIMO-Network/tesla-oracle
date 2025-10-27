@@ -35,8 +35,13 @@ type contractEventData struct {
 	Contract       common.Address  `json:"contract"`
 }
 
+type TelemetryService interface {
+	UnsubscribeFromTelemetry(ctx context.Context, tokenID int64, walletAddress common.Address) error
+}
+
 type Processor struct {
 	pdb                              db.Store
+	teslaService                     TelemetryService
 	topic                            string
 	vehicleNftAddress                common.Address
 	logger                           *zerolog.Logger
@@ -46,11 +51,13 @@ type Processor struct {
 
 func New(
 	pdb db.Store,
+	teslaService TelemetryService,
 	topic string,
 	vehicleNftAddress common.Address,
 	logger *zerolog.Logger) *Processor {
 	return &Processor{
 		pdb:                              pdb,
+		teslaService:                     teslaService,
 		logger:                           logger,
 		topic:                            topic,
 		vehicleNftAddress:                vehicleNftAddress,
@@ -264,7 +271,25 @@ func (p Processor) handleVehicleTransferEvent(ctx context.Context, data json.Raw
 			Str("vin", device.Vin).
 			Int("sdTokenId", device.TokenID.Int).
 			Int("vehicleTokenId", device.VehicleTokenID.Int).
-			Msg("Deleting synthetic device for burned vehicle")
+			Msg("Stopping telemetry and deleting synthetic device for burned vehicle")
+
+		// Stop telemetry subscription before deleting
+		if device.TokenID.Valid {
+			err = p.teslaService.UnsubscribeFromTelemetry(ctx, int64(device.TokenID.Int), args.From)
+			if err != nil {
+				p.logger.Warn().
+					Err(err).
+					Str("vin", device.Vin).
+					Int("sdTokenId", device.TokenID.Int).
+					Msg("Failed to unsubscribe from telemetry, continuing with deletion")
+				// Don't return error - continue with deletion even if unsubscribe fails
+			} else {
+				p.logger.Info().
+					Str("vin", device.Vin).
+					Int("sdTokenId", device.TokenID.Int).
+					Msg("Successfully unsubscribed from telemetry")
+			}
+		}
 
 		// Hard delete - remove entire SD record
 		_, err = device.Delete(ctx, p.pdb.DBS().Writer)
