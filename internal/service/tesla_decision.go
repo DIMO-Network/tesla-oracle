@@ -25,6 +25,7 @@ const (
 const (
 	ActionRetryRefresh  = "retry_refresh"
 	ActionLoginRequired = "login_required"
+	ActionMissingScopes = "missing_scopes"
 )
 
 const (

@@ -477,6 +477,8 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 		expectedResponse   *mods.StatusDecision
 		expectedStatusCode int
 		telemetryStatus    bool
+		customToken        string // Optional: custom JWT token with specific scopes
+		requireScopes      bool   // Whether to set required scopes in settings
 	}{
 		{
 			name: "VehicleCommandProtocolRequired and KeyPaired",
@@ -573,6 +575,21 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
+		{
+			name: "Missing required scopes",
+			fleetStatus: &core.VehicleFleetStatus{
+				VehicleCommandProtocolRequired: true,
+				KeyPaired:                      true,
+			},
+			telemetryStatus: false,
+			customToken:     createJWTTokenWithScopes([]string{"vehicle_device_data"}), // Missing vehicle_location
+			requireScopes:   true,
+			expectedResponse: &mods.StatusDecision{
+				Action:  service.ActionMissingScopes,
+				Message: service.MessageGenericLoginRequired,
+			},
+			expectedStatusCode: fiber.StatusOK,
+		},
 	}
 
 	for _, tc := range testCases {
@@ -580,22 +597,44 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			// given
 			settings, logger, repos := s.createTestDependencies()
 
-			// when
-			mockTeslaService, mockCredStore := s.setupGetStatusMocks(tc.fleetStatus)
-			mockIdentitySvc := s.setupMockIdentityService()
-			repos.Credential = mockCredStore
-
-			// Add telemetry status mock for test cases that result in ActionSetTelemetryConfig
-			if (tc.fleetStatus.VehicleCommandProtocolRequired && tc.fleetStatus.KeyPaired) ||
-				(tc.fleetStatus.SafetyScreenStreamingToggleEnabled != nil && *tc.fleetStatus.SafetyScreenStreamingToggleEnabled) {
-				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&core.VehicleTelemetryStatus{
-					Configured: tc.telemetryStatus,
-				}, nil)
+			// Set required scopes if needed for this test case
+			if tc.requireScopes {
+				settings.TeslaRequiredScopes = "vehicle_device_data,vehicle_location"
 			}
+
+			// when
+			var mockTeslaService *test.MockTeslaFleetAPIService
+			var mockCredStore *test.MockCredStore
+
+			// Skip fleet status mock setup for missing scopes test since VirtualKeyConnectionStatus won't be called
+			if tc.requireScopes {
+				// Don't set up VirtualKeyConnectionStatus mock - scope check happens before it's called
+				mockTeslaService = new(test.MockTeslaFleetAPIService)
+			} else {
+				mockTeslaService, mockCredStore = s.setupGetStatusMocks(tc.fleetStatus)
+				repos.Credential = mockCredStore
+
+				// Add telemetry status mock for test cases that result in ActionSetTelemetryConfig
+				if (tc.fleetStatus.VehicleCommandProtocolRequired && tc.fleetStatus.KeyPaired) ||
+					(tc.fleetStatus.SafetyScreenStreamingToggleEnabled != nil && *tc.fleetStatus.SafetyScreenStreamingToggleEnabled) {
+					mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&core.VehicleTelemetryStatus{
+						Configured: tc.telemetryStatus,
+					}, nil)
+				}
+			}
+
+			mockIdentitySvc := s.setupMockIdentityService()
 
 			tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, logger)
 			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
-			dbVin := s.createTestSyntheticDeviceWithStatus(new(cipher.ROT13Cipher), "")
+
+			// Create synthetic device with custom token if provided
+			var dbVin *models.SyntheticDevice
+			if tc.customToken != "" {
+				dbVin = s.createTestSyntheticDeviceWithCustomToken(new(cipher.ROT13Cipher), tc.customToken, "")
+			} else {
+				dbVin = s.createTestSyntheticDeviceWithStatus(new(cipher.ROT13Cipher), "")
+			}
 			defer func() {
 				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
 			}()
@@ -2114,12 +2153,15 @@ func (s *TeslaControllerTestSuite) assertVirtualKeyStatusResponse(resp *http.Res
 }
 
 func (s *TeslaControllerTestSuite) assertGetStatusResponse(resp *http.Response, expectedResponse *mods.StatusDecision, expectedStatusCode int) {
-	var actualResponse mods.StatusDecision
+	var actualResponse mods.VehicleStatusResponse
 	s.assertJSONResponse(resp, &actualResponse, expectedStatusCode)
 
 	// Assert the response content
 	s.Equal(expectedResponse.Message, actualResponse.Message)
 	s.Equal(expectedResponse.Next, actualResponse.Next)
+	if expectedResponse.Action != "" {
+		s.Equal(expectedResponse.Action, actualResponse.Action)
+	}
 }
 
 // Helper function to assert SubmitCommand response
@@ -2158,4 +2200,46 @@ func (s *TeslaControllerTestSuite) createTestSyntheticDeviceWithStatus(cipher ci
 
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 	return dbVin
+}
+
+// createTestSyntheticDeviceWithCustomToken creates a synthetic device with a custom access token (e.g., JWT with specific scopes)
+func (s *TeslaControllerTestSuite) createTestSyntheticDeviceWithCustomToken(cipher cipher.Cipher, accessToken string, subscriptionStatus string) *models.SyntheticDevice {
+	encryptedAccessToken, _ := cipher.Encrypt(accessToken)
+	encryptedRefreshToken, _ := cipher.Encrypt("mockRefreshToken")
+
+	currentTime := time.Now()
+	accessExpireAt := currentTime.Add(time.Hour)
+	refreshExpireAt := currentTime.AddDate(0, 3, 0)
+
+	dbVin := &models.SyntheticDevice{
+		Address:           common.HexToAddress("0xabcdef1234567890abcdef1234567890abcdef12").Bytes(),
+		Vin:               vin,
+		TokenID:           null.NewInt(456, true),
+		VehicleTokenID:    null.NewInt(vehicleTokenID, true),
+		WalletChildNumber: null.IntFrom(111),
+		AccessToken:       null.StringFrom(encryptedAccessToken),
+		RefreshToken:      null.StringFrom(encryptedRefreshToken),
+		AccessExpiresAt:   null.TimeFrom(accessExpireAt.In(time.UTC)),
+		RefreshExpiresAt:  null.TimeFrom(refreshExpireAt.In(time.UTC)),
+	}
+
+	if subscriptionStatus != "" {
+		dbVin.SubscriptionStatus = null.StringFrom(subscriptionStatus)
+	}
+
+	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+	return dbVin
+}
+
+// createJWTTokenWithScopes creates a JWT token with the specified scopes
+func createJWTTokenWithScopes(scopes []string) string {
+	claims := jwt.MapClaims{
+		"scp":     scopes,
+		"ou_code": "NA",
+		"exp":     time.Now().Add(time.Hour).Unix(),
+		"iat":     time.Now().Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenString, _ := token.SignedString([]byte("test-secret"))
+	return tokenString
 }

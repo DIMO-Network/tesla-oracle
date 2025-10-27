@@ -397,7 +397,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	}
 
 	walletAddress := helpers.GetWallet(c)
-	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, walletAddress, true)
+	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, walletAddress, true, tc.requiredScopes)
 	if err != nil {
 		return tc.translateServiceError(err)
 	}
@@ -433,7 +433,7 @@ func (tc *TeslaController) GetStatusAdmin(c *fiber.Ctx) error {
 	}
 
 	walletAddress := helpers.GetWallet(c)
-	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, walletAddress, false)
+	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, walletAddress, false, tc.requiredScopes)
 	if err != nil {
 		return tc.translateServiceError(err)
 	}
