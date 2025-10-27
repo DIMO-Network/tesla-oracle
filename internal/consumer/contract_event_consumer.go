@@ -2,7 +2,9 @@ package consumer
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 
@@ -30,11 +32,18 @@ type contractEventData struct {
 	EventName      string          `json:"eventName"`
 	EventSignature string          `json:"eventSignature"`
 	Arguments      json.RawMessage `json:"arguments"`
+	Contract       common.Address  `json:"contract"`
+}
+
+type TelemetryService interface {
+	UnsubscribeFromTelemetry(ctx context.Context, tokenID int64, walletAddress common.Address) error
 }
 
 type Processor struct {
 	pdb                              db.Store
+	teslaService                     TelemetryService
 	topic                            string
+	vehicleNftAddress                common.Address
 	logger                           *zerolog.Logger
 	syntheticDeviceNodeMintedEventID string
 	syntheticDeviceNodeBurnedEventID string
@@ -42,12 +51,16 @@ type Processor struct {
 
 func New(
 	pdb db.Store,
+	teslaService TelemetryService,
 	topic string,
+	vehicleNftAddress common.Address,
 	logger *zerolog.Logger) *Processor {
 	return &Processor{
 		pdb:                              pdb,
+		teslaService:                     teslaService,
 		logger:                           logger,
 		topic:                            topic,
+		vehicleNftAddress:                vehicleNftAddress,
 		syntheticDeviceNodeMintedEventID: "0x5a560c1adda92bd6cbf9c891dc38e9e2973b7963493f2364caa40a4218346280",
 		syntheticDeviceNodeBurnedEventID: "0xe4edc3c1f917608d486e02df63af34158f185b78cef44615aebee26c09064122",
 	}
@@ -87,6 +100,22 @@ func (p Processor) ConsumeClaim(session sarama.ConsumerGroupSession, claim saram
 				if err := p.handleSyntheticDeviceNodeBurned(session.Context(), event.Data.Arguments); err != nil {
 					p.logger.Err(err).Msg("failed to process tesla device burn")
 					continue
+				}
+			}
+
+			if event.Data.Contract == p.vehicleNftAddress {
+				// handle vehicle NFT events
+				p.logger.Debug().
+					Str("eventName", event.Data.EventName).
+					Str("eventSignature", event.Data.EventSignature).
+					Str("contract", event.Data.Contract.Hex()).
+					Msg("Received vehicle NFT event")
+
+				if event.Data.EventName == "Transfer" {
+					if err := p.handleVehicleTransferEvent(session.Context(), event.Data.Arguments); err != nil {
+						p.logger.Err(err).Msg("failed to process vehicle transfer event")
+						continue
+					}
 				}
 			}
 
@@ -195,6 +224,85 @@ func (p Processor) handleSyntheticDeviceNodeBurned(ctx context.Context, data jso
 		Str("vin", device.Vin).
 		Int("vehicleTokenId", device.VehicleTokenID.Int).
 		Msg("Successfully disconnected synthetic device - vehicle data preserved for reconnection")
+
+	return nil
+}
+
+// TransferData describes the fields of an ERC-721 Transfer(address,address,uint256) event.
+type TransferData struct {
+	From    common.Address
+	To      common.Address
+	TokenID *big.Int
+}
+
+var zeroAddress common.Address
+
+func (p Processor) handleVehicleTransferEvent(ctx context.Context, data json.RawMessage) error {
+
+	var args TransferData
+	if err := json.Unmarshal(data, &args); err != nil {
+		return err
+	}
+
+	// Handle vehicle burn - delete entire SD record
+	if args.To == zeroAddress {
+		p.logger.Info().
+			Int64("vehicleTokenId", args.TokenID.Int64()).
+			Msg("Vehicle NFT burned - checking if Tesla synthetic device exists")
+
+		// Find synthetic device by vehicle_token_id
+		// Query from Writer to avoid race conditions since we're about to delete
+		device, err := models.SyntheticDevices(
+			models.SyntheticDeviceWhere.VehicleTokenID.EQ(
+				null.IntFrom(int(args.TokenID.Int64()))),
+		).One(ctx, p.pdb.DBS().Writer)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				// Not found means this is not a Tesla vehicle we're tracking - skip silently
+				p.logger.Debug().
+					Int64("vehicleTokenId", args.TokenID.Int64()).
+					Msg("Burned vehicle not found in our database - not a Tesla vehicle, skipping")
+				return nil
+			}
+			// Other database errors should be returned
+			return fmt.Errorf("failed to query synthetic device for vehicle token %d: %w", args.TokenID.Int64(), err)
+		}
+
+		p.logger.Info().
+			Str("vin", device.Vin).
+			Int("sdTokenId", device.TokenID.Int).
+			Int("vehicleTokenId", device.VehicleTokenID.Int).
+			Msg("Stopping telemetry and deleting synthetic device for burned vehicle")
+
+		// Stop telemetry subscription before deleting
+		if device.TokenID.Valid {
+			err = p.teslaService.UnsubscribeFromTelemetry(ctx, int64(device.TokenID.Int), args.From)
+			if err != nil {
+				p.logger.Warn().
+					Err(err).
+					Str("vin", device.Vin).
+					Int("sdTokenId", device.TokenID.Int).
+					Msg("Failed to unsubscribe from telemetry, continuing with deletion")
+				// Don't return error - continue with deletion even if unsubscribe fails
+			} else {
+				p.logger.Info().
+					Str("vin", device.Vin).
+					Int("sdTokenId", device.TokenID.Int).
+					Msg("Successfully unsubscribed from telemetry")
+			}
+		}
+
+		// Hard delete - remove entire SD record
+		_, err = device.Delete(ctx, p.pdb.DBS().Writer)
+		if err != nil {
+			return fmt.Errorf("failed to delete synthetic device for vehicle token %d: %w", args.TokenID.Int64(), err)
+		}
+
+		p.logger.Info().
+			Str("vin", device.Vin).
+			Int64("vehicleTokenId", args.TokenID.Int64()).
+			Msg("Successfully deleted synthetic device for burned vehicle")
+	}
 
 	return nil
 }

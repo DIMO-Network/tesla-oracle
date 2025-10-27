@@ -87,6 +87,12 @@ export class TeslaElement extends BaseOnboardingElement {
     @state()
     private linkOpened = false;
 
+    @state()
+    private isReconnecting = false;
+
+    @state()
+    private isOnboarding = false;
+
     connectedCallback() {
         super.connectedCallback();
 
@@ -208,9 +214,15 @@ export class TeslaElement extends BaseOnboardingElement {
                             <div class="text-lg font-medium">Tesla Vehicle</div>
                         </div>
                         <button
-                            class="button-primary"
+                            class="button-primary ${this.isReconnecting ? 'opacity-50 cursor-not-allowed' : ''}"
                             @click=${() => this.handleReconnectClick(vehicle.vin, vehicle.vehicleTokenId)}
-                        >Reconnect Vehicle</button>
+                            ?disabled=${this.isReconnecting}
+                        >
+                            ${this.isReconnecting ? html`
+                                <span class="inline-block">Reconnecting...</span>
+                                <span class="inline-block animate-spin ml-2">⟳</span>
+                            ` : 'Reconnect Vehicle'}
+                        </button>
                     </div>
                 `)}
             </div>
@@ -255,11 +267,16 @@ export class TeslaElement extends BaseOnboardingElement {
                         >Verify virtual key setup</button>
 
                         <button
-                                class="button-primary ${!this.virtualKeyChecked || this.canSetupVirtualKey ? 'disabled' : ''}"
+                                class="button-primary ${!this.virtualKeyChecked || this.canSetupVirtualKey || this.isOnboarding ? 'disabled' : ''}"
                                 @click=${() => this.handleContinueClick(item.vin)}
-                                ?disabled=${!this.virtualKeyChecked || this.canSetupVirtualKey}
+                                ?disabled=${!this.virtualKeyChecked || this.canSetupVirtualKey || this.isOnboarding}
                                 ?hidden=${!this.virtualKeyChecked}
-                        >Continue</button>
+                        >
+                            ${this.isOnboarding ? html`
+                                <span class="inline-block">Processing...</span>
+                                <span class="inline-block animate-spin ml-2">⟳</span>
+                            ` : 'Continue'}
+                        </button>
                     </div>
                 </div>`)}
         `
@@ -368,12 +385,22 @@ export class TeslaElement extends BaseOnboardingElement {
             }
         }
 
-        this.onboardVehicleTask.run([vin, vehicleTokenId]);
+        this.isOnboarding = true;
+        try {
+            await this.onboardVehicleTask.run([vin, vehicleTokenId]);
+        } finally {
+            this.isOnboarding = false;
+        }
     }
 
     async handleReconnectClick(vin: string, vehicleTokenId: number) {
         // Run the onboarding flow with the vehicleTokenId
         // This will trigger: VerifyVins → GetMintData → SubmitMintData → Finalize
-        this.onboardVehicleTask.run([vin, vehicleTokenId]);
+        this.isReconnecting = true;
+        try {
+            await this.onboardVehicleTask.run([vin, vehicleTokenId]);
+        } finally {
+            this.isReconnecting = false;
+        }
     }
 }
