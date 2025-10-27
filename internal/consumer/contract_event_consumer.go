@@ -251,10 +251,11 @@ func (p Processor) handleVehicleTransferEvent(ctx context.Context, data json.Raw
 			Msg("Vehicle NFT burned - checking if Tesla synthetic device exists")
 
 		// Find synthetic device by vehicle_token_id
+		// Query from Writer to avoid race conditions since we're about to delete
 		device, err := models.SyntheticDevices(
 			models.SyntheticDeviceWhere.VehicleTokenID.EQ(
 				null.IntFrom(int(args.TokenID.Int64()))),
-		).One(ctx, p.pdb.DBS().Reader)
+		).One(ctx, p.pdb.DBS().Writer)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				// Not found means this is not a Tesla vehicle we're tracking - skip silently
