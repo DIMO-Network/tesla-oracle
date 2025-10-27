@@ -303,8 +303,7 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, wal
 		return nil, err
 	}
 
-	// Validate access token has required scopes
-	if len(requiredScopes) > 0 {
+	// Validate access token has required scopesif len(requiredScopes) > 0 {
 		if err := ts.validateAccessTokenWithScopes(accessToken, requiredScopes); err != nil {
 			return &models.StatusDecision{
 				Action:  ActionMissingScopes,

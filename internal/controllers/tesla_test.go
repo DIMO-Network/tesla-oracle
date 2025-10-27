@@ -610,7 +610,6 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			if tc.requireScopes {
 				// Don't set up VirtualKeyConnectionStatus mock - scope check happens before it's called
 				mockTeslaService = new(test.MockTeslaFleetAPIService)
-				mockCredStore = nil
 			} else {
 				mockTeslaService, mockCredStore = s.setupGetStatusMocks(tc.fleetStatus)
 				repos.Credential = mockCredStore
