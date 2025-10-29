@@ -262,7 +262,6 @@ export class TeslaElement extends BaseOnboardingElement {
                         <button
                                 class="button-primary"
                                 @click=${() => this.handleOnboardClick(item.vin)}
-                                ?disabled=${this.virtualKeyChecked}
                                 ?hidden=${!this.linkOpened}
                         >Verify virtual key setup</button>
 
