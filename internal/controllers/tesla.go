@@ -655,6 +655,7 @@ func (tc *TeslaController) translateServiceError(err error) error {
 		return fiber.NewError(fiber.StatusForbidden, err.Error())
 	default:
 		// For unknown errors
+		tc.logger.Err(err).Msg("Unexpected error.")
 		return fiber.NewError(fiber.StatusInternalServerError, "Internal server error")
 	}
 }
