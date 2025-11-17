@@ -164,8 +164,8 @@ func (ts *TeslaService) ProcessAuthCodeExchange(ctx context.Context, authCode, r
 		if errors.Is(err, core.ErrInvalidAuthCode) || errors.Is(err, core.ErrTeslaAPICall) || errors.Is(err, core.ErrHTTPRequest) {
 			return nil, err
 		}
-		// Wrap any other unexpected errors
-		return nil, fmt.Errorf("%w: %s", core.ErrCredentialStore, err.Error())
+		// Wrap any other unexpected errors (use %v to preserve error message while maintaining core error for errors.Is)
+		return nil, fmt.Errorf("%w: %v", core.ErrCredentialStore, err)
 	}
 
 	// Validate refresh token is present
@@ -617,7 +617,7 @@ func (ts *TeslaService) validateAccessTokenWithScopes(accessToken string, requir
 
 	_, _, err := jwt.NewParser().ParseUnverified(accessToken, &claims)
 	if err != nil {
-		return fmt.Errorf("%w: %s", core.ErrInvalidAccessToken, err.Error())
+		return fmt.Errorf("%w: %v", core.ErrInvalidAccessToken, err)
 	}
 
 	var missingScopes []string

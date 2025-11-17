@@ -230,7 +230,7 @@ func (t *teslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context
 			return nil, fmt.Errorf("%w: %s - %s", ErrTeslaAPICall, e.ErrorCode, e.ErrorDescription)
 		}
 		// Network/timeout errors or other non-OAuth errors
-		return nil, fmt.Errorf("%w: %s", ErrHTTPRequest, err.Error())
+		return nil, fmt.Errorf("%w: %v", ErrHTTPRequest, err)
 	}
 
 	return &TeslaAuthCodeResponse{
@@ -350,7 +350,7 @@ func (t *teslaFleetAPIService) GetVehicles(ctx context.Context, token string) ([
 		var vehicles TeslaResponseWrapper[[]TeslaVehicle]
 		err = json.Unmarshal(body, &vehicles)
 		if err != nil {
-			return nil, fmt.Errorf("%w: invalid response encountered while fetching user vehicles: %s", ErrTeslaAPICall, err.Error())
+			return nil, fmt.Errorf("%w: invalid response encountered while fetching user vehicles: %v", ErrTeslaAPICall, err)
 		}
 
 		out = append(out, vehicles.Response...)
@@ -655,7 +655,7 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 
 	resp, err := t.HTTPClient.ExecuteRequestWithAuth("/"+url.Path, method, body, "Bearer "+token)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", ErrHTTPRequest, err.Error())
+		return nil, fmt.Errorf("%w: %v", ErrHTTPRequest, err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -663,17 +663,17 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 			return nil, ErrWrongRegion
 		}
 		if typ, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type")); err != nil {
-			return nil, fmt.Errorf("%w: status code %d and unparseable content type %q: %s", ErrTeslaAPICall, resp.StatusCode, resp.Header.Get("Content-Type"), err.Error())
+			return nil, fmt.Errorf("%w: status code %d and unparseable content type %q: %v", ErrTeslaAPICall, resp.StatusCode, resp.Header.Get("Content-Type"), err)
 		} else if typ != "application/json" {
 			return nil, fmt.Errorf("%w: status code %d and non-JSON content type %s", ErrTeslaAPICall, resp.StatusCode, resp.Header.Get("Content-Type"))
 		}
 		b, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("%w: error reading response body: %s", ErrHTTPRequest, err.Error())
+			return nil, fmt.Errorf("%w: error reading response body: %v", ErrHTTPRequest, err)
 		}
 		var errBody TeslaFleetAPIError
 		if err := json.Unmarshal(b, &errBody); err != nil {
-			return nil, fmt.Errorf("%w: couldn't parse Tesla error response body: %s", ErrTeslaAPICall, err.Error())
+			return nil, fmt.Errorf("%w: couldn't parse Tesla error response body: %v", ErrTeslaAPICall, err)
 		}
 		t.log.Info().Int("code", resp.StatusCode).Str("error", errBody.Error).Str("errorDescription", errBody.ErrorDescription).Str("url", url.String()).Msg("Tesla error.")
 
@@ -686,7 +686,7 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("%w: error reading response body: %s", ErrHTTPRequest, err.Error())
+		return nil, fmt.Errorf("%w: error reading response body: %v", ErrHTTPRequest, err)
 	}
 
 	return b, nil
