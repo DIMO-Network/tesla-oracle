@@ -200,8 +200,6 @@ func NewTeslaFleetAPIService(settings *config.Settings, logger *zerolog.Logger) 
 	}, nil
 }
 
-var ErrInvalidAuthCode = errors.New("authorization code invalid, expired, or revoked")
-
 // CompleteTeslaAuthCodeExchange calls Tesla Fleet API and exchange auth code for a new auth and refresh token
 func (t *teslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*TeslaAuthCodeResponse, error) {
 	conf := oauth2.Config{
@@ -231,7 +229,7 @@ func (t *teslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context
 			t.log.Info().Str("error", e.ErrorCode).Str("errorDescription", e.ErrorDescription).Msg("Code exchange failure.")
 			errString = e.ErrorDescription
 		}
-		return nil, fmt.Errorf("error occurred completing authorization: %s", errString)
+		return nil, fmt.Errorf("%w: %s", ErrInvalidAuthCode, errString)
 	}
 
 	return &TeslaAuthCodeResponse{
@@ -344,13 +342,14 @@ func (t *teslaFleetAPIService) GetVehicles(ctx context.Context, token string) ([
 
 		body, err := t.performRequest(ctx, url, token, http.MethodGet, nil)
 		if err != nil {
-			return nil, fmt.Errorf("failed to list vehicles: %w", err)
+			// performRequest already wraps errors appropriately
+			return nil, err
 		}
 
 		var vehicles TeslaResponseWrapper[[]TeslaVehicle]
 		err = json.Unmarshal(body, &vehicles)
 		if err != nil {
-			return nil, fmt.Errorf("invalid response encountered while fetching user vehicles: %w", err)
+			return nil, fmt.Errorf("%w: invalid response encountered while fetching user vehicles: %s", ErrTeslaAPICall, err.Error())
 		}
 
 		out = append(out, vehicles.Response...)
@@ -655,7 +654,7 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 
 	resp, err := t.HTTPClient.ExecuteRequestWithAuth("/"+url.Path, method, body, "Bearer "+token)
 	if err != nil {
-		return nil, fmt.Errorf("failed to make request: %w", err)
+		return nil, fmt.Errorf("%w: %s", ErrHTTPRequest, err.Error())
 	}
 
 	if resp.StatusCode != http.StatusOK {
@@ -663,17 +662,17 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 			return nil, ErrWrongRegion
 		}
 		if typ, _, err := mime.ParseMediaType(resp.Header.Get("Content-Type")); err != nil {
-			return nil, fmt.Errorf("status code %d and unparseable content type %q: %w", resp.StatusCode, resp.Header.Get("Content-Type"), err)
+			return nil, fmt.Errorf("%w: status code %d and unparseable content type %q: %s", ErrTeslaAPICall, resp.StatusCode, resp.Header.Get("Content-Type"), err.Error())
 		} else if typ != "application/json" {
-			return nil, fmt.Errorf("status code %d and non-JSON content type %s", resp.StatusCode, resp.Header.Get("Content-Type"))
+			return nil, fmt.Errorf("%w: status code %d and non-JSON content type %s", ErrTeslaAPICall, resp.StatusCode, resp.Header.Get("Content-Type"))
 		}
 		b, err := io.ReadAll(resp.Body)
 		if err != nil {
-			return nil, fmt.Errorf("error reading response body: %w", err)
+			return nil, fmt.Errorf("%w: error reading response body: %s", ErrHTTPRequest, err.Error())
 		}
 		var errBody TeslaFleetAPIError
 		if err := json.Unmarshal(b, &errBody); err != nil {
-			return nil, fmt.Errorf("couldn't parse Tesla error response body: %w", err)
+			return nil, fmt.Errorf("%w: couldn't parse Tesla error response body: %s", ErrTeslaAPICall, err.Error())
 		}
 		t.log.Info().Int("code", resp.StatusCode).Str("error", errBody.Error).Str("errorDescription", errBody.ErrorDescription).Str("url", url.String()).Msg("Tesla error.")
 
@@ -681,12 +680,12 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 			return nil, ErrFleetAPIUnauthorized
 		}
 
-		return nil, fmt.Errorf("error occurred calling Tesla api: %s", errBody.Error)
+		return nil, fmt.Errorf("%w: %s", ErrTeslaAPICall, errBody.Error)
 	}
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("error reading response body: %w", err)
+		return nil, fmt.Errorf("%w: error reading response body: %s", ErrHTTPRequest, err.Error())
 	}
 
 	return b, nil
