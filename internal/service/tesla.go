@@ -160,11 +160,11 @@ func (ts *TeslaService) ProcessAuthCodeExchange(ctx context.Context, authCode, r
 	// Exchange auth code for tokens
 	teslaAuth, err := ts.fleetAPISvc.CompleteTeslaAuthCodeExchange(ctx, authCode, redirectURI)
 	if err != nil {
-		// Check if this is an invalid auth code error
-		if errors.Is(err, core.ErrInvalidAuthCode) {
+		// Return specific errors as-is so they can be properly translated by the controller
+		if errors.Is(err, core.ErrInvalidAuthCode) || errors.Is(err, core.ErrTeslaAPICall) || errors.Is(err, core.ErrHTTPRequest) {
 			return nil, err
 		}
-		// Wrap other errors as credential store errors
+		// Wrap any other unexpected errors
 		return nil, fmt.Errorf("%w: %s", core.ErrCredentialStore, err.Error())
 	}
 
