@@ -673,7 +673,7 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 		}
 		var errBody TeslaFleetAPIError
 		if err := json.Unmarshal(b, &errBody); err != nil {
-			return nil, fmt.Errorf("%w: couldn't parse Tesla error response body: %w", ErrTeslaAPICall, err)
+			return nil, fmt.Errorf("%w: couldn't parse Tesla error response body: %v", ErrTeslaAPICall, err)
 		}
 		t.log.Info().Int("code", resp.StatusCode).Str("error", errBody.Error).Str("errorDescription", errBody.ErrorDescription).Str("url", url.String()).Msg("Tesla error.")
 
