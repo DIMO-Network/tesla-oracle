@@ -686,7 +686,7 @@ func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL,
 
 	b, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("%w: error reading response body: %w", ErrHTTPRequest, err)
+		return nil, fmt.Errorf("%w: error reading response body: %v", ErrHTTPRequest, err)
 	}
 
 	return b, nil
