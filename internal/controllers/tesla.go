@@ -616,6 +616,12 @@ func (tc *TeslaController) translateServiceError(err error) error {
 		return fiber.NewError(fiber.StatusUnauthorized, "No credentials found for vehicle. Please reauthenticate.")
 	case errors.Is(err, core.ErrTokenExpired):
 		return fiber.NewError(fiber.StatusUnauthorized, "Refresh token has expired. Please reauthenticate.")
+	case errors.Is(err, core.ErrInvalidAuthCode):
+		return fiber.NewError(fiber.StatusBadRequest, "Authorization code is invalid, expired, or has been revoked. Please try authenticating again.")
+	case errors.Is(err, core.ErrInvalidAccessToken):
+		return fiber.NewError(fiber.StatusUnauthorized, "Access token is invalid or malformed. Please reauthenticate.")
+	case errors.Is(err, core.ErrMissingScopes):
+		return fiber.NewError(fiber.StatusUnauthorized, "Access token is missing required scopes. Please reauthenticate with the correct permissions.")
 	case errors.Is(err, core.ErrTelemetryLimitReached):
 		return fiber.NewError(fiber.StatusConflict, "Telemetry subscription limit reached. Vehicle has reached max supported applications and new fleet telemetry requests cannot be added to the vehicle.")
 	case errors.Is(err, core.ErrTelemetryNotReady):
@@ -627,6 +633,12 @@ func (tc *TeslaController) translateServiceError(err error) error {
 			return fiber.NewError(fiber.StatusInternalServerError, "Region detection failed. Waiting on a fix from Tesla.")
 		}
 		return fiber.NewError(fiber.StatusInternalServerError, "Couldn't fetch vehicles from Tesla.")
+	case errors.Is(err, core.ErrHTTPRequest):
+		tc.logger.Err(err).Msg("HTTP request error.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to communicate with Tesla servers.")
+	case errors.Is(err, core.ErrTeslaAPICall):
+		tc.logger.Err(err).Msg("Tesla API error.")
+		return fiber.NewError(fiber.StatusBadGateway, "Tesla API returned an error. Please try again later.")
 	case errors.Is(err, core.ErrCredentialDecryption):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to decrypt credentials.")
 	case errors.Is(err, core.ErrTokenRefreshFailed):
@@ -642,7 +654,8 @@ func (tc *TeslaController) translateServiceError(err error) error {
 	case errors.Is(err, core.ErrTelemetryUnsubscribe):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to unsubscribe from telemetry data.")
 	case errors.Is(err, core.ErrCredentialStore):
-		return fiber.NewError(fiber.StatusInternalServerError, "Error persisting credentials.")
+		tc.logger.Err(err).Msg("Credential store error.")
+		return fiber.NewError(fiber.StatusInternalServerError, "Failed to store credentials. Please try again.")
 	case errors.Is(err, core.ErrOnboardingRecordCreation):
 		return fiber.NewError(fiber.StatusInternalServerError, "Failed to create onboarding record.")
 	case errors.Is(err, core.ErrDeviceDefinitionNotFound):
