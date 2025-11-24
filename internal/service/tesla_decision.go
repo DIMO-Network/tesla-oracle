@@ -87,6 +87,18 @@ func DecisionTreeAction(fleetStatus *core.VehicleFleetStatus, vehicleTokenID int
 					Method:   "POST",
 					Endpoint: telemetryStart,
 				}
+			} else if !fleetStatus.DiscountedDeviceData {
+				if fleetStatus.KeyPaired {
+					action = ActionSetTelemetryConfig
+					message = MessageReadyToStartDataFlow
+					next = &models.NextAction{
+						Method:   "POST",
+						Endpoint: telemetryStart,
+					}
+				} else {
+					action = ActionOpenTeslaDeeplink
+					message = MessageVirtualKeyNotPaired
+				}
 			} else {
 				action = ActionPromptToggle
 				message = MessageStreamingToggleDisabled
