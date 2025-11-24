@@ -96,7 +96,6 @@ func DecisionTreeAction(fleetStatus *core.VehicleFleetStatus, vehicleTokenID int
 						message = MessageVirtualKeyNotPaired
 					}
 				}
-
 			} else if *fleetStatus.SafetyScreenStreamingToggleEnabled {
 				action = ActionSetTelemetryConfig
 				message = MessageReadyToStartDataFlow
