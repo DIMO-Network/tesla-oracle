@@ -221,12 +221,21 @@ func (t *teslaFleetAPIService) CompleteTeslaAuthCodeExchange(ctx context.Context
 	if err != nil {
 		var e *oauth2.RetrieveError
 		if errors.As(err, &e) {
+			// Log the full Tesla response for debugging
+			logEvent := t.log.Error().
+				Str("error", e.ErrorCode).
+				Str("errorDescription", e.ErrorDescription).
+				Str("responseBody", string(e.Body))
+			if e.Response != nil {
+				logEvent = logEvent.Int("statusCode", e.Response.StatusCode)
+			}
+			logEvent.Msg("Code exchange failure.")
+
 			// Non-standard error code from Tesla. See RFC 6749.
 			if e.ErrorCode == "invalid_auth_code" {
 				return nil, ErrInvalidAuthCode
 			}
 			// Other OAuth errors from Tesla (e.g., invalid_grant, server_error, etc.)
-			t.log.Info().Str("error", e.ErrorCode).Str("errorDescription", e.ErrorDescription).Msg("Code exchange failure.")
 			return nil, fmt.Errorf("%w: %s - %s", ErrTeslaAPICall, e.ErrorCode, e.ErrorDescription)
 		}
 		// Network/timeout errors or other non-OAuth errors
