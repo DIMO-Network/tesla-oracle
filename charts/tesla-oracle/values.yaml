@@ -2,7 +2,7 @@ replicaCount: 1
 image:
   repository: dimozone/tesla-oracle
   pullPolicy: IfNotPresent
-  tag: 1dfcf40
+  tag: '4637503'
 imagePullSecrets: []
 nameOverride: ''
 fullnameOverride: ''
@@ -149,10 +149,10 @@ ingress:
 resources:
   limits:
     cpu: 250m
-    memory: 256Mi
+    memory: 384Mi
   requests:
-    cpu: 50m
-    memory: 128Mi
+    cpu: 5m
+    memory: 32Mi
 autoscaling:
   enabled: false
   minReplicas: 1
