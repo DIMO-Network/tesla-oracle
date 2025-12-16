@@ -100,6 +100,10 @@ export class TeslaElement extends BaseOnboardingElement {
     connectedCallback() {
         super.connectedCallback();
 
+        // Reset auth submission guards on component mount
+        this.isSubmittingAuthCode = false;
+        this.lastSubmittedCode = null;
+
         this.linkingService.useMessageService(this.messageService);
     }
 
@@ -111,11 +115,16 @@ export class TeslaElement extends BaseOnboardingElement {
             }
 
             // Guard against double submission - auth codes are single-use
-            if (this.isSubmittingAuthCode || this.lastSubmittedCode === authorizationCode) {
-                console.debug('Skipping duplicate auth code submission');
+            // Check and set flag atomically (synchronously) before any async work
+            if (this.isSubmittingAuthCode) {
+                console.debug('Skipping auth code submission - request in progress');
                 return [];
             }
-
+            if (this.lastSubmittedCode === authorizationCode) {
+                console.debug('Skipping auth code submission - code already submitted');
+                return [];
+            }
+            // Set flags synchronously to prevent race condition
             this.isSubmittingAuthCode = true;
             this.lastSubmittedCode = authorizationCode;
 
@@ -124,7 +133,17 @@ export class TeslaElement extends BaseOnboardingElement {
                     authorizationCode,
                     redirectUri,
                 }, true);
+
+                // Reset lastSubmittedCode on failure to allow retry
+                if (!response.success) {
+                    this.lastSubmittedCode = null;
+                }
+
                 return response.data?.vehicles || [];
+            } catch (error) {
+                // Reset on error to allow retry
+                this.lastSubmittedCode = null;
+                throw error;
             } finally {
                 this.isSubmittingAuthCode = false;
             }
