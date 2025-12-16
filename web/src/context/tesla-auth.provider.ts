@@ -43,7 +43,11 @@ export class AuthProvider extends LitElement {
         params.forEach((value, key) => {
             console.debug(`${key}: ${value}`);
             if (['locale', 'code', 'state', 'issuer'].includes(key)) {
-                localStorage.setItem(key, value);
+                // Don't persist 'code' in localStorage - OAuth auth codes are single-use
+                // and storing them can cause double-submission errors on page refresh
+                if (key !== 'code') {
+                    localStorage.setItem(key, value);
+                }
                 this._auth = {...this._auth, [key]: value}
                 hadParams = true;
             }

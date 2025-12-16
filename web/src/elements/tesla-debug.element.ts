@@ -68,8 +68,16 @@ export class TeslaDebugElement extends BaseOnboardingElement {
     @state()
     private linkOpened = false;
 
+    // Guard against double submission of auth code
+    private isSubmittingAuthCode = false;
+    private lastSubmittedCode: string | null = null;
+
     connectedCallback() {
         super.connectedCallback();
+
+        // Reset auth submission guards on component mount
+        this.isSubmittingAuthCode = false;
+        this.lastSubmittedCode = null;
 
         this.linkingService.useMessageService(this.messageService);
     }
@@ -81,11 +89,39 @@ export class TeslaDebugElement extends BaseOnboardingElement {
                 return [];
             }
 
-            const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
-                authorizationCode,
-                redirectUri,
-            }, true);
-            return response.data?.vehicles || [];
+            // Guard against double submission - auth codes are single-use
+            // Check and set flag atomically (synchronously) before any async work
+            if (this.isSubmittingAuthCode) {
+                console.debug('Skipping auth code submission - request in progress');
+                return [];
+            }
+            if (this.lastSubmittedCode === authorizationCode) {
+                console.debug('Skipping auth code submission - code already submitted');
+                return [];
+            }
+            // Set flags synchronously to prevent race condition
+            this.isSubmittingAuthCode = true;
+            this.lastSubmittedCode = authorizationCode;
+
+            try {
+                const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
+                    authorizationCode,
+                    redirectUri,
+                }, true);
+
+                // Reset lastSubmittedCode on failure to allow retry
+                if (!response.success) {
+                    this.lastSubmittedCode = null;
+                }
+
+                return response.data?.vehicles || [];
+            } catch (error) {
+                // Reset on error to allow retry
+                this.lastSubmittedCode = null;
+                throw error;
+            } finally {
+                this.isSubmittingAuthCode = false;
+            }
         },
         // arguments to pass into the task. This task watches the arguments for changes to execute the task
         args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri]
