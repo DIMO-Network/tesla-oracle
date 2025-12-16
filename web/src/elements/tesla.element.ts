@@ -93,6 +93,10 @@ export class TeslaElement extends BaseOnboardingElement {
     @state()
     private isOnboarding = false;
 
+    // Guard against double submission of auth code
+    private isSubmittingAuthCode = false;
+    private lastSubmittedCode: string | null = null;
+
     connectedCallback() {
         super.connectedCallback();
 
@@ -106,11 +110,24 @@ export class TeslaElement extends BaseOnboardingElement {
                 return [];
             }
 
-            const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
-                authorizationCode,
-                redirectUri,
-            }, true);
-            return response.data?.vehicles || [];
+            // Guard against double submission - auth codes are single-use
+            if (this.isSubmittingAuthCode || this.lastSubmittedCode === authorizationCode) {
+                console.debug('Skipping duplicate auth code submission');
+                return [];
+            }
+
+            this.isSubmittingAuthCode = true;
+            this.lastSubmittedCode = authorizationCode;
+
+            try {
+                const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
+                    authorizationCode,
+                    redirectUri,
+                }, true);
+                return response.data?.vehicles || [];
+            } finally {
+                this.isSubmittingAuthCode = false;
+            }
         },
         // arguments to pass into the task. This task watches the arguments for changes to execute the task
         args: () => [this.teslaAuth?.code, this.teslaSettings?.redirectUri]
