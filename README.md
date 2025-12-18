@@ -25,9 +25,9 @@ Tesla Auth → List Vehicles → Virtual Key → Verify → Mint Data → Sign �
 **Current Flow (backed by tesla-oracle)**:
 
 1. **Authorize with Tesla** - OAuth flow with Tesla
-2. **`POST /v1/tesla/vehicles`** - Get owned vehicles (`vin`, `externalId`, `device_definition_id`, MMY)
+2. **`POST /v1/vehicles`** - Get owned vehicles (`vin`, `externalId`, `device_definition_id`, MMY)
 3. **Select vehicle** from the list
-4. **`GET /v1/tesla/virtual-key?vin=<vin>`** - Check virtual key pairing status
+4. **`GET /v1/virtual-key?vin=<vin>`** - Check virtual key pairing status
 5. **Depending on the status handle virtual key step with Tesla app**
 6. **`POST /v1/vehicle/verify`** - Verify vehicle with `{vins: [vin]}` payload
 7. **`GET /v1/vehicle/mint?vins=<vin>`** - Get signing payload for the VIN
@@ -62,11 +62,12 @@ Tesla Oracle uses decision trees to determine vehicle status and next actions ba
 #### **Ready to Start Data Flow**
 ```json
 {
-  "message": "Vehicle ready to start data flow. Call start data flow endpoint",
+  "message": "Vehicle ready to start data flow. Submit command to start telemetry",
   "action": "set_telemetry_config",
   "next": {
     "method": "POST",
-    "endpoint": "/v1/tesla/telemetry/123/start"
+    "endpoint": "/v1/commands/123",
+    "body": {"command": "telemetry/start"}
   }
 }
 ```
@@ -105,9 +106,12 @@ Tesla Oracle uses decision trees to determine vehicle status and next actions ba
 
 ### Telemetry Operations
 
-- **Subscribe/Unsubscribe**: Requires `MobileAppDevLicense` wallet (dev license validation)
-- **Start Data Flow**: Requires vehicle ownership validation
-- **Commands**: Require active telemetry subscription status + privilege token authentication
+All telemetry operations are now available via the commands endpoint:
+- **Subscribe**: `POST /v1/commands/{tokenID}` with `{"command": "telemetry/subscribe"}` - Requires `MobileAppDevLicense` wallet (dev license validation)
+- **Unsubscribe**: `POST /v1/commands/{tokenID}` with `{"command": "telemetry/unsubscribe"}` - Requires `MobileAppDevLicense` wallet (dev license validation)
+- **Start Data Flow**: `POST /v1/commands/{tokenID}` with `{"command": "telemetry/start"}` - Requires vehicle ownership validation
+- **Wake Up**: `POST /v1/commands/{tokenID}` with `{"command": "wakeup"}` - Wakes up vehicle from sleep
+- **Vehicle Commands**: `POST /v1/commands/{tokenID}` with commands like `frunk/open`, `doors/lock`, etc. - Require active telemetry subscription status + privilege token authentication
 
 ## ⚡ Background Processing with River Jobs
 

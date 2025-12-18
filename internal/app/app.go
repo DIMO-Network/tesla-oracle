@@ -2,10 +2,11 @@ package app
 
 import (
 	"errors"
-	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
-	"github.com/DIMO-Network/shared/pkg/privileges"
 	"os"
 	"strconv"
+
+	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
+	"github.com/DIMO-Network/shared/pkg/privileges"
 
 	"github.com/DIMO-Network/shared/pkg/middleware/metrics"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -98,32 +99,26 @@ func App(
 	app.Get("/v1/swagger/*", swagger.HandlerDefault)
 	app.Get("/swagger/*", swagger.HandlerDefault)
 
-	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
-	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
-	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
-	teslaGroup.Post("/reauthenticate", teslaCtrl.Reauthenticate)
-	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
-	teslaGroup.Post("/disconnected", teslaCtrl.GetDisconnectedVehicles)
-	teslaGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
+	vehicleGroup := app.Group("/v1", jwtAuth, walletMdw)
+	vehicleGroup.Get("/settings", teslaCtrl.GetSettings)
+	vehicleGroup.Post("/vehicles", teslaCtrl.ListVehicles)
+	vehicleGroup.Post("/reauthenticate", teslaCtrl.Reauthenticate)
+	vehicleGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
+	vehicleGroup.Post("/disconnected", teslaCtrl.GetDisconnectedVehicles)
+	vehicleGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
 
 	// Admin routes without ownership validation
-	adminGroup := app.Group("/v1/admin/tesla", jwtAuth, walletMdw)
+	adminGroup := app.Group("/v1/admin", jwtAuth, walletMdw)
 	adminGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatusAdmin)
-	adminGroup.Post("/:vehicleTokenId/wakeup", teslaCtrl.WakeUpVehicleAdmin)
 
-	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
-	vehicleGroup.Post("/verify", onboardCtrl.VerifyVins)
-	vehicleGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)
-	vehicleGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
-	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
-	vehicleGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
+	onboardingGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
+	onboardingGroup.Post("/verify", onboardCtrl.VerifyVins)
+	onboardingGroup.Get("/mint/status", onboardCtrl.GetMintStatusForVins)
+	onboardingGroup.Get("/mint", onboardCtrl.GetMintDataForVins)
+	onboardingGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
+	onboardingGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
 
-	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
-	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
-	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
-	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
-
-	// we can't use /v1/tesla prefix here because the privilegeAuth middleware requires a different JWT key set URL,
+	// we can't use /v1 prefix here because the privilegeAuth middleware requires a different JWT key set URL,
 	// if we inherit the same prefix - we also inherit the jwtAuth middleware which uses a different key set URL
 	commandsGroup := app.Group("/v1/commands", privilegeAuth)
 	commandsGroup.Post("/:tokenID", privTokenWare.OneOf(settings.VehicleNftAddress, []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)

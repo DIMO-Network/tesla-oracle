@@ -114,210 +114,6 @@ func TestTeslaControllerTestSuite(t *testing.T) {
 	suite.Run(t, new(TeslaControllerTestSuite))
 }
 
-func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
-	testCases := []struct {
-		name                       string
-		fleetStatus                *core.VehicleFleetStatus
-		expectedAction             string
-		expectedStatusCode         int
-		expectedSubscriptionStatus string
-	}{
-		{
-			name: "Start Streaming",
-			fleetStatus: &core.VehicleFleetStatus{
-				VehicleCommandProtocolRequired: true,
-				KeyPaired:                      true,
-			},
-			expectedAction:             service.ActionSetTelemetryConfig,
-			expectedStatusCode:         fiber.StatusOK,
-			expectedSubscriptionStatus: "active",
-		},
-		{
-			name: "Start Polling",
-			fleetStatus: &core.VehicleFleetStatus{
-				VehicleCommandProtocolRequired: false,
-				FirmwareVersion:                "2025.21.11",
-			},
-			expectedAction:             service.ActionStartPolling,
-			expectedStatusCode:         fiber.StatusOK,
-			expectedSubscriptionStatus: "active",
-		},
-		{
-			name: "Open Tesla Deeplink",
-			fleetStatus: &core.VehicleFleetStatus{
-				VehicleCommandProtocolRequired: true,
-				KeyPaired:                      false,
-			},
-			expectedAction:             service.ActionOpenTeslaDeeplink,
-			expectedStatusCode:         fiber.StatusConflict,
-			expectedSubscriptionStatus: "pending",
-		},
-		{
-			name: "Update Firmware",
-			fleetStatus: &core.VehicleFleetStatus{
-				VehicleCommandProtocolRequired: false,
-				FirmwareVersion:                "2023.10.5",
-			},
-			expectedAction:             service.ActionUpdateFirmware,
-			expectedStatusCode:         fiber.StatusConflict,
-			expectedSubscriptionStatus: "pending",
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			// given
-			settings, logger, repos := s.createTestDependencies()
-
-			// when
-			mockTeslaService, mockDevicesService := s.setupMockServices(tc.fleetStatus, tc.expectedAction, false)
-			tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, logger)
-			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, mockDevicesService, *tokenManager)
-			dbVin := s.createTestSyntheticDeviceWithStatus(new(cipher.ROT13Cipher), "")
-			defer func() {
-				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
-			}()
-
-			controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
-			app := s.setupTestApp("/v1/tesla/telemetry/subscribe/:vehicleTokenId", "POST", controller.TelemetrySubscribe)
-
-			//  then
-			req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/subscribe/789", nil)
-			req.Header.Set("Content-Type", "application/json")
-			assert.NoError(s.T(), test.GenerateJWT(req))
-
-			// Execute test
-			resp, err := app.Test(req)
-
-			// verify
-			assert.NoError(s.T(), err)
-			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
-			s.assertMockCalls(mockTeslaService, mockDevicesService, tc.expectedAction)
-			s.assertSubscriptionStatus(tc.expectedSubscriptionStatus, vehicleTokenID)
-		})
-	}
-}
-
-func (s *TeslaControllerTestSuite) TestStartDataFlow() {
-	testCases := []struct {
-		name                       string
-		fleetStatus                *core.VehicleFleetStatus
-		expectedAction             string
-		expectedStatusCode         int
-		expectedConfigLimitReached bool
-	}{
-		{
-			name: "Start Streaming",
-			fleetStatus: &core.VehicleFleetStatus{
-				VehicleCommandProtocolRequired: true,
-				KeyPaired:                      true,
-			},
-			expectedAction:             service.ActionSetTelemetryConfig,
-			expectedStatusCode:         fiber.StatusOK,
-			expectedConfigLimitReached: false,
-		},
-		{
-			name: "Start Polling",
-			fleetStatus: &core.VehicleFleetStatus{
-				VehicleCommandProtocolRequired: false,
-				FirmwareVersion:                "2025.21.11",
-			},
-			expectedAction:             service.ActionStartPolling,
-			expectedStatusCode:         fiber.StatusOK,
-			expectedConfigLimitReached: false,
-		},
-		{
-			name: "Vehicle Not Ready",
-			fleetStatus: &core.VehicleFleetStatus{
-				VehicleCommandProtocolRequired: true,
-				KeyPaired:                      false,
-			},
-			expectedAction:             service.ActionOpenTeslaDeeplink,
-			expectedStatusCode:         fiber.StatusConflict,
-			expectedConfigLimitReached: false,
-		},
-		{
-			name: "Telemetry subscription limit reached",
-			fleetStatus: &core.VehicleFleetStatus{
-				VehicleCommandProtocolRequired: true,
-				KeyPaired:                      true,
-			},
-			expectedAction:             service.ActionDummy,
-			expectedStatusCode:         fiber.StatusConflict,
-			expectedConfigLimitReached: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		s.Run(tc.name, func() {
-			// given
-			settings, logger, repos := s.createTestDependencies()
-
-			// when
-			mockTeslaService, mockDevicesService := s.setupMockServices(tc.fleetStatus, tc.expectedAction, tc.expectedConfigLimitReached)
-			mockIdentitySvc := s.setupMockIdentityService()
-
-			tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, logger)
-			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService, *tokenManager)
-			dbVin := s.createTestSyntheticDeviceWithStatus(new(cipher.ROT13Cipher), "pending")
-			defer func() {
-				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
-			}()
-
-			controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
-			app := s.setupTestApp("/v1/tesla/telemetry/:vehicleTokenId/start", "POST", controller.StartDataFlow)
-
-			// then
-			req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/789/start", nil)
-			req.Header.Set("Content-Type", "application/json")
-			assert.NoError(s.T(), test.GenerateJWT(req))
-
-			resp, err := app.Test(req)
-
-			// verify
-			assert.NoError(s.T(), err)
-			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
-			s.assertMockCalls(mockTeslaService, mockDevicesService, tc.expectedAction)
-			s.assertSubscriptionStatus("pending", vehicleTokenID) // Status should remain unchanged
-			mockIdentitySvc.AssertExpectations(s.T())
-		})
-	}
-}
-
-func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
-	// given
-	settings, logger, repos := s.createTestDependencies()
-
-	// when
-	mockTeslaService, mockDevicesService, mockIdentitySvc := s.setupUnsubscribeMocks()
-
-	mockCredStore := repos.Credential.(*test.MockCredStore)
-	tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, logger)
-	teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService, *tokenManager)
-	controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
-
-	dbVin := s.createTestSyntheticDeviceWithStatus(new(cipher.ROT13Cipher), "active")
-	defer func() {
-		_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
-	}()
-
-	// then
-	app := s.setupTestApp("/v1/tesla/telemetry/unsubscribe/:vehicleTokenId", "POST", controller.UnsubscribeTelemetry)
-	req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/unsubscribe/789", nil)
-	assert.NoError(s.T(), test.GenerateJWT(req))
-
-	resp, err := app.Test(req)
-
-	//  verify
-	assert.NoError(s.T(), err)
-	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
-	s.assertSubscriptionStatus("inactive", vehicleTokenID)
-
-	mockCredStore.AssertExpectations(s.T())
-	mockTeslaService.AssertExpectations(s.T())
-	mockDevicesService.AssertExpectations(s.T())
-}
-
 func (s *TeslaControllerTestSuite) TestListVehicles() {
 	// given
 	wallet := common.HexToAddress(walletAddress)
@@ -358,7 +154,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 
 	// then
 	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
-	req, _ := http.NewRequest("POST", "/v1/tesla/vehicles", strings.NewReader(requestBody))
+	req, _ := http.NewRequest("POST", "/v1/vehicles", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -417,7 +213,7 @@ func (s *TeslaControllerTestSuite) TestReauthenticate() {
 
 	// then
 	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
-	req, _ := http.NewRequest("POST", "/v1/tesla/reauthenticate", strings.NewReader(requestBody))
+	req, _ := http.NewRequest("POST", "/v1/reauthenticate", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -454,8 +250,8 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
 
 	// then
-	app := s.setupFiberApp("/v1/tesla/virtual-key", "GET", controller.GetVirtualKeyStatus)
-	req, _ := createRequest("GET", "/v1/tesla/virtual-key?vin="+vin, "")
+	app := s.setupFiberApp("/v1/virtual-key", "GET", controller.GetVirtualKeyStatus)
+	req, _ := createRequest("GET", "/v1/virtual-key?vin="+vin, "")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
@@ -1059,7 +855,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 				}()
 			}
 
-			riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+			riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos, teslaSvc)
 			require.NoError(s.T(), err)
 
 			controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
@@ -1100,11 +896,11 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 	}
 }
 
-func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
+func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories, teslaService *service.TeslaService) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
 	workers := river.NewWorkers()
 
 	// Create and register Tesla command worker
-	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger, 5*time.Second)
+	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, teslaService, repositories.Command, repositories.Vehicle, &logger, 5*time.Second, settings.MobileAppDevLicense)
 	if err := river.AddWorkerSafely(workers, teslaCommandWorker); err != nil {
 		return nil, nil, fmt.Errorf("failed to add Tesla command worker: %w", err)
 	}
@@ -1216,7 +1012,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 			}()
 
 			// Setup River client
-			riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+			riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos, teslaSvc)
 			require.NoError(s.T(), err)
 
 			// Start River worker to process jobs
@@ -1315,7 +1111,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 		}()
 
 		// Setup River client
-		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos, teslaSvc)
 		require.NoError(s.T(), err)
 
 		// Start River worker
@@ -1405,7 +1201,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 		}()
 
 		// Setup River client
-		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos, teslaSvc)
 		require.NoError(s.T(), err)
 
 		// Start River worker
@@ -1464,6 +1260,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		settings, logger, repos := s.createTestDependencies()
 		cip := new(cipher.ROT13Cipher)
 		tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 		// Create synthetic device for the test
 		dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
@@ -1479,7 +1276,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		}()
 
 		// Setup River client
-		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos, teslaSvc)
 		require.NoError(s.T(), err)
 
 		// Start River worker
@@ -1513,7 +1310,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		mockTeslaService.On("ExecuteCommand", mock.Anything, mock.AnythingOfType("string"), vin, mock.AnythingOfType("string")).Return(nil).Once()
 
 		// Create Tesla service
-		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
+		teslaSvc = service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
@@ -1563,6 +1360,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		settings, logger, repos := s.createTestDependencies()
 		cip := new(cipher.ROT13Cipher)
 		tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 		// Create synthetic device for the test
 		dbVin := s.createTestSyntheticDeviceWithStatus(cip, "active")
@@ -1578,7 +1376,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		}()
 
 		// Setup River client
-		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos)
+		riverClient, _, err := initializeRiver(s.ctx, *logger, &s.settings, mockTeslaService, tokenManager, repos, teslaSvc)
 		require.NoError(s.T(), err)
 
 		// Start River worker
@@ -1594,7 +1392,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		mockTeslaService.On("WakeUpVehicle", mock.Anything, mock.AnythingOfType("string"), vin).Return(nil, fmt.Errorf("some error")).Times(3)
 
 		// Create Tesla service
-		teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
+		teslaSvc = service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 		// Setup controller
 		controller := NewTeslaController(settings, logger, teslaSvc, riverClient, repos.Command)
@@ -1827,7 +1625,7 @@ func (s *TeslaControllerTestSuite) setupTestAppForListVehicles(controller *Tesla
 		return c.Next()
 	})
 	app.Use(helpers.NewWalletMiddleware())
-	app.Post("/v1/tesla/vehicles", controller.ListVehicles)
+	app.Post("/v1/vehicles", controller.ListVehicles)
 	return app
 }
 
@@ -1849,7 +1647,7 @@ func (s *TeslaControllerTestSuite) setupTestAppForReauthenticate(controller *Tes
 		return c.Next()
 	})
 	app.Use(helpers.NewWalletMiddleware())
-	app.Post("/v1/tesla/reauthenticate", controller.Reauthenticate)
+	app.Post("/v1/reauthenticate", controller.Reauthenticate)
 	return app
 }
 

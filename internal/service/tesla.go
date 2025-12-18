@@ -398,17 +398,23 @@ func (ts *TeslaService) ValidateCommandRequest(ctx context.Context, tokenID int6
 		return nil, fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
 	}
 
-	// Check subscription status - commands only allowed for active subscriptions
-	if sd.SubscriptionStatus.String == "inactive" {
+	// Check subscription status - most commands require active subscription
+	// Exceptions: wakeup, telemetry/subscribe, telemetry/start (these can work with inactive subscription)
+	requiresActiveSubscription := command != core.CommandWakeup &&
+		command != core.CommandTelemetrySubscribe &&
+		command != core.CommandTelemetryStart
+
+	if requiresActiveSubscription && sd.SubscriptionStatus.String == "inactive" {
 		ts.logger.Warn().
 			Str("subscriptionStatus", sd.SubscriptionStatus.String).
 			Int("vehicleTokenId", sd.VehicleTokenID.Int).
+			Str("command", command).
 			Msgf("Dropping command request for vehicle due to subscription status")
 		return nil, core.ErrInactiveSubscription
 	}
 
 	// TODO: Should we check if commands are enabled? Who enables them?
-	ts.logger.Debug().Str("vin", sd.Vin).Msg("Command request validation passed")
+	ts.logger.Debug().Str("vin", sd.Vin).Str("command", command).Msg("Command request validation passed")
 
 	return sd, nil
 }
