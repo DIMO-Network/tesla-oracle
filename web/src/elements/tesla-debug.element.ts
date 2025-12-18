@@ -104,7 +104,7 @@ export class TeslaDebugElement extends BaseOnboardingElement {
             this.lastSubmittedCode = authorizationCode;
 
             try {
-                const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
+                const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/vehicles", {
                     authorizationCode,
                     redirectUri,
                 }, true);
@@ -133,7 +133,7 @@ export class TeslaDebugElement extends BaseOnboardingElement {
                 return [];
             }
             const query = qs.stringify({vin});
-            const response = await this.api.callApi<VirtualKeyResponse>("GET", `/v1/tesla/virtual-key?${query}`, null, true);
+            const response = await this.api.callApi<VirtualKeyResponse>("GET", `/v1/virtual-key?${query}`, null, true);
             return response.data || null;
         },
         autoRun: false

@@ -20,11 +20,14 @@ const (
 	CommandDoorsUnlock = "doors/unlock"
 	CommandChargeStart = "charge/start"
 	CommandChargeStop  = "charge/stop"
+	CommandWakeup      = "wakeup"
 )
 
 const (
-	ChargeLimit               = "charge/limit"
-	TelemetrySubscribe string = "telemetry/subscribe"
+	ChargeLimit                 = "charge/limit"
+	CommandTelemetrySubscribe   = "telemetry/subscribe"
+	CommandTelemetryUnsubscribe = "telemetry/unsubscribe"
+	CommandTelemetryStart       = "telemetry/start"
 )
 
 // ValidateCommand validates the command against supported commands
@@ -45,12 +48,16 @@ func ValidateCommand(command string) error {
 // IsCommandSupported checks if the command is in the list of supported commands
 func IsCommandSupported(command string) bool {
 	supportedCommands := map[string]bool{
-		CommandFrunkOpen:   true,
-		CommandTrunkOpen:   true,
-		CommandDoorsLock:   true,
-		CommandDoorsUnlock: true,
-		CommandChargeStart: true,
-		CommandChargeStop:  true,
+		CommandFrunkOpen:            true,
+		CommandTrunkOpen:            true,
+		CommandDoorsLock:            true,
+		CommandDoorsUnlock:          true,
+		CommandChargeStart:          true,
+		CommandChargeStop:           true,
+		CommandWakeup:               true,
+		CommandTelemetrySubscribe:   true,
+		CommandTelemetryUnsubscribe: true,
+		CommandTelemetryStart:       true,
 	}
 
 	return supportedCommands[command]
@@ -65,6 +72,10 @@ func GetSupportedCommandsList() string {
 		CommandDoorsUnlock,
 		CommandChargeStart,
 		CommandChargeStop,
+		CommandWakeup,
+		CommandTelemetrySubscribe,
+		CommandTelemetryUnsubscribe,
+		CommandTelemetryStart,
 	}
 
 	return strings.Join(commands, ", ")
@@ -76,12 +87,16 @@ func GetSupportedCommandsList() string {
 func GetEventTypeForCommand(command string) string {
 	prefix := "zone.dimo.task.tesla"
 	commandEventTypes := map[string]string{
-		CommandFrunkOpen:   fmt.Sprintf("%s.frunk.open", prefix),
-		CommandTrunkOpen:   fmt.Sprintf("%s.trunk.open", prefix),
-		CommandDoorsLock:   fmt.Sprintf("%s.doors.lock", prefix),
-		CommandDoorsUnlock: fmt.Sprintf("%s.doors.unlock", prefix),
-		CommandChargeStart: fmt.Sprintf("%s.charge.start", prefix),
-		CommandChargeStop:  fmt.Sprintf("%s.charge.stop", prefix),
+		CommandFrunkOpen:            fmt.Sprintf("%s.frunk.open", prefix),
+		CommandTrunkOpen:            fmt.Sprintf("%s.trunk.open", prefix),
+		CommandDoorsLock:            fmt.Sprintf("%s.doors.lock", prefix),
+		CommandDoorsUnlock:          fmt.Sprintf("%s.doors.unlock", prefix),
+		CommandChargeStart:          fmt.Sprintf("%s.charge.start", prefix),
+		CommandChargeStop:           fmt.Sprintf("%s.charge.stop", prefix),
+		CommandWakeup:               fmt.Sprintf("%s.wakeup", prefix),
+		CommandTelemetrySubscribe:   fmt.Sprintf("%s.telemetry.subscribe", prefix),
+		CommandTelemetryUnsubscribe: fmt.Sprintf("%s.telemetry.unsubscribe", prefix),
+		CommandTelemetryStart:       fmt.Sprintf("%s.telemetry.start", prefix),
 	}
 
 	if eventType, exists := commandEventTypes[command]; exists {

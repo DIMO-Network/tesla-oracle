@@ -8,6 +8,8 @@ import (
 
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
+	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
@@ -37,30 +39,36 @@ func (a TeslaCommandArgs) InsertOpts() river.InsertOpts {
 // TeslaCommandWorker handles Tesla command execution with wake-up logic
 type TeslaCommandWorker struct {
 	river.WorkerDefaults[TeslaCommandArgs]
-	teslaFleetAPI  core.TeslaFleetAPIService
-	tokenManager   *core.TeslaTokenManager
-	commandRepo    repository.CommandRepository
-	vehicleRepo    repository.VehicleRepository
-	logger         *zerolog.Logger
-	SnoozeDuration time.Duration
+	teslaFleetAPI       core.TeslaFleetAPIService
+	tokenManager        *core.TeslaTokenManager
+	teslaService        *service.TeslaService
+	commandRepo         repository.CommandRepository
+	vehicleRepo         repository.VehicleRepository
+	logger              *zerolog.Logger
+	SnoozeDuration      time.Duration
+	mobileAppDevLicense common.Address
 }
 
 // NewTeslaCommandWorker creates a new Tesla command worker
 func NewTeslaCommandWorker(
 	teslaFleetAPI core.TeslaFleetAPIService,
 	tokenManager *core.TeslaTokenManager,
+	teslaService *service.TeslaService,
 	commandRepo repository.CommandRepository,
 	vehicleRepo repository.VehicleRepository,
 	logger *zerolog.Logger,
 	snoozeDuration time.Duration,
+	mobileAppDevLicense common.Address,
 ) *TeslaCommandWorker {
 	return &TeslaCommandWorker{
-		teslaFleetAPI:  teslaFleetAPI,
-		tokenManager:   tokenManager,
-		commandRepo:    commandRepo,
-		vehicleRepo:    vehicleRepo,
-		logger:         logger,
-		SnoozeDuration: snoozeDuration,
+		teslaFleetAPI:       teslaFleetAPI,
+		tokenManager:        tokenManager,
+		teslaService:        teslaService,
+		commandRepo:         commandRepo,
+		vehicleRepo:         vehicleRepo,
+		logger:              logger,
+		SnoozeDuration:      snoozeDuration,
+		mobileAppDevLicense: mobileAppDevLicense,
 	}
 }
 
@@ -106,7 +114,19 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 		return fmt.Errorf("failed to get access token: %w", err)
 	}
 
-	// Attempt to wake up vehicle and get its state
+	// Handle wakeup command specially - it doesn't require vehicle to be online first
+	if args.Command == core.CommandWakeup {
+		vehicle, err := w.teslaFleetAPI.WakeUpVehicle(ctx, accessToken, args.VIN)
+		if err != nil {
+			logger.Error().Err(err).Msg("Failed to wake up vehicle")
+			return fmt.Errorf("failed to wake up vehicle: %w", err)
+		}
+		logger.Info().Str("vehicleState", vehicle.State).Msg("Wakeup command completed successfully")
+		w.updateCommandStatus(ctx, jobID, core.CommandStatusCompleted, "")
+		return nil
+	}
+
+	// For other commands, attempt to wake up vehicle and get its state
 	vehicle, err := w.teslaFleetAPI.WakeUpVehicle(ctx, accessToken, args.VIN)
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to wake up vehicle")
@@ -147,7 +167,7 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 	logger.Info().Str("vehicleState", vehicle.State).Msg("Vehicle is awake, executing command")
 
 	// Vehicle is awake, execute the command
-	err = w.executeCommand(ctx, accessToken, args.VIN, args.Command)
+	err = w.executeCommand(ctx, accessToken, args.VIN, args.Command, int64(args.VehicleTokenID))
 	if err != nil {
 		logger.Error().Err(err).Msg("Failed to execute command")
 		// Don't update status here - let River handle retries
@@ -161,25 +181,57 @@ func (w *TeslaCommandWorker) Work(ctx context.Context, job *river.Job[TeslaComma
 	return nil
 }
 
-// executeCommand executes the actual Tesla command via Fleet API
-func (w *TeslaCommandWorker) executeCommand(ctx context.Context, accessToken string, vin, command string) error {
+// executeCommand executes the actual Tesla command via Fleet API or service methods
+func (w *TeslaCommandWorker) executeCommand(ctx context.Context, accessToken string, vin, command string, vehicleTokenID int64) error {
 	w.logger.Info().
 		Str("command", command).
 		Str("vin", vin).
 		Msg("Executing Tesla command")
 
-	// Execute the command using TeslaFleetAPIService
-	err := w.teslaFleetAPI.ExecuteCommand(ctx, accessToken, vin, command)
-	if err != nil {
-		return fmt.Errorf("failed to execute Tesla command %s: %w", command, err)
+	// Handle telemetry commands via service methods
+	switch command {
+	case core.CommandTelemetrySubscribe:
+		// Use mobile app dev license for telemetry subscribe (validated at controller level)
+		err := w.teslaService.SubscribeToTelemetry(ctx, vehicleTokenID, w.mobileAppDevLicense)
+		if err != nil {
+			return fmt.Errorf("failed to subscribe to telemetry: %w", err)
+		}
+		w.logger.Info().Str("command", command).Str("vin", vin).Msg("Telemetry subscribe executed successfully")
+		return nil
+
+	case core.CommandTelemetryUnsubscribe:
+		// Use mobile app dev license for telemetry unsubscribe (validated at controller level)
+		err := w.teslaService.UnsubscribeFromTelemetry(ctx, vehicleTokenID, w.mobileAppDevLicense)
+		if err != nil {
+			return fmt.Errorf("failed to unsubscribe from telemetry: %w", err)
+		}
+		w.logger.Info().Str("command", command).Str("vin", vin).Msg("Telemetry unsubscribe executed successfully")
+		return nil
+
+	case core.CommandTelemetryStart:
+		// Use zero address for start - ownership validation should have been done at controller level
+		// If validation fails, it will return an error which is acceptable
+		err := w.teslaService.StartVehicleDataFlow(ctx, vehicleTokenID, common.Address{})
+		if err != nil {
+			return fmt.Errorf("failed to start vehicle data flow: %w", err)
+		}
+		w.logger.Info().Str("command", command).Str("vin", vin).Msg("Telemetry start executed successfully")
+		return nil
+
+	default:
+		// Execute standard vehicle commands using TeslaFleetAPIService
+		err := w.teslaFleetAPI.ExecuteCommand(ctx, accessToken, vin, command)
+		if err != nil {
+			return fmt.Errorf("failed to execute Tesla command %s: %w", command, err)
+		}
+
+		w.logger.Info().
+			Str("command", command).
+			Str("vin", vin).
+			Msg("Tesla command executed successfully")
+
+		return nil
 	}
-
-	w.logger.Info().
-		Str("command", command).
-		Str("vin", vin).
-		Msg("Tesla command executed successfully")
-
-	return nil
 }
 
 // updateCommandStatus updates the command status in the database

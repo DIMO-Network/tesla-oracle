@@ -50,7 +50,7 @@ func DecisionTreeAction(fleetStatus *core.VehicleFleetStatus, vehicleTokenID int
 	var message string
 	var next *models.NextAction
 
-	telemetryStart := fmt.Sprintf("/v1/tesla/telemetry/%d/start", vehicleTokenID)
+	telemetryStart := fmt.Sprintf("/v1/commands/%d", vehicleTokenID)
 
 	if fleetStatus.VehicleCommandProtocolRequired {
 		if fleetStatus.KeyPaired {

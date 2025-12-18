@@ -432,7 +432,7 @@ func (t *teslaFleetAPIService) GetAvailableCommands(token string) (*UserDeviceAP
 		return nil, fmt.Errorf("couldn't parse JWT: %w", err)
 	}
 
-	enabled := []string{TelemetrySubscribe} // TODO(elffjs): Maybe not a safe assumption.
+	enabled := []string{CommandTelemetrySubscribe} // TODO(elffjs): Maybe not a safe assumption.
 	disabled := []string{}
 
 	if slices.Contains(claims.Scopes, teslaCommandScope) {
