@@ -2,7 +2,7 @@ replicaCount: 1
 image:
   repository: dimozone/tesla-oracle
   pullPolicy: IfNotPresent
-  tag: d2a295e
+  tag: 4b34ce6
 imagePullSecrets: []
 nameOverride: ''
 fullnameOverride: ''
