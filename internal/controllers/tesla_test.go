@@ -651,7 +651,6 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			s.assertGetStatusResponse(resp, tc.expectedResponse, tc.expectedStatusCode)
 
 			mockTeslaService.AssertExpectations(s.T())
-			mockIdentitySvc.AssertExpectations(s.T())
 		})
 	}
 }
@@ -845,7 +844,6 @@ func (s *TeslaControllerTestSuite) TestGetStatusWithTokenRefreshErrors() {
 		s.Run(tc.name, func() {
 			// given
 			settings, logger, repos := s.createTestDependencies()
-			mockIdentitySvc := s.setupMockIdentityService()
 
 			// Create mock Tesla service that will return refresh token error
 			mockTeslaService := new(test.MockTeslaFleetAPIService)
@@ -862,7 +860,7 @@ func (s *TeslaControllerTestSuite) TestGetStatusWithTokenRefreshErrors() {
 
 			// Create token manager and service following the same pattern as TestGetStatus
 			tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
-			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
+			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 			controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
 			app := s.setupTestApp("/v1/tesla/:vehicleTokenId/status", "GET", controller.GetStatus)
@@ -888,7 +886,6 @@ func (s *TeslaControllerTestSuite) TestGetStatusWithTokenRefreshErrors() {
 			s.Equal(tc.expectedMessage, response.Message)
 
 			mockTeslaService.AssertExpectations(s.T())
-			mockIdentitySvc.AssertExpectations(s.T())
 		})
 	}
 }

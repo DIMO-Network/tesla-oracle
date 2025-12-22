@@ -275,15 +275,7 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 }
 
 // GetVehicleStatus handles the complete vehicle status check workflow
-func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, walletAddress common.Address, validateVehicleOwnership bool, requiredScopes []string) (*models.StatusDecision, error) {
-	// Validate vehicle ownership (disabled for admin)
-	if validateVehicleOwnership {
-		err := ts.validateVehicleOwnership(tokenID, walletAddress)
-		if err != nil {
-			return nil, err
-		}
-	}
-
+func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, requiredScopes []string) (*models.StatusDecision, error) {
 	// Get synthetic device
 	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
 	if err != nil {
