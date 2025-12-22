@@ -267,23 +267,26 @@ info:
   title: DIMO Tesla Oracle API
   version: "1.0"
 paths:
-  /v1/admin/tesla/{vehicleTokenId}/status:
+  /v1/{vehicleTokenId}/status:
     get:
       consumes:
       - application/json
-      description: Gets information about vehicle status for admin users. Bypasses
-        ownership validation.
+      description: Get vehicle status and determines the next action for a Tesla vehicle
+        based on its fleet status, including telemetry compatibility, virtual key
+        pairing, firmware version, and streaming toggle settings. Provides appropriate
+        instructions or actions for the user to enable telemetry or resolve issues.
       parameters:
-      - description: Vehicle Token ID
+      - description: Vehicle token ID that must be set in the request path to fetch
+          vehicle details
         in: path
         name: vehicleTokenId
         required: true
-        type: integer
+        type: string
       produces:
       - application/json
       responses:
         "200":
-          description: OK
+          description: Vehicle status details and next action
           schema:
             $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VehicleStatusResponse'
         "400":
@@ -305,10 +308,10 @@ paths:
             $ref: '#/definitions/fiber.Error'
       security:
       - BearerAuth: []
-      summary: Get vehicle status (Admin)
+      summary: Get vehicle status
       tags:
       - tesla
-  /v1/admin/tesla/{vehicleTokenId}/wakeup:
+  /v1/admin/{vehicleTokenId}/wakeup:
     post:
       consumes:
       - application/json
@@ -396,51 +399,7 @@ paths:
       summary: Submit command to Tesla vehicle
       tags:
       - tesla
-  /v1/tesla/{vehicleTokenId}/status:
-    get:
-      consumes:
-      - application/json
-      description: Get vehicle status and determines the next action for a Tesla vehicle
-        based on its fleet status, including telemetry compatibility, virtual key
-        pairing, firmware version, and streaming toggle settings. Provides appropriate
-        instructions or actions for the user to enable telemetry or resolve issues.
-      parameters:
-      - description: Vehicle token ID that must be set in the request path to fetch
-          vehicle details
-        in: path
-        name: vehicleTokenId
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: Vehicle status details and next action
-          schema:
-            $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VehicleStatusResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "401":
-          description: Unauthorized or no credentials found for the vehicle.
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "404":
-          description: Vehicle not found or failed to get vehicle by token ID.
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "500":
-          description: Internal server error, including decryption or fleet status
-            retrieval failures.
-          schema:
-            $ref: '#/definitions/fiber.Error'
-      security:
-      - BearerAuth: []
-      summary: Get vehicle status
-      tags:
-      - tesla
-  /v1/tesla/disconnected:
+  /v1/disconnected:
     post:
       consumes:
       - application/json
@@ -474,7 +433,7 @@ paths:
       summary: Get vehicle statuses
       tags:
       - tesla
-  /v1/tesla/reauthenticate:
+  /v1/reauthenticate:
     post:
       consumes:
       - application/json
@@ -515,7 +474,7 @@ paths:
       summary: Reauthenticate and get user vehicles
       tags:
       - tesla
-  /v1/tesla/settings:
+  /v1/settings:
     get:
       description: Get config params for frontend app
       produces:
@@ -528,7 +487,7 @@ paths:
       summary: Get tesla-related configuration parameters
       tags:
       - Settings
-  /v1/tesla/telemetry/{vehicleTokenId}/start:
+  /v1/telemetry/{vehicleTokenId}/start:
     post:
       consumes:
       - application/json
@@ -578,7 +537,7 @@ paths:
       summary: Start data flow for Tesla vehicle
       tags:
       - tesla
-  /v1/tesla/telemetry/subscribe/{vehicleTokenId}:
+  /v1/telemetry/subscribe/{vehicleTokenId}:
     post:
       consumes:
       - application/json
@@ -626,7 +585,7 @@ paths:
       summary: Subscribe vehicle for Tesla Telemetry Data
       tags:
       - telemetry
-  /v1/tesla/telemetry/unsubscribe/{vehicleTokenId}:
+  /v1/telemetry/unsubscribe/{vehicleTokenId}:
     post:
       consumes:
       - application/json
@@ -668,82 +627,6 @@ paths:
       summary: Unsubscribe vehicle from Tesla Telemetry Data
       tags:
       - telemetry
-  /v1/tesla/vehicles:
-    post:
-      consumes:
-      - application/json
-      description: Gets Tesla vehicles owned by the user. Creates initial onboarding
-        records for all of them.
-      parameters:
-      - description: Authorization details
-        in: body
-        name: payload
-        required: true
-        schema:
-          $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeResponseWrapper'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "424":
-          description: Failed Dependency
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/fiber.Error'
-      security:
-      - BearerAuth: []
-      summary: Get user vehicles
-      tags:
-      - tesla
-  /v1/tesla/virtual-key:
-    get:
-      consumes:
-      - application/json
-      description: Gets information about Tesla virtual key.
-      parameters:
-      - description: Vehicle VIN
-        in: query
-        name: vin
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VirtualKeyStatusResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/fiber.Error'
-        "500":
-          description: Internal server error
-          schema:
-            $ref: '#/definitions/fiber.Error'
-      security:
-      - BearerAuth: []
-      summary: Get virtual key status
-      tags:
-      - tesla
   /v1/vehicle/finalize:
     post:
       consumes:
@@ -935,6 +818,82 @@ paths:
       tags:
       - onboarding
       - verify
+  /v1/vehicles:
+    post:
+      consumes:
+      - application/json
+      description: Gets Tesla vehicles owned by the user. Creates initial onboarding
+        records for all of them.
+      parameters:
+      - description: Authorization details
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_controllers.CompleteOAuthExchangeResponseWrapper'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "424":
+          description: Failed Dependency
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Get user vehicles
+      tags:
+      - tesla
+  /v1/virtual-key:
+    get:
+      consumes:
+      - application/json
+      description: Gets information about Tesla virtual key.
+      parameters:
+      - description: Vehicle VIN
+        in: query
+        name: vin
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VirtualKeyStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/fiber.Error'
+        "500":
+          description: Internal server error
+          schema:
+            $ref: '#/definitions/fiber.Error'
+      security:
+      - BearerAuth: []
+      summary: Get virtual key status
+      tags:
+      - tesla
 securityDefinitions:
   BearerAuth:
     in: header

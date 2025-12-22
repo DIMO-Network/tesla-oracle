@@ -25,9 +25,9 @@ Tesla Auth → List Vehicles → Virtual Key → Verify → Mint Data → Sign �
 **Current Flow (backed by tesla-oracle)**:
 
 1. **Authorize with Tesla** - OAuth flow with Tesla
-2. **`POST /v1/tesla/vehicles`** - Get owned vehicles (`vin`, `externalId`, `device_definition_id`, MMY)
+2. **`POST /v1/vehicles`** - Get owned vehicles (`vin`, `externalId`, `device_definition_id`, MMY)
 3. **Select vehicle** from the list
-4. **`GET /v1/tesla/virtual-key?vin=<vin>`** - Check virtual key pairing status
+4. **`GET /v1/virtual-key?vin=<vin>`** - Check virtual key pairing status
 5. **Depending on the status handle virtual key step with Tesla app**
 6. **`POST /v1/vehicle/verify`** - Verify vehicle with `{vins: [vin]}` payload
 7. **`GET /v1/vehicle/mint?vins=<vin>`** - Get signing payload for the VIN
@@ -66,7 +66,7 @@ Tesla Oracle uses decision trees to determine vehicle status and next actions ba
   "action": "set_telemetry_config",
   "next": {
     "method": "POST",
-    "endpoint": "/v1/tesla/telemetry/123/start"
+    "endpoint": "/v1/telemetry/123/start"
   }
 }
 ```

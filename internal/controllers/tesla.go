@@ -52,7 +52,7 @@ func NewTeslaController(settings *config.Settings, logger *zerolog.Logger, tesla
 // @Produce json
 // @Success 200
 // @Security     BearerAuth
-// @Router /v1/tesla/settings [get]
+// @Router /v1/settings [get]
 func (tc *TeslaController) GetSettings(c *fiber.Ctx) error {
 	payload := TeslaSettingsResponse{
 		TeslaClientID:    tc.settings.TeslaClientID,
@@ -88,7 +88,7 @@ type TeslaSettingsResponse struct {
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by VIN."
 // @Failure     409 {object} fiber.Error "Vehicle is not ready for telemetry subscription."
 // @Failure     500 {object} fiber.Error "Internal server error, including decryption or telemetry subscription failures."
-// @Router      /v1/tesla/telemetry/subscribe/{vehicleTokenId} [post]
+// @Router      /v1/telemetry/subscribe/{vehicleTokenId} [post]
 func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Telemetry/Subscribe").
@@ -133,7 +133,7 @@ func (tc *TeslaController) TelemetrySubscribe(c *fiber.Ctx) error {
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
 // @Failure     409 {object} fiber.Error "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps."
 // @Failure     500 {object} fiber.Error "Internal server error, including decryption or fleet status retrieval failures."
-// @Router      /v1/tesla/telemetry/{vehicleTokenId}/start [post]
+// @Router      /v1/telemetry/{vehicleTokenId}/start [post]
 func (tc *TeslaController) StartDataFlow(c *fiber.Ctx) error {
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Telemetry/Start").
@@ -169,7 +169,7 @@ func (tc *TeslaController) StartDataFlow(c *fiber.Ctx) error {
 // @Failure     401 {object} fiber.Error "Unauthorized"
 // @Failure     404 {object} fiber.Error "OnboardingService not found or owner information is missing."
 // @Failure     500 {object} fiber.Error "Internal server error"
-// @Router      /v1/tesla/telemetry/unsubscribe/{vehicleTokenId} [post]
+// @Router      /v1/telemetry/unsubscribe/{vehicleTokenId} [post]
 func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
@@ -210,7 +210,7 @@ func (tc *TeslaController) UnsubscribeTelemetry(c *fiber.Ctx) error {
 // @Failure     401 {object} fiber.Error "Unauthorized"
 // @Failure     424 {object} fiber.Error "Failed Dependency"
 // @Failure     500 {object} fiber.Error "Internal server error"
-// @Router      /v1/tesla/vehicles [post]
+// @Router      /v1/vehicles [post]
 func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
 	logger := helpers.GetLogger(c, tc.logger)
@@ -249,7 +249,7 @@ func (tc *TeslaController) ListVehicles(c *fiber.Ctx) error {
 // @Failure     401 {object} fiber.Error "Unauthorized"
 // @Failure     424 {object} fiber.Error "Failed Dependency"
 // @Failure     500 {object} fiber.Error "Internal server error"
-// @Router      /v1/tesla/reauthenticate [post]
+// @Router      /v1/reauthenticate [post]
 func (tc *TeslaController) Reauthenticate(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
 	logger := helpers.GetLogger(c, tc.logger)
@@ -287,7 +287,7 @@ func (tc *TeslaController) Reauthenticate(c *fiber.Ctx) error {
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
 // @Failure     500 {object} fiber.Error "Internal server error"
-// @Router      /v1/tesla/virtual-key [get]
+// @Router      /v1/virtual-key [get]
 func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 	walletAddress := helpers.GetWallet(c)
 
@@ -316,7 +316,7 @@ func (tc *TeslaController) GetVirtualKeyStatus(c *fiber.Ctx) error {
 // @Success     200 {object} controllers.VehicleStatusesResponse
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     500 {object} fiber.Error "Internal server error"
-// @Router      /v1/tesla/disconnected [post]
+// @Router      /v1/disconnected [post]
 func (tc *TeslaController) GetDisconnectedVehicles(c *fiber.Ctx) error {
 	logger := helpers.GetLogger(c, tc.logger).With().
 		Str("Name", "Tesla/GetDisconnectedVehicles").
@@ -389,14 +389,13 @@ func (tc *TeslaController) GetDisconnectedVehicles(c *fiber.Ctx) error {
 // @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
 // @Failure     500 {object} fiber.Error "Internal server error, including decryption or fleet status retrieval failures."
-// @Router      /v1/tesla/{vehicleTokenId}/status [get]
+// @Router      /v1/{vehicleTokenId}/status [get]
 func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {
 		return err
 	}
 
-	//walletAddress := helpers.GetWallet(c)
 	statusDecision, err := tc.teslaService.GetVehicleStatus(c.Context(), tokenID, tc.requiredScopes)
 	if err != nil {
 		return tc.translateServiceError(err)
@@ -425,7 +424,7 @@ func (tc *TeslaController) GetStatus(c *fiber.Ctx) error {
 // @Failure     401 {object} fiber.Error "Unauthorized or no credentials found for the vehicle."
 // @Failure     404 {object} fiber.Error "Vehicle not found or failed to get vehicle by token ID."
 // @Failure     500 {object} fiber.Error "Internal server error, including wake up failures."
-// @Router      /v1/admin/tesla/{vehicleTokenId}/wakeup [post]
+// @Router      /v1/admin/{vehicleTokenId}/wakeup [post]
 func (tc *TeslaController) WakeUpVehicleAdmin(c *fiber.Ctx) error {
 	tokenID, err := extractVehicleTokenId(c)
 	if err != nil {

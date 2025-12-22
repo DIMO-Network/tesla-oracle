@@ -179,10 +179,10 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			}()
 
 			controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
-			app := s.setupTestApp("/v1/tesla/telemetry/subscribe/:vehicleTokenId", "POST", controller.TelemetrySubscribe)
+			app := s.setupTestApp("/v1/telemetry/subscribe/:vehicleTokenId", "POST", controller.TelemetrySubscribe)
 
 			//  then
-			req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/subscribe/789", nil)
+			req, _ := http.NewRequest("POST", "/v1/telemetry/subscribe/789", nil)
 			req.Header.Set("Content-Type", "application/json")
 			assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -265,10 +265,10 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			}()
 
 			controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
-			app := s.setupTestApp("/v1/tesla/telemetry/:vehicleTokenId/start", "POST", controller.StartDataFlow)
+			app := s.setupTestApp("/v1/telemetry/:vehicleTokenId/start", "POST", controller.StartDataFlow)
 
 			// then
-			req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/789/start", nil)
+			req, _ := http.NewRequest("POST", "/v1/telemetry/789/start", nil)
 			req.Header.Set("Content-Type", "application/json")
 			assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -302,8 +302,8 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	}()
 
 	// then
-	app := s.setupTestApp("/v1/tesla/telemetry/unsubscribe/:vehicleTokenId", "POST", controller.UnsubscribeTelemetry)
-	req, _ := http.NewRequest("POST", "/v1/tesla/telemetry/unsubscribe/789", nil)
+	app := s.setupTestApp("/v1/telemetry/unsubscribe/:vehicleTokenId", "POST", controller.UnsubscribeTelemetry)
+	req, _ := http.NewRequest("POST", "/v1/telemetry/unsubscribe/789", nil)
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
@@ -358,7 +358,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 
 	// then
 	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
-	req, _ := http.NewRequest("POST", "/v1/tesla/vehicles", strings.NewReader(requestBody))
+	req, _ := http.NewRequest("POST", "/v1/vehicles", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -417,7 +417,7 @@ func (s *TeslaControllerTestSuite) TestReauthenticate() {
 
 	// then
 	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
-	req, _ := http.NewRequest("POST", "/v1/tesla/reauthenticate", strings.NewReader(requestBody))
+	req, _ := http.NewRequest("POST", "/v1/reauthenticate", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -454,8 +454,8 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 	controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
 
 	// then
-	app := s.setupFiberApp("/v1/tesla/virtual-key", "GET", controller.GetVirtualKeyStatus)
-	req, _ := createRequest("GET", "/v1/tesla/virtual-key?vin="+vin, "")
+	app := s.setupFiberApp("/v1/virtual-key", "GET", controller.GetVirtualKeyStatus)
+	req, _ := createRequest("GET", "/v1/virtual-key?vin="+vin, "")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
@@ -470,7 +470,7 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 }
 
 func (s *TeslaControllerTestSuite) TestGetStatus() {
-	expectedStartEndpoint := fmt.Sprintf("/v1/tesla/telemetry/%d/start", vehicleTokenID)
+	expectedStartEndpoint := fmt.Sprintf("/v1/telemetry/%d/start", vehicleTokenID)
 	testCases := []struct {
 		name               string
 		fleetStatus        *core.VehicleFleetStatus
@@ -640,10 +640,10 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			}()
 
 			controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
-			app := s.setupTestApp("/v1/tesla/:vehicleTokenId/status", "GET", controller.GetStatus)
+			app := s.setupTestApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 			// then
-			req, _ := createRequest("GET", fmt.Sprintf("/v1/tesla/%d/status", vehicleTokenID), "")
+			req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 			req.Header.Set("Authorization", "Bearer mockToken")
 
 			resp, err := app.Test(req, -1)
@@ -698,10 +698,10 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 
 	require.NoError(s.T(), dbVin.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
 
-	app := s.setupFiberApp("/v1/tesla/:vehicleTokenId/status", "GET", controller.GetStatus)
+	app := s.setupFiberApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 	// then
-	req, _ := createRequest("GET", fmt.Sprintf("/v1/tesla/%d/status", vehicleTokenID), "")
+	req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 	err := generateJWT(req)
 	assert.NoError(s.T(), err)
 
@@ -863,10 +863,10 @@ func (s *TeslaControllerTestSuite) TestGetStatusWithTokenRefreshErrors() {
 			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, nil, *tokenManager)
 
 			controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
-			app := s.setupTestApp("/v1/tesla/:vehicleTokenId/status", "GET", controller.GetStatus)
+			app := s.setupTestApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 			// when
-			req, _ := createRequest("GET", fmt.Sprintf("/v1/tesla/%d/status", vehicleTokenID), "")
+			req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 			req.Header.Set("Authorization", "Bearer mockToken")
 
 			resp, err := app.Test(req, -1)
@@ -1824,7 +1824,7 @@ func (s *TeslaControllerTestSuite) setupTestAppForListVehicles(controller *Tesla
 		return c.Next()
 	})
 	app.Use(helpers.NewWalletMiddleware())
-	app.Post("/v1/tesla/vehicles", controller.ListVehicles)
+	app.Post("/v1/vehicles", controller.ListVehicles)
 	return app
 }
 
@@ -1846,7 +1846,7 @@ func (s *TeslaControllerTestSuite) setupTestAppForReauthenticate(controller *Tes
 		return c.Next()
 	})
 	app.Use(helpers.NewWalletMiddleware())
-	app.Post("/v1/tesla/reauthenticate", controller.Reauthenticate)
+	app.Post("/v1/reauthenticate", controller.Reauthenticate)
 	return app
 }
 
