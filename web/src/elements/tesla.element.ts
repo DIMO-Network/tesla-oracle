@@ -129,7 +129,7 @@ export class TeslaElement extends BaseOnboardingElement {
             this.lastSubmittedCode = authorizationCode;
 
             try {
-                const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/tesla/vehicles", {
+                const response = await this.api.callApi<VehiclesResponse>("POST", "/v1/vehicles", {
                     authorizationCode,
                     redirectUri,
                 }, true);
@@ -162,7 +162,7 @@ export class TeslaElement extends BaseOnboardingElement {
             const vins = vehicles.map((v: TeslaVehicle) => v.vin);
 
             // Call status endpoint with VINs
-            const response = await this.api.callApi<VehicleStatusesResponse>("POST", "/v1/tesla/disconnected", {
+            const response = await this.api.callApi<VehicleStatusesResponse>("POST", "/v1/disconnected", {
                 vins
             }, true);
 
@@ -177,7 +177,7 @@ export class TeslaElement extends BaseOnboardingElement {
                 return [];
             }
             const query = qs.stringify({vin});
-            const response = await this.api.callApi<VirtualKeyResponse>("GET", `/v1/tesla/virtual-key?${query}`, null, true);
+            const response = await this.api.callApi<VirtualKeyResponse>("GET", `/v1/virtual-key?${query}`, null, true);
             return response.data || null;
         },
         autoRun: false

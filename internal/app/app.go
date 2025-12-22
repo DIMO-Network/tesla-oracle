@@ -98,17 +98,16 @@ func App(
 	app.Get("/v1/swagger/*", swagger.HandlerDefault)
 	app.Get("/swagger/*", swagger.HandlerDefault)
 
-	teslaGroup := app.Group("/v1/tesla", jwtAuth, walletMdw)
-	teslaGroup.Get("/settings", teslaCtrl.GetSettings)
-	teslaGroup.Post("/vehicles", teslaCtrl.ListVehicles)
-	teslaGroup.Post("/reauthenticate", teslaCtrl.Reauthenticate)
-	teslaGroup.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
-	teslaGroup.Post("/disconnected", teslaCtrl.GetDisconnectedVehicles)
-	teslaGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
+	v1Group := app.Group("/v1", jwtAuth, walletMdw)
+	v1Group.Get("/settings", teslaCtrl.GetSettings)
+	v1Group.Post("/vehicles", teslaCtrl.ListVehicles)
+	v1Group.Post("/reauthenticate", teslaCtrl.Reauthenticate)
+	v1Group.Post("/disconnected", teslaCtrl.GetDisconnectedVehicles)
+	v1Group.Get("/:vehicleTokenId/status", teslaCtrl.GetStatus)
+	v1Group.Get("/virtual-key", teslaCtrl.GetVirtualKeyStatus)
 
 	// Admin routes without ownership validation
-	adminGroup := app.Group("/v1/admin/tesla", jwtAuth, walletMdw)
-	adminGroup.Get("/:vehicleTokenId/status", teslaCtrl.GetStatusAdmin)
+	adminGroup := app.Group("/v1/admin", jwtAuth, walletMdw)
 	adminGroup.Post("/:vehicleTokenId/wakeup", teslaCtrl.WakeUpVehicleAdmin)
 
 	vehicleGroup := app.Group("/v1/vehicle", jwtAuth, walletMdw)
@@ -118,12 +117,12 @@ func App(
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
 	vehicleGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
 
-	telemetryGroup := app.Group("/v1/tesla/telemetry", jwtAuth, walletMdw)
+	telemetryGroup := app.Group("/v1/telemetry", jwtAuth, walletMdw)
 	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
 	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
 	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)
 
-	// we can't use /v1/tesla prefix here because the privilegeAuth middleware requires a different JWT key set URL,
+	// we can't use /v1 prefix here because the privilegeAuth middleware requires a different JWT key set URL,
 	// if we inherit the same prefix - we also inherit the jwtAuth middleware which uses a different key set URL
 	commandsGroup := app.Group("/v1/commands", privilegeAuth)
 	commandsGroup.Post("/:tokenID", privTokenWare.OneOf(settings.VehicleNftAddress, []privileges.Privilege{privileges.VehicleCommands}), teslaCtrl.SubmitCommand)

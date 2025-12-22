@@ -15,68 +15,7 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/v1/admin/tesla/{vehicleTokenId}/status": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Gets information about vehicle status for admin users. Bypasses ownership validation.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "tesla"
-                ],
-                "summary": "Get vehicle status (Admin)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Vehicle Token ID",
-                        "name": "vehicleTokenId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VehicleStatusResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized or no credentials found for the vehicle.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Vehicle not found or failed to get vehicle by token ID.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error, including decryption or fleet status retrieval failures.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/admin/tesla/{vehicleTokenId}/wakeup": {
+        "/v1/admin/{vehicleTokenId}/wakeup": {
             "post": {
                 "security": [
                     {
@@ -207,7 +146,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/tesla/disconnected": {
+        "/v1/disconnected": {
             "post": {
                 "security": [
                     {
@@ -258,7 +197,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/tesla/reauthenticate": {
+        "/v1/reauthenticate": {
             "post": {
                 "security": [
                     {
@@ -321,7 +260,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/tesla/settings": {
+        "/v1/settings": {
             "get": {
                 "security": [
                     {
@@ -343,7 +282,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/tesla/telemetry/subscribe/{vehicleTokenId}": {
+        "/v1/telemetry/subscribe/{vehicleTokenId}": {
             "post": {
                 "security": [
                     {
@@ -413,7 +352,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/tesla/telemetry/unsubscribe/{vehicleTokenId}": {
+        "/v1/telemetry/unsubscribe/{vehicleTokenId}": {
             "post": {
                 "security": [
                     {
@@ -477,7 +416,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/tesla/telemetry/{vehicleTokenId}/start": {
+        "/v1/telemetry/{vehicleTokenId}/start": {
             "post": {
                 "security": [
                     {
@@ -534,185 +473,6 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "Vehicle is not ready for telemetry subscription. Call GetStatus endpoint to determine next steps.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error, including decryption or fleet status retrieval failures.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/tesla/vehicles": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Gets Tesla vehicles owned by the user. Creates initial onboarding records for all of them.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "tesla"
-                ],
-                "summary": "Get user vehicles",
-                "parameters": [
-                    {
-                        "description": "Authorization details",
-                        "name": "payload",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/internal_controllers.CompleteOAuthExchangeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/internal_controllers.CompleteOAuthExchangeResponseWrapper"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "424": {
-                        "description": "Failed Dependency",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/tesla/virtual-key": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Gets information about Tesla virtual key.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "tesla"
-                ],
-                "summary": "Get virtual key status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Vehicle VIN",
-                        "name": "vin",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VirtualKeyStatusResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/tesla/{vehicleTokenId}/status": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get vehicle status and determines the next action for a Tesla vehicle based on its fleet status, including telemetry compatibility, virtual key pairing, firmware version, and streaming toggle settings. Provides appropriate instructions or actions for the user to enable telemetry or resolve issues.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "tesla"
-                ],
-                "summary": "Get vehicle status",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Vehicle token ID that must be set in the request path to fetch vehicle details",
-                        "name": "vehicleTokenId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Vehicle status details and next action",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VehicleStatusResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized or no credentials found for the vehicle.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Vehicle not found or failed to get vehicle by token ID.",
                         "schema": {
                             "$ref": "#/definitions/fiber.Error"
                         }
@@ -1011,6 +771,185 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/vehicles": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gets Tesla vehicles owned by the user. Creates initial onboarding records for all of them.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla"
+                ],
+                "summary": "Get user vehicles",
+                "parameters": [
+                    {
+                        "description": "Authorization details",
+                        "name": "payload",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.CompleteOAuthExchangeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_controllers.CompleteOAuthExchangeResponseWrapper"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "424": {
+                        "description": "Failed Dependency",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/virtual-key": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Gets information about Tesla virtual key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla"
+                ],
+                "summary": "Get virtual key status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Vehicle VIN",
+                        "name": "vin",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VirtualKeyStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/{vehicleTokenId}/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get vehicle status and determines the next action for a Tesla vehicle based on its fleet status, including telemetry compatibility, virtual key pairing, firmware version, and streaming toggle settings. Provides appropriate instructions or actions for the user to enable telemetry or resolve issues.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tesla"
+                ],
+                "summary": "Get vehicle status",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Vehicle token ID that must be set in the request path to fetch vehicle details",
+                        "name": "vehicleTokenId",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Vehicle status details and next action",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_models.VehicleStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized or no credentials found for the vehicle.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "404": {
+                        "description": "Vehicle not found or failed to get vehicle by token ID.",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal server error, including decryption or fleet status retrieval failures.",
                         "schema": {
                             "$ref": "#/definitions/fiber.Error"
                         }

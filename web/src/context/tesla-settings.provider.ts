@@ -23,7 +23,7 @@ export class SettingsProvider extends LitElement {
     async connectedCallback() {
         super.connectedCallback();
 
-        const settings = await this.api.callApi<TeslaSettingsContext>('GET', '/v1/tesla/settings', null, true);
+        const settings = await this.api.callApi<TeslaSettingsContext>('GET', '/v1/settings', null, true);
         console.log('SETTINGS', settings)
         this._settings = {
             ...this._settings,
