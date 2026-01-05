@@ -137,6 +137,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			fleetStatus: &core.VehicleFleetStatus{
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2025.21.11",
+				DiscountedDeviceData:           true,
 			},
 			expectedAction:             service.ActionStartPolling,
 			expectedStatusCode:         fiber.StatusOK,
@@ -221,6 +222,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			fleetStatus: &core.VehicleFleetStatus{
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2025.21.11",
+				DiscountedDeviceData:           true,
 			},
 			expectedAction:             service.ActionStartPolling,
 			expectedStatusCode:         fiber.StatusOK,
@@ -525,6 +527,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			fleetStatus: &core.VehicleFleetStatus{
 				VehicleCommandProtocolRequired: false,
 				FirmwareVersion:                "2025.21.11",
+				DiscountedDeviceData:           true,
 			},
 			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{

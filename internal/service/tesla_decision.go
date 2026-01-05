@@ -74,11 +74,27 @@ func DecisionTreeAction(fleetStatus *core.VehicleFleetStatus, vehicleTokenID int
 			message = MessageFirmwareTooOld
 		} else {
 			if fleetStatus.SafetyScreenStreamingToggleEnabled == nil {
-				action = ActionStartPolling
-				message = MessageReadyToStartDataFlow
-				next = &models.NextAction{
-					Method:   "POST",
-					Endpoint: telemetryStart,
+				if fleetStatus.DiscountedDeviceData {
+					action = ActionStartPolling
+					message = MessageReadyToStartDataFlow
+					next = &models.NextAction{
+						Method:   "POST",
+						Endpoint: telemetryStart,
+					}
+				} else {
+					// There are some cars that have vehicle_command_protocol_required as false,
+					// but are virtual key-capable and stream-capable.
+					if fleetStatus.KeyPaired {
+						action = ActionSetTelemetryConfig
+						message = MessageReadyToStartDataFlow
+						next = &models.NextAction{
+							Method:   "POST",
+							Endpoint: telemetryStart,
+						}
+					} else {
+						action = ActionOpenTeslaDeeplink
+						message = MessageVirtualKeyNotPaired
+					}
 				}
 			} else if *fleetStatus.SafetyScreenStreamingToggleEnabled {
 				action = ActionSetTelemetryConfig
