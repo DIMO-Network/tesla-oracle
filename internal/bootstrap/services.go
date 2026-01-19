@@ -15,6 +15,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	work "github.com/DIMO-Network/tesla-oracle/internal/workers"
+	"github.com/DIMO-Network/tesla-oracle/pkg/wallet"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/jackc/pgx/v5"
@@ -32,7 +33,7 @@ type Services struct {
 	VehicleOnboardService    service.VehicleOnboardService
 	IdentityService          service.IdentityAPIService
 	DeviceDefinitionsService service.DeviceDefinitionsAPIService
-	WalletService            service.SDWalletsAPI
+	WalletService            wallet.SDWalletsAPI
 	RiverClient              *river.Client[pgx.Tx]
 	DBPool                   *pgxpool.Pool
 	Repositories             *repository.Repositories
@@ -57,7 +58,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	deviceDefinitionsService := service.NewDeviceDefinitionsAPIService(logger, settings)
 
 	// Initialize wallet service
-	walletService := service.NewSDWalletsService(*logger, *settings)
+	walletService := wallet.NewSDWalletsService(*logger, settings.SDWalletsSeed)
 
 	// Initialize Tesla Fleet API service
 	teslaFleetAPIService, err := core.NewTeslaFleetAPIService(settings, logger)
@@ -113,7 +114,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 }
 
 // initializeRiver creates River client with workers and database pool
-func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
+func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws wallet.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
 	workers := river.NewWorkers()
 
 	// Create and register workers

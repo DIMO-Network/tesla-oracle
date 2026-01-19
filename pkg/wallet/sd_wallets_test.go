@@ -1,4 +1,4 @@
-package service
+package wallet
 
 import (
 	"context"
@@ -6,7 +6,6 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/rs/zerolog"
@@ -24,7 +23,7 @@ type SDWalletsServiceTestSuite struct {
 func (s *SDWalletsServiceTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-	s.ws = NewSDWalletsService(logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
+	s.ws = NewSDWalletsService(logger, sdWalletsSeed)
 }
 
 func TestSDWalletsServiceTestSuite(t *testing.T) {

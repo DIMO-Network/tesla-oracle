@@ -1,11 +1,10 @@
-package service
+package wallet
 
 import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
 
-	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/btcsuite/btcd/btcutil/hdkeychain"
 	"github.com/btcsuite/btcd/chaincfg"
 	"github.com/ethereum/go-ethereum/common"
@@ -25,8 +24,8 @@ type SDWalletsService struct {
 	key    *hdkeychain.ExtendedKey
 }
 
-func NewSDWalletsService(logger zerolog.Logger, settings config.Settings) *SDWalletsService {
-	seed := common.FromHex(settings.SDWalletsSeed)
+func NewSDWalletsService(logger zerolog.Logger, rawSeed string) *SDWalletsService {
+	seed := common.FromHex(rawSeed)
 
 	if len(seed) != hdkeychain.RecommendedSeedLen {
 		logger.Fatal().Msgf("Seed must be %d bytes.", hdkeychain.RecommendedSeedLen)

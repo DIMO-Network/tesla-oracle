@@ -16,6 +16,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/DIMO-Network/tesla-oracle/pkg/wallet"
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/aarondl/sqlboiler/v4/queries"
@@ -108,14 +109,14 @@ type OnboardingWorker struct {
 	identity service.IdentityAPIService
 	dbs      *db.Store
 	tr       *transactions.Client
-	ws       service.SDWalletsAPI
+	ws       wallet.SDWalletsAPI
 	m        sync.RWMutex
 	//vendor   VendorOnboardingAPI
 
 	river.WorkerDefaults[OnboardingArgs]
 }
 
-func NewOnboardingWorker(settings *config.Settings, logger zerolog.Logger, identity service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws service.SDWalletsAPI) *OnboardingWorker {
+func NewOnboardingWorker(settings *config.Settings, logger zerolog.Logger, identity service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws wallet.SDWalletsAPI) *OnboardingWorker {
 	return &OnboardingWorker{
 		settings: settings,
 		logger:   logger,

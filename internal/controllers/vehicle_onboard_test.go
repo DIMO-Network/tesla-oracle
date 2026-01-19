@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"io"
 	"os"
 	"testing"
 	"time"
+
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
+	"github.com/DIMO-Network/tesla-oracle/pkg/wallet"
 
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
@@ -46,7 +48,7 @@ type VehicleControllerTestSuite struct {
 	ctx       context.Context
 	river     *river.Client[pgx.Tx]
 	settings  config.Settings
-	ws        *service.SDWalletsService
+	ws        *wallet.SDWalletsService
 	logger    zerolog.Logger
 }
 
@@ -55,7 +57,7 @@ func (s *VehicleControllerTestSuite) SetupSuite() {
 	s.ctx = context.Background()
 	s.logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
 	s.pdb, s.container, s.settings = test.StartContainerDatabase(context.Background(), s.T(), migrationsDirRelPath)
-	s.ws = service.NewSDWalletsService(s.logger, config.Settings{SDWalletsSeed: sdWalletsSeed})
+	s.ws = wallet.NewSDWalletsService(s.logger, sdWalletsSeed)
 
 	fmt.Println("Suite setup completed.")
 }

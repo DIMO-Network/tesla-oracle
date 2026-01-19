@@ -4,13 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"github.com/jackc/pgx/v5"
-	"github.com/riverqueue/river"
 	"math/big"
 	"regexp"
 	"slices"
 	"strconv"
 	"strings"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/riverqueue/river"
 
 	"github.com/DIMO-Network/go-transactions"
 	registry "github.com/DIMO-Network/go-transactions/contracts"
@@ -20,6 +21,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
+	"github.com/DIMO-Network/tesla-oracle/pkg/wallet"
 	"github.com/aarondl/null/v8"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -175,7 +177,7 @@ type vehicleOnboardService struct {
 	logger       *zerolog.Logger
 	identitySvc  IdentityAPIService
 	riverClient  *river.Client[pgx.Tx]
-	walletSvc    SDWalletsAPI
+	walletSvc    wallet.SDWalletsAPI
 	transactions *transactions.Client
 	repositories *repository.Repositories
 }
@@ -186,7 +188,7 @@ func NewVehicleOnboardService(
 	logger *zerolog.Logger,
 	identitySvc IdentityAPIService,
 	riverClient *river.Client[pgx.Tx],
-	walletSvc SDWalletsAPI,
+	walletSvc wallet.SDWalletsAPI,
 	transactions *transactions.Client,
 	repositories *repository.Repositories,
 ) VehicleOnboardService {
