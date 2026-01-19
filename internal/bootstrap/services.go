@@ -57,10 +57,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	deviceDefinitionsService := service.NewDeviceDefinitionsAPIService(logger, settings)
 
 	// Initialize wallet service
-	walletService, err := service.NewSDWalletEnclaveClient(logger, *settings)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create SD Wallets service: %w", err)
-	}
+	walletService := service.NewSDWalletsService(*logger, *settings)
 
 	// Initialize Tesla Fleet API service
 	teslaFleetAPIService, err := core.NewTeslaFleetAPIService(settings, logger)
