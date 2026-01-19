@@ -27,11 +27,6 @@ type SDWalletsService struct {
 func NewSDWalletsService(logger zerolog.Logger, rawSeed string) *SDWalletsService {
 	seed := common.FromHex(rawSeed)
 
-	if len(seed) != hdkeychain.RecommendedSeedLen {
-		logger.Fatal().Msgf("Seed must be %d bytes.", hdkeychain.RecommendedSeedLen)
-		return nil
-	}
-
 	key, err := hdkeychain.NewMaster(seed, &chaincfg.MainNetParams)
 	if err != nil {
 		logger.Fatal().Err(err).Msg("Couldn't get key for provided seed.")
