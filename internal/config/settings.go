@@ -73,6 +73,19 @@ type Settings struct {
 	PartnersTeslaFleetURL string `json:"PARTNERS_FLEET_URL"`
 
 	MobileAppDevLicense common.Address `yaml:"MOBILE_APP_DEV_LICENSE"`
+
+	// Telemetry processor settings
+	TeslaTelemetryGroup    string `yaml:"TESLA_TELEMETRY_GROUP"`
+	TeslaTelemetryTopic    string `yaml:"TESLA_TELEMETRY_TOPIC"`
+	TeslaConnectionAddr    string `yaml:"TESLA_CONNECTION_ADDR"`
+	TeslaDISClientTLSCert  string `yaml:"TESLA_DIS_CLIENT_TLS_CERT"`
+	TeslaDISClientTLSKey   string `yaml:"TESLA_DIS_CLIENT_TLS_KEY"`
+	DISCACert              string `yaml:"DIS_CA_CERT"`
+	DISHost                string `yaml:"DIS_HOST"`
+	BatcherDurationSeconds int    `yaml:"BATCHER_DURATION_SECONDS"`
+	RetryBackoffSeconds    int    `yaml:"RETRY_BACKOFF_SECONDS"`
+	DISRetryLimit          int    `yaml:"DIS_RETRY_LIMIT"`
+	MappingRefreshInterval string `yaml:"MAPPING_REFRESH_INTERVAL"`
 }
 
 func (app *Settings) IsProduction() bool {

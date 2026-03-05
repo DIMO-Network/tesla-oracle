@@ -16,3 +16,16 @@ DB:
   NAME: tesla_oracle
   MAX_OPEN_CONNECTIONS: 5
   MAX_IDLE_CONNECTIONS: 5
+
+# Telemetry processor settings (optional - leave blank to disable)
+TESLA_TELEMETRY_GROUP: "topic.device.integration.ingest.tesla_V.group"
+TESLA_TELEMETRY_TOPIC: "topic.device.integration.ingest.tesla_V"
+TESLA_CONNECTION_ADDR: ""
+TESLA_DIS_CLIENT_TLS_CERT: ""
+TESLA_DIS_CLIENT_TLS_KEY: ""
+DIS_CA_CERT: ""
+DIS_HOST: ""
+BATCHER_DURATION_SECONDS: 10
+RETRY_BACKOFF_SECONDS: 5
+DIS_RETRY_LIMIT: 3
+MAPPING_REFRESH_INTERVAL: "10m"

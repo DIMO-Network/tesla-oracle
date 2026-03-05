@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
+	"time"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
 	"github.com/DIMO-Network/tesla-oracle/internal/credlistener"
+	"github.com/DIMO-Network/tesla-oracle/internal/telemetry"
 	"github.com/IBM/sarama"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
@@ -41,6 +44,13 @@ func (cm *ConsumerManager) StartConsumers(ctx context.Context, group *errgroup.G
 	// Start credential listener
 	if err := cm.startCredentialListener(ctx, group); err != nil {
 		return fmt.Errorf("failed to start credential listener: %w", err)
+	}
+
+	// Start telemetry consumer if configured
+	if cm.services.DISClient != nil && cm.settings.TeslaTelemetryTopic != "" {
+		if err := cm.startTelemetryConsumer(ctx, group); err != nil {
+			return fmt.Errorf("failed to start telemetry consumer: %w", err)
+		}
 	}
 
 	return nil
@@ -108,4 +118,57 @@ func (cm *ConsumerManager) runContractEventConsumer(ctx context.Context, proc *c
 			return nil
 		}
 	}
+}
+
+// startTelemetryConsumer starts the Tesla telemetry Kafka consumer that batches payloads and forwards them to DIS.
+func (cm *ConsumerManager) startTelemetryConsumer(ctx context.Context, group *errgroup.Group) error {
+	mapRefreshDur, err := time.ParseDuration(cm.settings.MappingRefreshInterval)
+	if err != nil {
+		return fmt.Errorf("couldn't parse MAPPING_REFRESH_INTERVAL %q: %w", cm.settings.MappingRefreshInterval, err)
+	}
+
+	saramaCfg := sarama.NewConfig()
+	saramaCfg.Version = sarama.V3_6_0_0
+
+	brokers := strings.Split(cm.settings.KafkaBrokers, ",")
+	kClient, err := sarama.NewClient(brokers, saramaCfg)
+	if err != nil {
+		return fmt.Errorf("error creating kafka client for telemetry consumer: %w", err)
+	}
+
+	cGroup, err := sarama.NewConsumerGroupFromClient(cm.settings.TeslaTelemetryGroup, kClient)
+	if err != nil {
+		return fmt.Errorf("error creating telemetry consumer group: %w", err)
+	}
+
+	batcher := telemetry.NewBatcher(
+		cm.services.DISClient,
+		cm.services.WalletService,
+		cm.settings.VehicleNftAddress,
+		cm.settings.SyntheticNftAddress,
+		cm.settings.TeslaConnectionAddr,
+		cm.settings.ChainID,
+		cm.logger,
+	)
+	vinMap := telemetry.NewVinMap(cm.services.DB.DBS, mapRefreshDur, cm.logger)
+	proc := telemetry.NewProcessor(batcher, vinMap, cm.settings.TeslaTelemetryTopic, cm.settings.BatcherDurationSeconds, cm.logger)
+
+	group.Go(func() error {
+		for {
+			cm.logger.Info().Msgf("starting telemetry consumer: %s", cm.settings.TeslaTelemetryTopic)
+			if err := cGroup.Consume(ctx, strings.Split(cm.settings.TeslaTelemetryTopic, ","), proc); err != nil {
+				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+					return nil
+				}
+				cm.logger.Err(err).Msg("telemetry consumer failure")
+				return err
+			}
+			if ctx.Err() != nil {
+				return nil
+			}
+		}
+	})
+
+	cm.logger.Info().Msgf("Started telemetry consumer for topic: %s", cm.settings.TeslaTelemetryTopic)
+	return nil
 }

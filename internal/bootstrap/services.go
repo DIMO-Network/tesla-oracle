@@ -14,6 +14,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	"github.com/DIMO-Network/tesla-oracle/internal/telemetry"
 	work "github.com/DIMO-Network/tesla-oracle/internal/workers"
 	"github.com/DIMO-Network/tesla-oracle/pkg/wallet"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -39,6 +40,7 @@ type Services struct {
 	Repositories             *repository.Repositories
 	TeslaFleetAPIService     core.TeslaFleetAPIService
 	TeslaService             *service.TeslaService
+	DISClient                *telemetry.DISClient
 }
 
 // InitializeServices creates and initializes all application services
@@ -98,6 +100,23 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	// Initialize VehicleOnboardService
 	vehicleOnboardService := service.NewVehicleOnboardService(settings, logger, identityService, riverClient, walletService, transactionsClient, repositories)
 
+	// Initialize DIS client for telemetry processing (optional)
+	var disClient *telemetry.DISClient
+	if settings.DISHost != "" {
+		disClient, err = telemetry.NewDISClient(
+			settings.TeslaDISClientTLSCert,
+			settings.TeslaDISClientTLSKey,
+			settings.DISCACert,
+			settings.DISHost,
+			settings.RetryBackoffSeconds,
+			settings.DISRetryLimit,
+			logger,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create DIS client: %w", err)
+		}
+	}
+
 	return &Services{
 		DB:                       &pdb,
 		TransactionsClient:       transactionsClient,
@@ -110,6 +129,7 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		Repositories:             repositories,
 		TeslaFleetAPIService:     teslaFleetAPIService,
 		TeslaService:             teslaService,
+		DISClient:                disClient,
 	}, nil
 }
 
