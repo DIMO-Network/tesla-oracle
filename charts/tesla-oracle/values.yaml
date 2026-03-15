@@ -89,7 +89,6 @@ env:
     GQ==
     -----END CERTIFICATE-----
   SYNTHETIC_WALLET_GRPC_ADDR: synthetic-wallet-instance-dev:8086
-  CREDENTIAL_KTABLE: table.task.credential
   TESLA_CONNECTION_ADDR: '0xc4035Fecb1cc906130423EF05f9C20977F643722'
   TESLA_DIS_CA_CERT: |
     -----BEGIN CERTIFICATE-----

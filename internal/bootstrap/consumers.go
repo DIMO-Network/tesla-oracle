@@ -8,7 +8,6 @@ import (
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
-	"github.com/DIMO-Network/tesla-oracle/internal/credlistener"
 	"github.com/IBM/sarama"
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
@@ -39,11 +38,6 @@ func (cm *ConsumerManager) StartConsumers(ctx context.Context, group *errgroup.G
 		}
 	}
 
-	// Start credential listener
-	if err := cm.startCredentialListener(ctx, group); err != nil {
-		return fmt.Errorf("failed to start credential listener: %w", err)
-	}
-
 	if err := cm.startTelemetryConsumer(ctx, group); err != nil {
 		return fmt.Errorf("failed to start telemetry consumer: %w", err)
 	}
@@ -68,34 +62,6 @@ func (cm *ConsumerManager) startContractEventConsumer(ctx context.Context, group
 	})
 
 	cm.logger.Info().Msgf("Started contract event consumer for topic: %s", cm.settings.TopicContractEvent)
-	return nil
-}
-
-// startCredentialListener starts the credential listener
-func (cm *ConsumerManager) startCredentialListener(ctx context.Context, group *errgroup.Group) error {
-	config := sarama.NewConfig()
-	config.Version = sarama.V3_6_0_0
-
-	cGroup, err := sarama.NewConsumerGroup([]string{cm.settings.KafkaBrokers}, "tesla-oracle", config)
-	if err != nil {
-		return fmt.Errorf("error creating consumer group: %w", err)
-	}
-
-	cl := credlistener.New(*cm.services.DB, cm.logger)
-
-	group.Go(func() error {
-		for {
-			err := cGroup.Consume(ctx, []string{cm.settings.CredentialKTable}, cl)
-			if err != nil {
-				cm.logger.Warn().Err(err).Msg("Credential consumer error.")
-			}
-			if ctx.Err() != nil {
-				return nil
-			}
-		}
-	})
-
-	cm.logger.Info().Msgf("Started credential listener for topic: %s", cm.settings.CredentialKTable)
 	return nil
 }
 

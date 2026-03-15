@@ -337,12 +337,6 @@ func (ts *TeslaService) GetVehicleStatus(ctx context.Context, tokenID int64, req
 				}, nil
 			}
 		}
-	case ActionStartPolling:
-		// For polling, we consider telemetry already started be devices-api
-		return &models.StatusDecision{
-			Action:  ActionTelemetryConfigured,
-			Message: MessageTelemetryConfigured,
-		}, nil
 	}
 
 	return resp, nil
@@ -721,10 +715,8 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 		}
 
 	case ActionStartPolling:
-		startErr := ts.devicesSvc.StartTeslaTask(ctx, tokenID)
-		if startErr != nil {
-			ts.logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
-		}
+		ts.logger.Warn().Int64("vehicleTokenId", tokenID).Str("vin", sd.Vin).Msg("Polling startup is disabled until it is reimplemented in this service")
+		return core.ErrTelemetryNotReady
 
 	default:
 		return core.ErrTelemetryNotReady

@@ -140,8 +140,8 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 				DiscountedDeviceData:           true,
 			},
 			expectedAction:             service.ActionStartPolling,
-			expectedStatusCode:         fiber.StatusOK,
-			expectedSubscriptionStatus: "active",
+			expectedStatusCode:         fiber.StatusConflict,
+			expectedSubscriptionStatus: "pending",
 		},
 		{
 			name: "Open Tesla Deeplink",
@@ -225,7 +225,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 				DiscountedDeviceData:           true,
 			},
 			expectedAction:             service.ActionStartPolling,
-			expectedStatusCode:         fiber.StatusOK,
+			expectedStatusCode:         fiber.StatusConflict,
 			expectedConfigLimitReached: false,
 		},
 		{
@@ -531,7 +531,12 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			},
 			telemetryStatus: false,
 			expectedResponse: &mods.StatusDecision{
-				Message: service.MessageTelemetryConfigured,
+				Message: service.MessageReadyToStartDataFlow,
+				Action:  service.ActionStartPolling,
+				Next: &mods.NextAction{
+					Method:   "POST",
+					Endpoint: expectedStartEndpoint,
+				},
 			},
 			expectedStatusCode: fiber.StatusOK,
 		},
@@ -718,59 +723,83 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 
 func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 	testCases := []struct {
-		name              string
-		syntheticDevice   *models.SyntheticDevice
-		decryptError      error
-		decryptedToken    string
-		refreshTokenValid bool
-		refreshTokenError error
-		expectedToken     string
-		expectedError     string
+		name            string
+		syntheticDevice *models.SyntheticDevice
+		refreshResponse *core.RefreshTokenResp
+		refreshTokenErr error
+		expectedToken   string
+		expectedError   string
+		expectRefresh   bool
 	}{
 		{
 			name: "Valid access token",
 			syntheticDevice: &models.SyntheticDevice{
+				VehicleTokenID:   null.IntFrom(vehicleTokenID),
+				Address:          common.HexToAddress(walletAddress).Bytes(),
 				AccessToken:      null.StringFrom("encryptedAccessToken"),
+				RefreshToken:     null.StringFrom("encryptedRefreshToken"),
+				AccessExpiresAt:  null.TimeFrom(time.Now().Add(1 * time.Hour)),
 				RefreshExpiresAt: null.TimeFrom(time.Now().Add(1 * time.Hour)),
 			},
-			decryptedToken: "validAccessToken",
-			expectedToken:  "validAccessToken",
+			expectedToken: "encryptedAccessToken",
 		},
 		{
 			name: "Refresh token expired",
 			syntheticDevice: &models.SyntheticDevice{
+				VehicleTokenID:   null.IntFrom(vehicleTokenID),
+				Address:          common.HexToAddress(walletAddress).Bytes(),
 				AccessToken:      null.StringFrom("encryptedExpiredAccessToken"),
 				RefreshToken:     null.StringFrom("encryptedExpiredRefreshToken"),
 				AccessExpiresAt:  null.TimeFrom(time.Now().Add(-1 * time.Hour)),
 				RefreshExpiresAt: null.TimeFrom(time.Now().Add(-1 * time.Hour)),
 			},
-			decryptedToken:    "expiredAccessToken",
-			refreshTokenValid: true,
-			refreshTokenError: fmt.Errorf("refresh token expired"),
-			expectedError:     core.ErrTokenExpired.Error(),
+			expectedError: core.ErrTokenExpired.Error(),
+		},
+		{
+			name: "Refresh token before expiry window",
+			syntheticDevice: &models.SyntheticDevice{
+				VehicleTokenID:   null.IntFrom(vehicleTokenID),
+				Address:          common.HexToAddress(walletAddress).Bytes(),
+				AccessToken:      null.StringFrom("oldAccess"),
+				RefreshToken:     null.StringFrom("refreshToken"),
+				AccessExpiresAt:  null.TimeFrom(time.Now().Add(2 * time.Minute)),
+				RefreshExpiresAt: null.TimeFrom(time.Now().Add(2 * time.Hour)),
+			},
+			refreshResponse: &core.RefreshTokenResp{
+				AccessToken:  "newAccess",
+				RefreshToken: "newRefresh",
+				ExpiresIn:    3600,
+			},
+			expectedToken: "newAccess",
+			expectRefresh: true,
 		},
 	}
 
 	for _, tc := range testCases {
 		s.Run(tc.name, func() {
-			// when
-			mockCipher := new(test.MockCipher)
-			mockCipher.On("Decrypt", tc.syntheticDevice.AccessToken.String).Return(tc.decryptedToken, tc.decryptError)
-			if tc.refreshTokenValid {
-				mockCipher.On("Decrypt", tc.syntheticDevice.RefreshToken.String).Return(tc.decryptedToken, tc.decryptError)
-			}
+			cip := new(cipher.ROT13Cipher)
+			encryptedAccess, err := cip.Encrypt(tc.syntheticDevice.AccessToken.String)
+			require.NoError(s.T(), err)
+			tc.syntheticDevice.AccessToken = null.StringFrom(encryptedAccess)
+			encryptedRefresh, err := cip.Encrypt(tc.syntheticDevice.RefreshToken.String)
+			require.NoError(s.T(), err)
+			tc.syntheticDevice.RefreshToken = null.StringFrom(encryptedRefresh)
+
+			require.NoError(s.T(), tc.syntheticDevice.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+			defer func() {
+				_, _ = tc.syntheticDevice.Delete(s.ctx, s.pdb.DBS().Writer)
+			}()
+
 			mockTeslaService := new(test.MockTeslaFleetAPIService)
-			if tc.refreshTokenValid {
-				//mockTeslaService := new(test.MockTeslaFleetAPIService)
-				mockTeslaService.On("RefreshAccessToken", mock.Anything, tc.syntheticDevice.RefreshToken.String).Return(tc.decryptedToken, tc.refreshTokenError)
+			if tc.expectRefresh {
+				mockTeslaService.On("RefreshToken", mock.Anything, "refreshToken").Return(tc.refreshResponse, tc.refreshTokenErr)
 			}
 			logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
-			tokenManager := core.NewTeslaTokenManager(mockCipher, nil, mockTeslaService, &logger)
+			vehicleRepo := repository.NewVehicleRepository(&s.pdb, cip, &logger)
+			tokenManager := core.NewTeslaTokenManager(cip, vehicleRepo, mockTeslaService, &logger)
 
-			// then
 			token, err := tokenManager.GetOrRefreshAccessToken(context.TODO(), tc.syntheticDevice)
 
-			// verify
 			if tc.expectedError != "" {
 				s.Require().Error(err)
 				s.Contains(err.Error(), tc.expectedError)
@@ -779,7 +808,7 @@ func (s *TeslaControllerTestSuite) TestGetOrRefreshAccessToken() {
 				s.Equal(tc.expectedToken, token)
 			}
 
-			mockCipher.AssertExpectations(s.T())
+			mockTeslaService.AssertExpectations(s.T())
 		})
 	}
 }
@@ -1967,8 +1996,7 @@ func (s *TeslaControllerTestSuite) setupPrivilegeTestApp(method string, handler 
 
 func (s *TeslaControllerTestSuite) setupMockServices(fleetStatus *core.VehicleFleetStatus, expectedAction string, limitReached bool) (*test.MockTeslaFleetAPIService, *test.MockDevicesGRPCService) {
 	config := MockConfig{
-		FleetStatus:  fleetStatus,
-		NeedsDevices: expectedAction == service.ActionStartPolling,
+		FleetStatus: fleetStatus,
 	}
 
 	mockTeslaService, _, _, mockDevicesService := s.setupGenericMocks(config)
@@ -1978,8 +2006,6 @@ func (s *TeslaControllerTestSuite) setupMockServices(fleetStatus *core.VehicleFl
 	case service.ActionSetTelemetryConfig:
 		mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
 		mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&core.VehicleTelemetryStatus{LimitReached: limitReached}, nil)
-	case service.ActionStartPolling:
-		mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
 	case service.ActionDummy:
 		mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&core.VehicleTelemetryStatus{LimitReached: limitReached}, nil)
 	}
@@ -2001,8 +2027,6 @@ func (s *TeslaControllerTestSuite) assertMockCalls(mockTeslaService *test.MockTe
 	case service.ActionSetTelemetryConfig:
 		mockTeslaService.AssertCalled(s.T(), "SubscribeForTelemetryData", mock.Anything, mock.Anything, vin)
 		mockTeslaService.AssertExpectations(s.T())
-	case service.ActionStartPolling:
-		mockDevicesService.AssertCalled(s.T(), "StartTeslaTask", mock.Anything, int64(vehicleTokenID))
 	}
 }
 
