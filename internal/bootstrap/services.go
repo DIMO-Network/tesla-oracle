@@ -14,6 +14,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	"github.com/DIMO-Network/tesla-oracle/internal/telemetry"
 	work "github.com/DIMO-Network/tesla-oracle/internal/workers"
 	"github.com/DIMO-Network/tesla-oracle/pkg/wallet"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
@@ -37,8 +38,10 @@ type Services struct {
 	RiverClient              *river.Client[pgx.Tx]
 	DBPool                   *pgxpool.Pool
 	Repositories             *repository.Repositories
+	SyntheticDeviceLookup    service.SyntheticDeviceLookupService
 	TeslaFleetAPIService     core.TeslaFleetAPIService
 	TeslaService             *service.TeslaService
+	TelemetryRuntime         *telemetry.Runtime
 }
 
 // InitializeServices creates and initializes all application services
@@ -86,6 +89,8 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	// Initialize Tesla token manager
 	tokenManager := core.NewTeslaTokenManager(cip, repositories.Vehicle, teslaFleetAPIService, logger)
 
+	syntheticDeviceLookup := service.NewSyntheticDeviceLookupService(repositories.Vehicle)
+
 	// Initialize Tesla service with all dependencies
 	teslaService := service.NewTeslaService(settings, logger, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, *tokenManager)
 
@@ -98,6 +103,11 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	// Initialize VehicleOnboardService
 	vehicleOnboardService := service.NewVehicleOnboardService(settings, logger, identityService, riverClient, walletService, transactionsClient, repositories)
 
+	telemetryRuntime, err := telemetry.NewRuntime(settings, logger, walletService, syntheticDeviceLookup)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize telemetry runtime: %w", err)
+	}
+
 	return &Services{
 		DB:                       &pdb,
 		TransactionsClient:       transactionsClient,
@@ -108,8 +118,10 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		RiverClient:              riverClient,
 		DBPool:                   dbPool,
 		Repositories:             repositories,
+		SyntheticDeviceLookup:    syntheticDeviceLookup,
 		TeslaFleetAPIService:     teslaFleetAPIService,
 		TeslaService:             teslaService,
+		TelemetryRuntime:         telemetryRuntime,
 	}, nil
 }
 

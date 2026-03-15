@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/consumer"
@@ -41,6 +42,10 @@ func (cm *ConsumerManager) StartConsumers(ctx context.Context, group *errgroup.G
 	// Start credential listener
 	if err := cm.startCredentialListener(ctx, group); err != nil {
 		return fmt.Errorf("failed to start credential listener: %w", err)
+	}
+
+	if err := cm.startTelemetryConsumer(ctx, group); err != nil {
+		return fmt.Errorf("failed to start telemetry consumer: %w", err)
 	}
 
 	return nil
@@ -91,6 +96,35 @@ func (cm *ConsumerManager) startCredentialListener(ctx context.Context, group *e
 	})
 
 	cm.logger.Info().Msgf("Started credential listener for topic: %s", cm.settings.CredentialKTable)
+	return nil
+}
+
+func (cm *ConsumerManager) startTelemetryConsumer(ctx context.Context, group *errgroup.Group) error {
+	config := sarama.NewConfig()
+	config.Version = sarama.V3_6_0_0
+
+	brokers := strings.Split(cm.settings.KafkaBrokers, ",")
+	cGroup, err := sarama.NewConsumerGroup(brokers, cm.services.TelemetryRuntime.Group, config)
+	if err != nil {
+		return fmt.Errorf("error creating telemetry consumer group: %w", err)
+	}
+
+	group.Go(func() error {
+		for {
+			cm.logger.Info().Msgf("starting telemetry consumer: %s", cm.services.TelemetryRuntime.Topic)
+			if err := cGroup.Consume(ctx, strings.Split(cm.services.TelemetryRuntime.Topic, ","), cm.services.TelemetryRuntime.Processor); err != nil {
+				if errors.Is(err, sarama.ErrClosedConsumerGroup) {
+					return nil
+				}
+				return err
+			}
+			if ctx.Err() != nil {
+				return nil
+			}
+		}
+	})
+
+	cm.logger.Info().Msgf("Started telemetry consumer for topic: %s", cm.services.TelemetryRuntime.Topic)
 	return nil
 }
 

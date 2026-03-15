@@ -30,6 +30,8 @@ env:
   ENABLE_CONTRACT_EVENT_CONSUMER: true
   CONTRACT_EVENT_TOPIC: topic.contract.event
   KAFKA_BROKERS: kafka-dev-dimo-kafka-kafka-brokers:9092
+  TESLA_TELEMETRY_TOPIC: topic.device.integration.ingest.tesla_V
+  TESLA_TELEMETRY_GROUP: topic.device.integration.ingest.tesla_V.group
   DB_PORT: '5432'
   DB_NAME: tesla_oracle
   DB_MAX_OPEN_CONNECTIONS: '10'
@@ -88,6 +90,40 @@ env:
     -----END CERTIFICATE-----
   SYNTHETIC_WALLET_GRPC_ADDR: synthetic-wallet-instance-dev:8086
   CREDENTIAL_KTABLE: table.task.credential
+  TESLA_CONNECTION_ADDR: '0xc4035Fecb1cc906130423EF05f9C20977F643722'
+  TESLA_DIS_CA_CERT: |
+    -----BEGIN CERTIFICATE-----
+    MIICQjCCAeegAwIBAgIQF7WZqR1boC6eFj+h6Kw3sjAKBggqhkjOPQQDAjAyMTAw
+    LgYDVQQDEydESU1PIENBIERldmVsb3BtZW50IFNlcnZlciBJbnRlcm1lZGlhdGUw
+    HhcNMjQwOTI1MTQyNjI5WhcNMjUwOTI1MTQyNzI5WjAcMRowGAYDVQQDExFkaXMu
+    ZGV2LmRpbW8uem9uZTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABBQQAeepmCWH
+    gSpoDBBTG1Zo4k94MpR9yTvKas1kiQP+tcbm02rmNmgCra42rLJX76Z99d+Ezvv7
+    ohw96oD8tf2jgfQwgfEwDgYDVR0PAQH/BAQDAgeAMB0GA1UdJQQWMBQGCCsGAQUF
+    BwMBBggrBgEFBQcDAjAdBgNVHQ4EFgQUKkURPCT6cktQBnzUWU1LUiPFyA4wHwYD
+    VR0jBBgwFoAU+7zrfioO4bjNpD9KiG8fbTcIq8kwLwYDVR0RBCgwJoIRZGlzLmRl
+    di5kaW1vLnpvbmWGEWh0dHBzOi8vZGltby56b25lME8GDCsGAQQBgqRkxihAAQQ/
+    MD0CAQEEC3N0ZXAtaXNzdWVyBCt1X0swcVFra1Vwam4tUU9JUFBxZDZxd3BlRjh5
+    dHA1alFZZ2xYZ3lTUEM4MAoGCCqGSM49BAMCA0kAMEYCIQCRExnT+DCFga2bJf8y
+    chTr6wivosJk9W4LE+3xHfK+NQIhAPjJkGWSxJNPLmiZ53hBoQnpIIYO5yQIVaN+
+    T9msftxp
+    -----END CERTIFICATE-----
+    -----BEGIN CERTIFICATE-----
+    MIIBvDCCAWKgAwIBAgIRAL6QCUcK/8jy48V7ElERABowCgYIKoZIzj0EAwIwIzEh
+    MB8GA1UEAxMYRElNTyBDQSBEZXZlbG9wbWVudCBSb290MCAXDTIyMDQyMzExMTEw
+    M1oYDzIwNzIwNDEwMTExMTAzWjAyMTAwLgYDVQQDEydESU1PIENBIERldmVsb3Bt
+    ZW50IFNlcnZlciBJbnRlcm1lZGlhdGUwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNC
+    AAQMyh6plUM3p4KWWfK0CqWXr1B9NWk53+c9ps8OpgZZIyXjxiw1EHxrpcqU7C9e
+    hw+6JfmvTqqi3F4ES8K+Tt/mo2YwZDAOBgNVHQ8BAf8EBAMCAQYwEgYDVR0TAQH/
+    BAgwBgEB/wIBADAdBgNVHQ4EFgQU+7zrfioO4bjNpD9KiG8fbTcIq8kwHwYDVR0j
+    BBgwFoAUeMfSSqt+S65xQF82yRnjr+J5XC8wCgYIKoZIzj0EAwIDSAAwRQIhAK3s
+    Wtlk+d0fnkii091dTZGt+dtzEbM4HuizaG6mO5zPAiApi03qU/hdsAxXwlbhufH/
+    5HuUiCLgBK8vPvL2YdMaKQ==
+    -----END CERTIFICATE-----
+  TESLA_DIS_HOST: https://dis.dev.dimo.zone
+  BATCHER_DURATION_SECONDS: 10
+  RETRY_BACKOFF_SECONDS: 5
+  DIS_RETRY_LIMIT: 3
+  MAPPING_REFRESH_INTERVAL: 10m
 service:
   type: ClusterIP
   ports:
@@ -165,7 +201,21 @@ podDisruptionBudget:
   minAvailable: 0
 kafka:
   clusterName: kafka-dev-dimo-kafka
-  topics: []
+  topics:
+    - name: topic.device.integration.mapping.tesla
+      config:
+        segment.ms: '3600000'
+        compression.type: producer
+        cleanup.policy: compact,delete
+        min.compaction.lag.ms: '3600000'
+    - name: tesla-telemetry-processor-mapping-table
+      config:
+        segment.ms: '3600000'
+        compression.type: producer
+        cleanup.policy: compact
+        min.compaction.lag.ms: '3600000'
+        min.cleanable.dirty.ratio: '0.01'
+        delete.retention.ms: '3600000'
 serviceMonitor:
   enabled: true
   path: /metrics
