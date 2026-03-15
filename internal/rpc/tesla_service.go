@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/DIMO-Network/tesla-oracle/pkg/grpc"
 	"github.com/aarondl/null/v8"
@@ -26,11 +27,13 @@ func NewTeslaRPCService(
 	dbs func() *db.ReaderWriter,
 	logger *zerolog.Logger,
 	wp WalletProvider,
+	lookup service.SyntheticDeviceLookupService,
 ) grpc.TeslaOracleServer {
 	return &TeslaRPCService{
 		dbs:    dbs,
 		logger: logger,
 		wp:     wp,
+		lookup: lookup,
 	}
 }
 
@@ -40,6 +43,7 @@ type TeslaRPCService struct {
 	dbs    func() *db.ReaderWriter
 	wp     WalletProvider
 	logger *zerolog.Logger
+	lookup service.SyntheticDeviceLookupService
 }
 
 func (t *TeslaRPCService) RegisterNewSyntheticDevice(ctx context.Context, req *grpc.RegisterNewSyntheticDeviceRequest) (*grpc.RegisterNewSyntheticDeviceResponse, error) {
@@ -121,11 +125,7 @@ func (t *TeslaRPCService) RegisterNewSyntheticDeviceV2(ctx context.Context, req 
 }
 
 func (t *TeslaRPCService) GetSyntheticDevicesByVIN(ctx context.Context, req *grpc.GetSyntheticDevicesByVINRequest) (*grpc.GetSyntheticDevicesByVINResponse, error) {
-	devices, err := models.SyntheticDevices(
-		models.SyntheticDeviceWhere.Vin.EQ(req.GetVin()),
-		models.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
-		models.SyntheticDeviceWhere.TokenID.IsNotNull(),
-	).All(ctx, t.dbs().Reader)
+	devices, err := t.lookup.GetSyntheticDevicesByVIN(ctx, req.GetVin())
 	if err != nil {
 		return nil, err
 	}
@@ -135,12 +135,12 @@ func (t *TeslaRPCService) GetSyntheticDevicesByVIN(ctx context.Context, req *grp
 		all = append(
 			all,
 			&grpc.SyntheticDevice{
-				Vin:                dev.Vin,
+				Vin:                dev.VIN,
 				Address:            dev.Address,
-				WalletChildNum:     uint64(dev.WalletChildNumber.Int),
-				VehicleTokenId:     uint64(dev.VehicleTokenID.Int),
-				TokenId:            uint64(dev.TokenID.Int),
-				SubscriptionStatus: dev.SubscriptionStatus.String,
+				WalletChildNum:     dev.WalletChildNum,
+				VehicleTokenId:     dev.VehicleTokenID,
+				TokenId:            dev.TokenID,
+				SubscriptionStatus: dev.SubscriptionStatus,
 			},
 		)
 	}

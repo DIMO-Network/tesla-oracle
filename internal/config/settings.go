@@ -19,6 +19,8 @@ type Settings struct {
 	TopicContractEvent          string      `yaml:"CONTRACT_EVENT_TOPIC"`
 	CredentialKTable            string      `yaml:"CREDENTIAL_KTABLE"`
 	KafkaBrokers                string      `yaml:"KAFKA_BROKERS"`
+	TeslaTelemetryGroup         string      `yaml:"TESLA_TELEMETRY_GROUP"`
+	TeslaTelemetryTopic         string      `yaml:"TESLA_TELEMETRY_TOPIC"`
 	DB                          db.Settings `yaml:"DB"`
 	ServiceName                 string      `yaml:"SERVICE_NAME"`
 	JwtKeySetURL                string      `yaml:"JWT_KEY_SET_URL"`
@@ -68,6 +70,16 @@ type Settings struct {
 	TeslaVirtualKeyURL          url.URL `yaml:"TESLA_VIRTUAL_KEY_URL"`
 
 	SyntheticWalletGRPCAddr string `yaml:"SYNTHETIC_WALLET_GRPC_ADDR"`
+
+	TeslaConnectionAddr             string `yaml:"TESLA_CONNECTION_ADDR"`
+	TeslaDISClientTLSCert           string `yaml:"TESLA_DIS_CLIENT_TLS_CERT"`
+	TeslaDISClientTLSKey            string `yaml:"TESLA_DIS_CLIENT_TLS_KEY"`
+	TeslaDISCACert                  string `yaml:"TESLA_DIS_CA_CERT"`
+	TeslaDISHost                    string `yaml:"TESLA_DIS_HOST"`
+	TelemetryBatcherDurationSeconds int    `yaml:"BATCHER_DURATION_SECONDS"`
+	TelemetryRetryBackoffSeconds    int    `yaml:"RETRY_BACKOFF_SECONDS"`
+	TelemetryDISRetryLimit          int    `yaml:"DIS_RETRY_LIMIT"`
+	TelemetryMappingRefreshInterval string `yaml:"MAPPING_REFRESH_INTERVAL"`
 
 	// Settings for the partners token
 	PartnersTeslaFleetURL string `json:"PARTNERS_FLEET_URL"`
