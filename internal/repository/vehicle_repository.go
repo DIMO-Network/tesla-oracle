@@ -11,6 +11,7 @@ import (
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
+	"github.com/aarondl/sqlboiler/v4/queries/qm"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog"
 )
@@ -88,6 +89,28 @@ func (r *vehicleRepository) GetSyntheticDeviceByTokenID(ctx context.Context, tok
 	return sd, nil
 }
 
+// GetSyntheticDeviceByTokenIDForUpdate retrieves and locks a synthetic device row for refresh coordination.
+func (r *vehicleRepository) GetSyntheticDeviceByTokenIDForUpdate(ctx context.Context, tokenID int64) (*dbmodels.SyntheticDevice, *sql.Tx, error) {
+	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
+	if err != nil {
+		return nil, nil, err
+	}
+
+	sd, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.VehicleTokenID.EQ(null.IntFrom(int(tokenID))),
+		qm.For("UPDATE"),
+	).One(ctx, tx)
+	if err != nil {
+		_ = tx.Rollback()
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil, ErrVehicleNotFound
+		}
+		return nil, nil, fmt.Errorf("failed to lock vehicle with token ID %d: %w", tokenID, err)
+	}
+
+	return sd, tx, nil
+}
+
 // GetSyntheticDeviceByAddress retrieves a synthetic device by its address
 func (r *vehicleRepository) GetSyntheticDeviceByAddress(ctx context.Context, address common.Address) (*dbmodels.SyntheticDevice, error) {
 	device, err := dbmodels.SyntheticDevices(
@@ -133,6 +156,15 @@ func (r *vehicleRepository) UpdateSyntheticDeviceSubscriptionStatus(ctx context.
 
 // UpdateSyntheticDeviceCredentials updates the credentials for a synthetic device
 func (r *vehicleRepository) UpdateSyntheticDeviceCredentials(ctx context.Context, synthDevice *dbmodels.SyntheticDevice, creds *Credential) error {
+	return r.updateSyntheticDeviceCredentials(ctx, r.db.DBS().Writer, synthDevice, creds)
+}
+
+// UpdateSyntheticDeviceCredentialsTx updates credentials using an existing transaction.
+func (r *vehicleRepository) UpdateSyntheticDeviceCredentialsTx(ctx context.Context, tx *sql.Tx, synthDevice *dbmodels.SyntheticDevice, creds *Credential) error {
+	return r.updateSyntheticDeviceCredentials(ctx, tx, synthDevice, creds)
+}
+
+func (r *vehicleRepository) updateSyntheticDeviceCredentials(ctx context.Context, exec boil.ContextExecutor, synthDevice *dbmodels.SyntheticDevice, creds *Credential) error {
 	encryptedAccess, err := r.cipher.Encrypt(creds.AccessToken)
 	if err != nil {
 		return fmt.Errorf("failed to encrypt access token: %w", err)
@@ -149,9 +181,7 @@ func (r *vehicleRepository) UpdateSyntheticDeviceCredentials(ctx context.Context
 	synthDevice.RefreshToken = null.String{String: encryptedRefresh, Valid: true}
 	synthDevice.RefreshExpiresAt = null.TimeFrom(creds.RefreshExpiry)
 
-	// Save the changes to the database
-	// TODO: add transaction handling
-	_, err = synthDevice.Update(ctx, r.db.DBS().Writer, boil.Infer())
+	_, err = synthDevice.Update(ctx, exec, boil.Infer())
 	if err != nil {
 		return err
 	}

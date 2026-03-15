@@ -164,17 +164,6 @@ Tesla Oracle uses [River](https://riverqueue.com/) job queue system for asynchro
 
 ### Kafka Integration
 
-**Credential Listener**: Tesla Oracle consumes credential updates from the DIMO network via Kafka:
-
-- **Topic**: `CREDENTIAL_KTABLE` (configured per environment)
-- **Consumer Group**: `tesla-oracle`
-- **Purpose**: Receives Tesla API credential updates for synthetic devices
-- **Processing**:
-  - Listens for credential cloud events with access/refresh tokens
-  - Updates `synthetic_devices` table with new encrypted credentials
-  - Handles token expiry management (access tokens + 90-day refresh tokens)
-  - Filters for Tesla integration (IntegrationTokenID = 2)
-
 **Contract Event Consumer**: Processes blockchain events when enabled:
 - **Topic**: Configurable contract event topic
 - **Purpose**: Handles smart contract events and state changes

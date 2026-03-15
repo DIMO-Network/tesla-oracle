@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"database/sql"
 
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/ethereum/go-ethereum/common"
@@ -22,9 +23,11 @@ type VehicleRepository interface {
 	GetSyntheticDevicesByVIN(ctx context.Context, vin string) (dbmodels.SyntheticDeviceSlice, error)
 	GetSyntheticDevicesByVins(ctx context.Context, vins []string) (dbmodels.SyntheticDeviceSlice, error)
 	GetSyntheticDeviceByTokenID(ctx context.Context, tokenID int64) (*dbmodels.SyntheticDevice, error)
+	GetSyntheticDeviceByTokenIDForUpdate(ctx context.Context, tokenID int64) (*dbmodels.SyntheticDevice, *sql.Tx, error)
 	GetSyntheticDeviceByAddress(ctx context.Context, address common.Address) (*dbmodels.SyntheticDevice, error)
 	UpdateSyntheticDeviceSubscriptionStatus(ctx context.Context, device *dbmodels.SyntheticDevice, status string) error
 	UpdateSyntheticDeviceCredentials(ctx context.Context, device *dbmodels.SyntheticDevice, creds *Credential) error
+	UpdateSyntheticDeviceCredentialsTx(ctx context.Context, tx *sql.Tx, device *dbmodels.SyntheticDevice, creds *Credential) error
 	InsertSyntheticDevice(ctx context.Context, device *dbmodels.SyntheticDevice) error
 	DeleteSyntheticDevice(ctx context.Context, address []byte) error
 }
