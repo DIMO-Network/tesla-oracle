@@ -22,36 +22,27 @@ import (
 )
 
 type TeslaService struct {
-	settings     *config.Settings
-	logger       *zerolog.Logger
-	repositories *repository.Repositories
-	fleetAPISvc  core.TeslaFleetAPIService
-	identitySvc  IdentityAPIService
-	ddSvc        DeviceDefinitionsAPIService
-	devicesSvc   DevicesGRPCService
-	authManager  core.TeslaTokenManager
+	settings      *config.Settings
+	logger        *zerolog.Logger
+	repositories  *repository.Repositories
+	fleetAPISvc   core.TeslaFleetAPIService
+	identitySvc   IdentityAPIService
+	ddSvc         DeviceDefinitionsAPIService
+	pollScheduler LegacyPollScheduler
+	authManager   core.TeslaTokenManager
 }
 
-func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, repositories *repository.Repositories, fleetAPISvc core.TeslaFleetAPIService, identitySvc IdentityAPIService, ddSvc DeviceDefinitionsAPIService, devicesService DevicesGRPCService, authManager core.TeslaTokenManager) *TeslaService {
+func NewTeslaService(settings *config.Settings, logger *zerolog.Logger, repositories *repository.Repositories, fleetAPISvc core.TeslaFleetAPIService, identitySvc IdentityAPIService, ddSvc DeviceDefinitionsAPIService, pollScheduler LegacyPollScheduler, authManager core.TeslaTokenManager) *TeslaService {
 	return &TeslaService{
-		settings:     settings,
-		logger:       logger,
-		repositories: repositories,
-		fleetAPISvc:  fleetAPISvc,
-		identitySvc:  identitySvc,
-		ddSvc:        ddSvc,
-		devicesSvc:   devicesService,
-		authManager:  authManager,
+		settings:      settings,
+		logger:        logger,
+		repositories:  repositories,
+		fleetAPISvc:   fleetAPISvc,
+		identitySvc:   identitySvc,
+		ddSvc:         ddSvc,
+		pollScheduler: pollScheduler,
+		authManager:   authManager,
 	}
-}
-
-// StopTeslaTask stops Tesla task for the given vehicle token ID.
-func (ts *TeslaService) StopTeslaTask(ctx context.Context, tokenID int64) error {
-	if ts.devicesSvc == nil {
-		ts.logger.Warn().Msg("Devices GRPC service is disabled")
-		return nil
-	}
-	return ts.devicesSvc.StopTeslaTask(ctx, tokenID)
 }
 
 // SubscribeToTelemetry handles the complete telemetry subscription workflow
@@ -137,12 +128,6 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 	if err != nil {
 		ts.logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
 		return fmt.Errorf("%w: %s", core.ErrTelemetryUnsubscribe, err.Error())
-	}
-
-	// Stop Tesla task
-	stopErr := ts.StopTeslaTask(ctx, vehicle.TokenID)
-	if stopErr != nil {
-		ts.logger.Warn().Err(stopErr).Msg("Failed to stop Tesla task for synthetic device.")
 	}
 
 	// Update subscription status
@@ -721,9 +706,11 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 		}
 
 	case ActionStartPolling:
-		startErr := ts.devicesSvc.StartTeslaTask(ctx, tokenID)
-		if startErr != nil {
-			ts.logger.Warn().Err(startErr).Msg("Failed to start Tesla task for synthetic device.")
+		if ts.pollScheduler == nil {
+			return fmt.Errorf("%w: legacy poll scheduler unavailable", core.ErrTelemetryConfigFailed)
+		}
+		if err := ts.pollScheduler.ScheduleLegacyPoll(ctx, sd); err != nil {
+			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
 		}
 
 	default:

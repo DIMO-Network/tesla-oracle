@@ -75,6 +75,20 @@ func (r *vehicleRepository) GetSyntheticDevicesByVins(ctx context.Context, vins 
 	return devices, nil
 }
 
+// GetSyntheticDevicesBySubscriptionStatus retrieves all synthetic devices for a subscription status.
+func (r *vehicleRepository) GetSyntheticDevicesBySubscriptionStatus(ctx context.Context, status string) (dbmodels.SyntheticDeviceSlice, error) {
+	devices, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.SubscriptionStatus.EQ(null.StringFrom(status)),
+		dbmodels.SyntheticDeviceWhere.VehicleTokenID.IsNotNull(),
+		dbmodels.SyntheticDeviceWhere.TokenID.IsNotNull(),
+	).All(ctx, r.db.DBS().Reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query synthetic devices with subscription status %s: %w", status, err)
+	}
+
+	return devices, nil
+}
+
 // GetSyntheticDeviceByTokenID retrieves a synthetic device by its token ID
 func (r *vehicleRepository) GetSyntheticDeviceByTokenID(ctx context.Context, tokenID int64) (*dbmodels.SyntheticDevice, error) {
 	sd, err := dbmodels.SyntheticDevices(

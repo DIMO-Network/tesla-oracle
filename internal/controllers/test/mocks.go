@@ -2,11 +2,13 @@ package test
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
+	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/stretchr/testify/mock"
 )
@@ -119,6 +121,14 @@ func (m *MockTeslaFleetAPIService) GetVehicle(ctx context.Context, token string,
 	panic("implement me")
 }
 
+func (m *MockTeslaFleetAPIService) GetLegacyVehicleData(ctx context.Context, token, vin string) (json.RawMessage, error) {
+	args := m.Called(ctx, token, vin)
+	if args.Get(0) != nil {
+		return args.Get(0).(json.RawMessage), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 func (m *MockTeslaFleetAPIService) WakeUpVehicle(ctx context.Context, token string, vin string) (*core.TeslaVehicle, error) {
 	args := m.Called(ctx, token, vin)
 	if args.Get(0) != nil {
@@ -158,23 +168,13 @@ func (m *MockTeslaFleetAPIService) ExecuteCommand(ctx context.Context, token, vi
 	return args.Error(0)
 }
 
-// MockDevicesGRPCService is a mock implementation of the DevicesGRPCService interface.
-type MockDevicesGRPCService struct {
+// MockLegacyPollScheduler is a mock implementation of the LegacyPollScheduler interface.
+type MockLegacyPollScheduler struct {
 	mock.Mock
 }
 
-func (m *MockDevicesGRPCService) StartTeslaTask(ctx context.Context, tokenID int64) error {
-	args := m.Called(ctx, tokenID)
-	return args.Error(0)
-}
-
-func (m *MockDevicesGRPCService) StopTeslaTask(ctx context.Context, tokenID int64) error {
-	args := m.Called(ctx, tokenID)
-	return args.Error(0)
-}
-
-func (m *MockDevicesGRPCService) Close() error {
-	args := m.Called()
+func (m *MockLegacyPollScheduler) ScheduleLegacyPoll(ctx context.Context, device *dbmodels.SyntheticDevice) error {
+	args := m.Called(ctx, device)
 	return args.Error(0)
 }
 
