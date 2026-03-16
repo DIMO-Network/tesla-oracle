@@ -38,6 +38,7 @@ type TeslaFleetAPIService interface {
 	CompleteTeslaAuthCodeExchange(ctx context.Context, authCode, redirectURI string) (*TeslaAuthCodeResponse, error)
 	GetVehicles(ctx context.Context, token string) ([]TeslaVehicle, error)
 	GetVehicle(ctx context.Context, token string, vehicleID int) (*TeslaVehicle, error)
+	GetLegacyVehicleData(ctx context.Context, token, vin string) (json.RawMessage, error)
 	WakeUpVehicle(ctx context.Context, token string, vin string) (*TeslaVehicle, error)
 	VirtualKeyConnectionStatus(ctx context.Context, token, vin string) (*VehicleFleetStatus, error)
 	SubscribeForTelemetryData(ctx context.Context, token, vin string) error
@@ -49,6 +50,20 @@ type TeslaFleetAPIService interface {
 }
 
 var teslaScopes = []string{"openid", "offline_access", "user_data", "vehicle_device_data", "vehicle_cmds", "vehicle_charging_cmds"}
+
+var legacyVehicleDataEndpoints = strings.Join([]string{
+	"charge_state",
+	"climate_state",
+	"closures_state",
+	"drive_state",
+	"gui_settings",
+	"location_data",
+	"charge_schedule_data",
+	"preconditioning_schedule_data",
+	"vehicle_config",
+	"vehicle_state",
+	"vehicle_data_combo",
+}, ";")
 
 type TeslaResponseWrapper[A any] struct {
 	Response   A `json:"response"`
@@ -388,6 +403,48 @@ func (t *teslaFleetAPIService) GetVehicle(ctx context.Context, token string, veh
 	}
 
 	return &vehicle.Response, nil
+}
+
+// GetLegacyVehicleData fetches the raw Tesla vehicle_data.response payload for legacy polling.
+func (t *teslaFleetAPIService) GetLegacyVehicleData(ctx context.Context, token, vin string) (json.RawMessage, error) {
+	u := t.FleetBase.JoinPath("api/1/vehicles", vin, "vehicle_data")
+	q := u.Query()
+	q.Set("endpoints", legacyVehicleDataEndpoints)
+	u.RawQuery = q.Encode()
+
+	path := "/" + u.Path
+	if u.RawQuery != "" {
+		path += "?" + u.RawQuery
+	}
+
+	resp, err := t.HTTPClient.ExecuteRequestWithAuth(path, http.MethodGet, nil, "Bearer "+token)
+	if err != nil {
+		var responseErr shttp.ResponseError
+		if errors.As(err, &responseErr) {
+			switch responseErr.StatusCode {
+			case http.StatusRequestTimeout:
+				return nil, ErrVehicleUnavailable
+			case http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound:
+				return nil, ErrFleetAPIUnauthorized
+			}
+		}
+		return nil, fmt.Errorf("%w: %w", ErrHTTPRequest, err)
+	}
+	defer func() {
+		_ = resp.Body.Close()
+	}()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: error reading response body: %v", ErrHTTPRequest, err)
+	}
+
+	var wrapped TeslaResponseWrapper[json.RawMessage]
+	if err := json.Unmarshal(body, &wrapped); err != nil {
+		return nil, fmt.Errorf("%w: invalid response encountered while fetching vehicle data: %w", ErrTeslaAPICall, err)
+	}
+
+	return wrapped.Response, nil
 }
 
 // WakeUpVehicle Calls Tesla Fleet API to wake a vehicle from sleep and returns the vehicle state

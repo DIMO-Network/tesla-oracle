@@ -49,6 +49,12 @@ func main() {
 		handleMigration(&logger, &settings)
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "backfill-legacy-polls" {
+		if err := backfillLegacyPolls(ctx, &logger, &settings); err != nil {
+			logger.Fatal().Err(err).Msg("failed to backfill legacy polling jobs")
+		}
+		return
+	}
 
 	// Initialize all services
 	services, err := bootstrap.InitializeServices(ctx, &logger, &settings)

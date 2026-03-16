@@ -40,6 +40,7 @@ type Services struct {
 	Repositories             *repository.Repositories
 	SyntheticDeviceLookup    service.SyntheticDeviceLookupService
 	TeslaFleetAPIService     core.TeslaFleetAPIService
+	TokenManager             *core.TeslaTokenManager
 	TeslaService             *service.TeslaService
 	TelemetryRuntime         *telemetry.Runtime
 }
@@ -75,30 +76,44 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 	// Initialize repositories (moved before Tesla service since it depends on them)
 	repositories := initializeRepositories(&pdb, settings, logger, cip)
 
-	// Initialize devices GRPC service
-	var devicesService service.DevicesGRPCService
-	if !settings.DisableDevicesGRPC {
-		devicesService, err = service.NewDevicesGRPCService(settings, logger)
-		if err != nil {
-			return nil, fmt.Errorf("failed to initialize DevicesGRPCService: %w", err)
-		}
-	} else {
-		logger.Warn().Msgf("Devices GRPC is DISABLED")
-	}
-
 	// Initialize Tesla token manager
 	tokenManager := core.NewTeslaTokenManager(cip, repositories.Vehicle, teslaFleetAPIService, logger)
 
 	syntheticDeviceLookup := service.NewSyntheticDeviceLookupService(repositories.Vehicle)
 
-	// Initialize Tesla service with all dependencies
-	teslaService := service.NewTeslaService(settings, logger, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, devicesService, *tokenManager)
+	legacyDISClient, err := telemetry.NewDISClient(
+		settings.TeslaDISClientTLSCert,
+		settings.TeslaDISClientTLSKey,
+		settings.TeslaDISCACert,
+		settings.TeslaDISHost,
+		settings.TelemetryRetryBackoffSeconds,
+		settings.TelemetryDISRetryLimit,
+		logger,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize legacy DIS client: %w", err)
+	}
+
+	legacyPollSender := work.NewLegacyPollSender(
+		legacyDISClient,
+		walletService,
+		settings.VehicleNftAddress,
+		settings.SyntheticNftAddress,
+		settings.TeslaConnectionAddr,
+		settings.ChainID,
+		logger,
+	)
 
 	// Initialize River client with workers (including Tesla command worker)
-	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, tokenManager, repositories)
+	riverClient, dbPool, err := initializeRiver(ctx, *logger, settings, identityService, &pdb, transactionsClient, walletService, teslaFleetAPIService, tokenManager, repositories, legacyPollSender)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create river client: %w", err)
 	}
+
+	legacyPollScheduler := work.NewLegacyTeslaPollScheduler(riverClient, logger)
+
+	// Initialize Tesla service with all dependencies
+	teslaService := service.NewTeslaService(settings, logger, repositories, teslaFleetAPIService, identityService, deviceDefinitionsService, legacyPollScheduler, *tokenManager)
 
 	// Initialize VehicleOnboardService
 	vehicleOnboardService := service.NewVehicleOnboardService(settings, logger, identityService, riverClient, walletService, transactionsClient, repositories)
@@ -120,13 +135,14 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 		Repositories:             repositories,
 		SyntheticDeviceLookup:    syntheticDeviceLookup,
 		TeslaFleetAPIService:     teslaFleetAPIService,
+		TokenManager:             tokenManager,
 		TeslaService:             teslaService,
 		TelemetryRuntime:         telemetryRuntime,
 	}, nil
 }
 
 // initializeRiver creates River client with workers and database pool
-func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws wallet.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
+func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws wallet.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories, legacyPollSender *work.LegacyPollSender) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
 	workers := river.NewWorkers()
 
 	// Create and register workers
@@ -144,6 +160,12 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 	logger.Debug().Msg("Added Tesla command worker")
 
+	legacyPollWorker := work.NewLegacyTeslaPollWorker(teslaFleetAPI, tokenManager, repositories.Vehicle, legacyPollSender, &logger, 5*time.Minute)
+	if err := river.AddWorkerSafely(workers, legacyPollWorker); err != nil {
+		return nil, nil, fmt.Errorf("failed to add legacy Tesla poll worker: %w", err)
+	}
+	logger.Debug().Msg("Added legacy Tesla poll worker")
+
 	// Create database pool
 	dbURL := settings.DB.BuildConnectionString(true)
 	dbPool, err := pgxpool.New(ctx, dbURL)
@@ -160,6 +182,7 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 		Queues: map[string]river.QueueConfig{
 			river.QueueDefault: {MaxWorkers: 100},
 			"tesla_commands":   {MaxWorkers: 20}, // Dedicated queue for Tesla commands
+			"tesla_polls":      {MaxWorkers: 20},
 		},
 		Workers:      workers,
 		ErrorHandler: errorHandler,

@@ -33,4 +33,5 @@ var (
 	ErrMissingScopes            = errors.New("access token missing required scopes")
 	ErrTeslaAPICall             = errors.New("tesla api call failed")
 	ErrHTTPRequest              = errors.New("http request failed")
+	ErrVehicleUnavailable       = errors.New("vehicle unavailable")
 )

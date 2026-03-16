@@ -171,9 +171,9 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			settings, logger, repos := s.createTestDependencies()
 
 			// when
-			mockTeslaService, mockDevicesService := s.setupMockServices(tc.fleetStatus, tc.expectedAction, false)
+			mockTeslaService, mockPollScheduler := s.setupMockServices(tc.fleetStatus, tc.expectedAction, false)
 			tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, logger)
-			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, mockDevicesService, *tokenManager)
+			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, mockPollScheduler, *tokenManager)
 			dbVin := s.createTestSyntheticDeviceWithStatus(new(cipher.ROT13Cipher), "")
 			defer func() {
 				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
@@ -193,7 +193,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			// verify
 			assert.NoError(s.T(), err)
 			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
-			s.assertMockCalls(mockTeslaService, mockDevicesService, tc.expectedAction)
+			s.assertMockCalls(mockTeslaService, mockPollScheduler, tc.expectedAction)
 			s.assertSubscriptionStatus(tc.expectedSubscriptionStatus, vehicleTokenID)
 		})
 	}
@@ -256,11 +256,11 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			settings, logger, repos := s.createTestDependencies()
 
 			// when
-			mockTeslaService, mockDevicesService := s.setupMockServices(tc.fleetStatus, tc.expectedAction, tc.expectedConfigLimitReached)
+			mockTeslaService, mockPollScheduler := s.setupMockServices(tc.fleetStatus, tc.expectedAction, tc.expectedConfigLimitReached)
 			mockIdentitySvc := s.setupMockIdentityService()
 
 			tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, logger)
-			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService, *tokenManager)
+			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, mockPollScheduler, *tokenManager)
 			dbVin := s.createTestSyntheticDeviceWithStatus(new(cipher.ROT13Cipher), "pending")
 			defer func() {
 				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
@@ -279,7 +279,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			// verify
 			assert.NoError(s.T(), err)
 			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
-			s.assertMockCalls(mockTeslaService, mockDevicesService, tc.expectedAction)
+			s.assertMockCalls(mockTeslaService, mockPollScheduler, tc.expectedAction)
 			s.assertSubscriptionStatus("pending", vehicleTokenID) // Status should remain unchanged
 			mockIdentitySvc.AssertExpectations(s.T())
 		})
@@ -291,11 +291,11 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	settings, logger, repos := s.createTestDependencies()
 
 	// when
-	mockTeslaService, mockDevicesService, mockIdentitySvc := s.setupUnsubscribeMocks()
+	mockTeslaService, mockIdentitySvc := s.setupUnsubscribeMocks()
 
 	mockCredStore := repos.Credential.(*test.MockCredStore)
 	tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, logger)
-	teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService, *tokenManager)
+	teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
 	controller := NewTeslaController(settings, logger, teslaSvc, nil, nil)
 
 	dbVin := s.createTestSyntheticDeviceWithStatus(new(cipher.ROT13Cipher), "active")
@@ -317,7 +317,6 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 
 	mockCredStore.AssertExpectations(s.T())
 	mockTeslaService.AssertExpectations(s.T())
-	mockDevicesService.AssertExpectations(s.T())
 }
 
 func (s *TeslaControllerTestSuite) TestListVehicles() {
@@ -1037,12 +1036,12 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 				CommandRepoError:  tc.saveCommandError,
 			}
 
-			mockTeslaService, _, mockIdentitySvc, mockDevicesService := s.setupGenericMocks(config)
+			mockTeslaService, _, mockIdentitySvc, _ := s.setupGenericMocks(config)
 
 			// Create Tesla service
 			cip := new(cipher.ROT13Cipher)
 			tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
-			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, mockDevicesService, *tokenManager)
+			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, mockIdentitySvc, nil, nil, *tokenManager)
 
 			// Create synthetic device if needed
 			if !tc.syntheticDeviceNotExists {
@@ -1965,13 +1964,13 @@ func (s *TeslaControllerTestSuite) setupPrivilegeTestApp(method string, handler 
 	return app
 }
 
-func (s *TeslaControllerTestSuite) setupMockServices(fleetStatus *core.VehicleFleetStatus, expectedAction string, limitReached bool) (*test.MockTeslaFleetAPIService, *test.MockDevicesGRPCService) {
+func (s *TeslaControllerTestSuite) setupMockServices(fleetStatus *core.VehicleFleetStatus, expectedAction string, limitReached bool) (*test.MockTeslaFleetAPIService, *test.MockLegacyPollScheduler) {
 	config := MockConfig{
-		FleetStatus:  fleetStatus,
-		NeedsDevices: expectedAction == service.ActionStartPolling,
+		FleetStatus:        fleetStatus,
+		NeedsPollScheduler: expectedAction == service.ActionStartPolling,
 	}
 
-	mockTeslaService, _, _, mockDevicesService := s.setupGenericMocks(config)
+	mockTeslaService, _, _, mockPollScheduler := s.setupGenericMocks(config)
 
 	// Setup action-specific mocks
 	switch expectedAction {
@@ -1979,12 +1978,12 @@ func (s *TeslaControllerTestSuite) setupMockServices(fleetStatus *core.VehicleFl
 		mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
 		mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&core.VehicleTelemetryStatus{LimitReached: limitReached}, nil)
 	case service.ActionStartPolling:
-		mockDevicesService.On("StartTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
+		mockPollScheduler.On("ScheduleLegacyPoll", mock.Anything, mock.Anything).Return(nil)
 	case service.ActionDummy:
 		mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&core.VehicleTelemetryStatus{LimitReached: limitReached}, nil)
 	}
 
-	return mockTeslaService, mockDevicesService
+	return mockTeslaService, mockPollScheduler
 }
 
 func (s *TeslaControllerTestSuite) assertSubscriptionStatus(expectedStatus string, vehicleTokenID int) {
@@ -1996,13 +1995,13 @@ func (s *TeslaControllerTestSuite) assertSubscriptionStatus(expectedStatus strin
 	assert.Equal(s.T(), expectedStatus, device.SubscriptionStatus.String)
 }
 
-func (s *TeslaControllerTestSuite) assertMockCalls(mockTeslaService *test.MockTeslaFleetAPIService, mockDevicesService *test.MockDevicesGRPCService, expectedAction string) {
+func (s *TeslaControllerTestSuite) assertMockCalls(mockTeslaService *test.MockTeslaFleetAPIService, mockPollScheduler *test.MockLegacyPollScheduler, expectedAction string) {
 	switch expectedAction {
 	case service.ActionSetTelemetryConfig:
 		mockTeslaService.AssertCalled(s.T(), "SubscribeForTelemetryData", mock.Anything, mock.Anything, vin)
 		mockTeslaService.AssertExpectations(s.T())
 	case service.ActionStartPolling:
-		mockDevicesService.AssertCalled(s.T(), "StartTeslaTask", mock.Anything, int64(vehicleTokenID))
+		mockPollScheduler.AssertCalled(s.T(), "ScheduleLegacyPoll", mock.Anything, mock.Anything)
 	}
 }
 
@@ -2011,7 +2010,7 @@ type MockConfig struct {
 	FleetStatus           *core.VehicleFleetStatus
 	NeedsCredStore        bool
 	NeedsIdentity         bool
-	NeedsDevices          bool
+	NeedsPollScheduler    bool
 	NeedsPartnerToken     bool
 	EnableTelemetryStatus bool
 	TelemetryStatus       bool
@@ -2023,11 +2022,11 @@ type MockConfig struct {
 	VehicleOwnerMismatch  bool
 }
 
-func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.MockTeslaFleetAPIService, *test.MockCredStore, *test.MockIdentityAPIService, *test.MockDevicesGRPCService) {
+func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.MockTeslaFleetAPIService, *test.MockCredStore, *test.MockIdentityAPIService, *test.MockLegacyPollScheduler) {
 	mockTeslaService := new(test.MockTeslaFleetAPIService)
 	var mockCredStore *test.MockCredStore
 	var mockIdentitySvc *test.MockIdentityAPIService
-	var mockDevicesService *test.MockDevicesGRPCService
+	var mockPollScheduler *test.MockLegacyPollScheduler
 
 	// Setup access token (default if not specified)
 	accessToken := "mockAccessToken"
@@ -2058,10 +2057,8 @@ func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.M
 		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
 	}
 
-	// Setup devices service if needed
-	if config.NeedsDevices {
-		mockDevicesService = new(test.MockDevicesGRPCService)
-		mockDevicesService.On("StopTeslaTask", mock.Anything, int64(vehicleTokenID)).Return(nil)
+	if config.NeedsPollScheduler {
+		mockPollScheduler = new(test.MockLegacyPollScheduler)
 	}
 
 	// Setup fleet status if provided
@@ -2103,7 +2100,7 @@ func (s *TeslaControllerTestSuite) setupGenericMocks(config MockConfig) (*test.M
 		mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
 	}
 
-	return mockTeslaService, mockCredStore, mockIdentitySvc, mockDevicesService
+	return mockTeslaService, mockCredStore, mockIdentitySvc, mockPollScheduler
 }
 
 // Convenience wrappers for common patterns
@@ -2127,13 +2124,12 @@ func (s *TeslaControllerTestSuite) setupGetStatusMocks(fleetStatus *core.Vehicle
 	return mockTeslaService, mockCredStore
 }
 
-func (s *TeslaControllerTestSuite) setupUnsubscribeMocks() (*test.MockTeslaFleetAPIService, *test.MockDevicesGRPCService, *test.MockIdentityAPIService) {
-	mockTeslaService, _, mockIdentitySvc, mockDevicesService := s.setupGenericMocks(MockConfig{
+func (s *TeslaControllerTestSuite) setupUnsubscribeMocks() (*test.MockTeslaFleetAPIService, *test.MockIdentityAPIService) {
+	mockTeslaService, _, mockIdentitySvc, _ := s.setupGenericMocks(MockConfig{
 		NeedsIdentity:     true,
-		NeedsDevices:      true,
 		NeedsPartnerToken: true,
 	})
-	return mockTeslaService, mockDevicesService, mockIdentitySvc
+	return mockTeslaService, mockIdentitySvc
 }
 
 // Generic response assertion function
