@@ -9,6 +9,7 @@ import (
 
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
+	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
@@ -82,17 +83,19 @@ func (w *LegacyTeslaPollWorker) Work(ctx context.Context, job *river.Job[LegacyT
 		Int64("jobId", job.ID).
 		Logger()
 
+	if err := w.scheduleNext(ctx, job.Args); err != nil {
+		return fmt.Errorf("schedule next legacy poll: %w", err)
+	}
+
 	accessToken, err := w.tokenManager.GetOrRefreshAccessToken(ctx, sd)
 	if err != nil {
-		if errors.Is(err, core.ErrTokenExpired) {
+		if w.shouldDisablePolling(err) {
 			logger.Warn().Err(err).Msg("Stopping legacy polling until vehicle is reauthenticated")
 			return w.markPending(ctx, sd)
 		}
-		return fmt.Errorf("get access token: %w", err)
-	}
 
-	if err := w.scheduleNext(ctx, job.Args); err != nil {
-		return fmt.Errorf("schedule next legacy poll: %w", err)
+		logger.Warn().Err(err).Msg("Transient credential failure during legacy polling; will retry on next scheduled run")
+		return nil
 	}
 
 	rawStatus, err := w.teslaFleetAPI.GetLegacyVehicleData(ctx, accessToken, sd.Vin)
@@ -105,7 +108,8 @@ func (w *LegacyTeslaPollWorker) Work(ctx context.Context, job *river.Job[LegacyT
 			logger.Warn().Err(err).Msg("Stopping legacy polling after unauthorized Tesla response")
 			return w.markPending(ctx, sd)
 		default:
-			return fmt.Errorf("fetch legacy vehicle data: %w", err)
+			logger.Warn().Err(err).Msg("Transient Tesla vehicle data failure during legacy polling; will retry on next scheduled run")
+			return nil
 		}
 	}
 
@@ -158,4 +162,17 @@ func shouldContinueLegacyPolling(sd *dbmodels.SyntheticDevice) bool {
 		return false
 	}
 	return sd.AccessToken.Valid && sd.RefreshToken.Valid
+}
+
+func (w *LegacyTeslaPollWorker) shouldDisablePolling(err error) bool {
+	if errors.Is(err, core.ErrTokenExpired) {
+		return true
+	}
+
+	decision, decErr := service.TokenRefreshDecisionTree(err)
+	if decErr != nil {
+		return false
+	}
+
+	return decision.Action == service.ActionLoginRequired
 }
