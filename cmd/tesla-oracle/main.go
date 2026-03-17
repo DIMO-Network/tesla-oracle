@@ -55,6 +55,16 @@ func main() {
 		}
 		return
 	}
+	if len(os.Args) > 1 && os.Args[1] == "ensure-data-flow" {
+		tokenID, err := parseVehicleTokenIDArg(os.Args)
+		if err != nil {
+			logger.Fatal().Err(err).Msg("invalid ensure-data-flow arguments")
+		}
+		if err := ensureVehicleDataFlow(ctx, &logger, &settings, tokenID); err != nil {
+			logger.Fatal().Err(err).Msg("failed to ensure vehicle data flow")
+		}
+		return
+	}
 
 	// Initialize all services
 	services, err := bootstrap.InitializeServices(ctx, &logger, &settings)

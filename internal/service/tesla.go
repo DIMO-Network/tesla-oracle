@@ -92,6 +92,72 @@ func (ts *TeslaService) StartVehicleDataFlow(ctx context.Context, tokenID int64,
 	return ts.startStreamingOrPolling(ctx, sd, tokenID)
 }
 
+// EnsureVehicleDataFlow ensures a vehicle has active data flow enabled. It is an
+// operator path that bypasses wallet validation and repairs local status after
+// a successful enablement.
+func (ts *TeslaService) EnsureVehicleDataFlow(ctx context.Context, tokenID int64) error {
+	sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, tokenID)
+	if err != nil {
+		return fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
+	}
+
+	accessToken, err := ts.authManager.GetOrRefreshAccessToken(ctx, sd)
+	if err != nil {
+		return err
+	}
+
+	resp, err := ts.decideOnAction(ctx, sd, accessToken, tokenID)
+	if err != nil {
+		return err
+	}
+
+	switch resp.Action {
+	case ActionSetTelemetryConfig:
+		subStatus, err := ts.fleetAPISvc.GetTelemetrySubscriptionStatus(ctx, accessToken, sd.Vin)
+		if err != nil {
+			ts.logger.Err(err).Msg("Error checking telemetry subscription status")
+			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
+		}
+
+		ts.logger.Debug().
+			Interface("subStatus", subStatus).
+			Str("vin", sd.Vin).
+			Msg("Fetched telemetry subscription status")
+
+		if subStatus.LimitReached {
+			return core.ErrTelemetryLimitReached
+		}
+
+		if !subStatus.Configured {
+			if err := ts.fleetAPISvc.SubscribeForTelemetryData(ctx, accessToken, sd.Vin); err != nil {
+				ts.logger.Err(err).Msg("Error registering for telemetry")
+				return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
+			}
+		}
+	case ActionStartPolling:
+		if ts.pollScheduler == nil {
+			return fmt.Errorf("%w: legacy poll scheduler unavailable", core.ErrTelemetryConfigFailed)
+		}
+		if err := ts.pollScheduler.ScheduleLegacyPoll(ctx, sd); err != nil {
+			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
+		}
+	default:
+		return core.ErrTelemetryNotReady
+	}
+
+	if sd.SubscriptionStatus.String == "active" {
+		return nil
+	}
+
+	err = ts.repositories.Vehicle.UpdateSyntheticDeviceSubscriptionStatus(ctx, sd, "active")
+	if err != nil {
+		ts.logger.Err(err).Msg("Failed to update subscription status.")
+		return fmt.Errorf("%w: %s", core.ErrSubscriptionStatusUpdate, err.Error())
+	}
+
+	return nil
+}
+
 // UnsubscribeFromTelemetry handles the complete telemetry unsubscription workflow
 func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID int64, walletAddress common.Address) error {
 	// Validate dev license

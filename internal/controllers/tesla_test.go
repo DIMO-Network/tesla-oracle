@@ -286,6 +286,97 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 	}
 }
 
+func (s *TeslaControllerTestSuite) TestEnsureVehicleDataFlow() {
+	testCases := []struct {
+		name               string
+		fleetStatus        *core.VehicleFleetStatus
+		telemetryConfigured bool
+		expectSubscribe    bool
+		expectPolling      bool
+		expectErr          bool
+		expectedStatus     string
+	}{
+		{
+			name: "Start Streaming",
+			fleetStatus: &core.VehicleFleetStatus{
+				VehicleCommandProtocolRequired: true,
+				KeyPaired:                      true,
+			},
+			expectSubscribe: true,
+			expectedStatus:  "active",
+		},
+		{
+			name: "Already Configured Streaming",
+			fleetStatus: &core.VehicleFleetStatus{
+				VehicleCommandProtocolRequired: true,
+				KeyPaired:                      true,
+			},
+			telemetryConfigured: true,
+			expectedStatus:      "active",
+		},
+		{
+			name: "Start Polling",
+			fleetStatus: &core.VehicleFleetStatus{
+				VehicleCommandProtocolRequired: false,
+				FirmwareVersion:                "2025.21.11",
+				DiscountedDeviceData:           true,
+			},
+			expectPolling:  true,
+			expectedStatus: "active",
+		},
+		{
+			name: "Vehicle Not Ready",
+			fleetStatus: &core.VehicleFleetStatus{
+				VehicleCommandProtocolRequired: true,
+				KeyPaired:                      false,
+			},
+			expectErr:      true,
+			expectedStatus: "pending",
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			settings, logger, repos := s.createTestDependencies()
+			mockTeslaService := new(test.MockTeslaFleetAPIService)
+			mockPollScheduler := new(test.MockLegacyPollScheduler)
+			cip := new(cipher.ROT13Cipher)
+
+			tokenManager := core.NewTeslaTokenManager(cip, repos.Vehicle, mockTeslaService, logger)
+			teslaSvc := service.NewTeslaService(settings, logger, repos, mockTeslaService, nil, nil, mockPollScheduler, *tokenManager)
+
+			dbVin := s.createTestSyntheticDeviceWithStatus(cip, "pending")
+			defer func() {
+				_, _ = dbVin.Delete(s.ctx, s.pdb.DBS().Writer)
+			}()
+
+			mockTeslaService.On("VirtualKeyConnectionStatus", mock.Anything, "mockAccessToken", vin).Return(tc.fleetStatus, nil)
+			if tc.fleetStatus != nil && tc.fleetStatus.KeyPaired {
+				mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, "mockAccessToken", vin).Return(&core.VehicleTelemetryStatus{
+					Configured: tc.telemetryConfigured,
+				}, nil)
+			}
+			if tc.expectSubscribe {
+				mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, "mockAccessToken", vin).Return(nil)
+			}
+			if tc.expectPolling {
+				mockPollScheduler.On("ScheduleLegacyPoll", mock.Anything, mock.Anything).Return(nil)
+			}
+
+			err := teslaSvc.EnsureVehicleDataFlow(s.ctx, vehicleTokenID)
+			if tc.expectErr {
+				require.Error(s.T(), err)
+			} else {
+				require.NoError(s.T(), err)
+			}
+
+			s.assertSubscriptionStatus(tc.expectedStatus, vehicleTokenID)
+			mockTeslaService.AssertExpectations(s.T())
+			mockPollScheduler.AssertExpectations(s.T())
+		})
+	}
+}
+
 func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 	// given
 	settings, logger, repos := s.createTestDependencies()
