@@ -82,7 +82,7 @@ type Settings struct {
 	TelemetryMappingRefreshInterval string `yaml:"MAPPING_REFRESH_INTERVAL"`
 
 	// Settings for the partners token
-	PartnersTeslaFleetURL string `json:"PARTNERS_FLEET_URL"`
+	PartnersTeslaFleetURL string `yaml:"PARTNERS_FLEET_URL"`
 
 	MobileAppDevLicense common.Address `yaml:"MOBILE_APP_DEV_LICENSE"`
 }
