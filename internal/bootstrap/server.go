@@ -114,7 +114,15 @@ func (sm *ServerManager) createGRPCServer() *grpc.Server {
 		grpc.StreamInterceptor(grpc_prometheus.StreamServerInterceptor),
 	)
 
-	teslaSvc := rpc.NewTeslaRPCService(sm.services.DB.DBS, sm.logger, sm.services.WalletService, sm.services.SyntheticDeviceLookup)
+	teslaSvc := rpc.NewTeslaRPCService(
+		sm.services.DB.DBS,
+		sm.logger,
+		sm.services.WalletService,
+		sm.services.SyntheticDeviceLookup,
+		sm.services.Repositories.Vehicle,
+		sm.services.TokenManager,
+		sm.services.TeslaFleetAPIService,
+	)
 	grpc_oracle.RegisterTeslaOracleServer(server, teslaSvc)
 
 	return server

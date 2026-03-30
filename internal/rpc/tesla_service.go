@@ -7,6 +7,8 @@ import (
 	"fmt"
 
 	"github.com/DIMO-Network/shared/pkg/db"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
+	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	"github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/DIMO-Network/tesla-oracle/pkg/grpc"
@@ -17,6 +19,7 @@ import (
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 type WalletProvider interface {
@@ -28,22 +31,31 @@ func NewTeslaRPCService(
 	logger *zerolog.Logger,
 	wp WalletProvider,
 	lookup service.SyntheticDeviceLookupService,
+	vehicles repository.VehicleRepository,
+	tokenManager *core.TeslaTokenManager,
+	fleetAPI core.TeslaFleetAPIService,
 ) grpc.TeslaOracleServer {
 	return &TeslaRPCService{
-		dbs:    dbs,
-		logger: logger,
-		wp:     wp,
-		lookup: lookup,
+		dbs:          dbs,
+		logger:       logger,
+		wp:           wp,
+		lookup:       lookup,
+		vehicles:     vehicles,
+		tokenManager: tokenManager,
+		fleetAPI:     fleetAPI,
 	}
 }
 
 // TeslaRPCService is the grpc server implementation for the proto services
 type TeslaRPCService struct {
 	grpc.UnimplementedTeslaOracleServer
-	dbs    func() *db.ReaderWriter
-	wp     WalletProvider
-	logger *zerolog.Logger
-	lookup service.SyntheticDeviceLookupService
+	dbs          func() *db.ReaderWriter
+	wp           WalletProvider
+	logger       *zerolog.Logger
+	lookup       service.SyntheticDeviceLookupService
+	vehicles     repository.VehicleRepository
+	tokenManager *core.TeslaTokenManager
+	fleetAPI     core.TeslaFleetAPIService
 }
 
 func (t *TeslaRPCService) RegisterNewSyntheticDevice(ctx context.Context, req *grpc.RegisterNewSyntheticDeviceRequest) (*grpc.RegisterNewSyntheticDeviceResponse, error) {
@@ -162,4 +174,53 @@ func (t *TeslaRPCService) GetVinByTokenId(ctx context.Context, req *grpc.GetVinB
 	}
 
 	return &grpc.GetVinByTokenIdResponse{Vin: sd.Vin}, nil
+}
+
+func (t *TeslaRPCService) GetFleetStatusByTokenId(ctx context.Context, req *grpc.GetFleetStatusByTokenIdRequest) (*grpc.GetFleetStatusByTokenIdResponse, error) {
+	if req.GetVehicleTokenId() == 0 {
+		return nil, status.Error(codes.InvalidArgument, "vehicle_token_id is required")
+	}
+
+	sd, err := t.vehicles.GetSyntheticDeviceByTokenID(ctx, int64(req.GetVehicleTokenId()))
+	if err != nil {
+		if errors.Is(err, repository.ErrVehicleNotFound) || errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "vehicle not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load vehicle: %v", err)
+	}
+
+	if sd == nil || sd.AccessToken.String == "" || sd.RefreshToken.String == "" {
+		return nil, status.Error(codes.FailedPrecondition, "no Tesla credentials found for vehicle")
+	}
+
+	accessToken, err := t.tokenManager.GetOrRefreshAccessToken(ctx, sd)
+	if err != nil {
+		switch {
+		case errors.Is(err, core.ErrNoCredentials), errors.Is(err, core.ErrTokenExpired):
+			return nil, status.Errorf(codes.FailedPrecondition, "Tesla credentials unavailable: %v", err)
+		case errors.Is(err, core.ErrCredentialDecryption):
+			return nil, status.Errorf(codes.Internal, "failed to decrypt Tesla credentials: %v", err)
+		default:
+			return nil, status.Errorf(codes.Unavailable, "failed to acquire Tesla access token: %v", err)
+		}
+	}
+
+	fleetStatus, err := t.fleetAPI.VirtualKeyConnectionStatus(ctx, accessToken, sd.Vin)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "failed to fetch Tesla fleet status: %v", err)
+	}
+
+	resp := &grpc.GetFleetStatusByTokenIdResponse{
+		KeyPaired:                      fleetStatus.KeyPaired,
+		VehicleCommandProtocolRequired: fleetStatus.VehicleCommandProtocolRequired,
+		FirmwareVersion:                fleetStatus.FirmwareVersion,
+		DiscountedDeviceData:           fleetStatus.DiscountedDeviceData,
+		FleetTelemetryVersion:          fleetStatus.FleetTelemetryVersion,
+		NumberOfKeys:                   uint32(fleetStatus.NumberOfKeys),
+	}
+	if fleetStatus.SafetyScreenStreamingToggleEnabled != nil {
+		resp.SafetyScreenStreamingToggleEnabled = wrapperspb.Bool(*fleetStatus.SafetyScreenStreamingToggleEnabled)
+	}
+
+	return resp, nil
 }

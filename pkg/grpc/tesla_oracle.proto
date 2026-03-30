@@ -5,6 +5,7 @@ option go_package = "github.com/DIMO-Network/tesla-oracle/pkg/grpc";
 package tesla_oracle;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/wrappers.proto";
 
 /*
   TeslaOracle replaces devices-api for Tesla synthetic device calls.
@@ -15,6 +16,7 @@ service TeslaOracle {
   rpc GetSyntheticDevicesByVIN(GetSyntheticDevicesByVINRequest) returns (GetSyntheticDevicesByVINResponse);
 
   rpc GetVinByTokenId(GetVinByTokenIdRequest) returns (GetVinByTokenIdResponse);
+  rpc GetFleetStatusByTokenId(GetFleetStatusByTokenIdRequest) returns (GetFleetStatusByTokenIdResponse);
 }
 
 message GetVinByTokenIdRequest {
@@ -23,6 +25,20 @@ message GetVinByTokenIdRequest {
 
 message GetVinByTokenIdResponse {
   string vin = 1;
+}
+
+message GetFleetStatusByTokenIdRequest {
+  uint32 vehicle_token_id = 1;
+}
+
+message GetFleetStatusByTokenIdResponse {
+  bool key_paired = 1;
+  bool vehicle_command_protocol_required = 2;
+  string firmware_version = 3;
+  bool discounted_device_data = 4;
+  string fleet_telemetry_version = 5;
+  uint32 number_of_keys = 6;
+  google.protobuf.BoolValue safety_screen_streaming_toggle_enabled = 7;
 }
 
 message RegisterNewSyntheticDeviceRequest {
@@ -64,4 +80,3 @@ message SyntheticDevice {
   uint64 vehicle_token_id = 5;
   string subscription_status = 6;
 }
-
