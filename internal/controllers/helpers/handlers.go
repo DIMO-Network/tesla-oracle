@@ -37,24 +37,50 @@ var zeroAddr common.Address
 // If it fails to do so, then it returns a Fiber error that is safe and appropriate
 // to return to the client.
 func GetJWTEthAddr(c *fiber.Ctx) (common.Address, error) {
-	token := c.Locals("user").(*jwt.Token)
-	claims := token.Claims.(jwt.MapClaims) // These can't fail!
-
-	ethAddrAny, ok := claims[ethClaim]
+	addr, ok, err := GetOptionalJWTEthAddr(c)
+	if err != nil {
+		return zeroAddr, err
+	}
 	if !ok {
 		return zeroAddr, fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Missing claim %s.", ethClaim))
 	}
 
+	return addr, nil
+}
+
+// GetOptionalJWTEthAddr returns the JWT Ethereum address when present and valid.
+// Missing JWTs or claims are treated as "not found" instead of request errors.
+func GetOptionalJWTEthAddr(c *fiber.Ctx) (common.Address, bool, error) {
+	tokenAny := c.Locals("user")
+	if tokenAny == nil {
+		return zeroAddr, false, nil
+	}
+
+	token, ok := tokenAny.(*jwt.Token)
+	if !ok {
+		return zeroAddr, false, nil
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return zeroAddr, false, nil
+	}
+
+	ethAddrAny, ok := claims[ethClaim]
+	if !ok {
+		return zeroAddr, false, nil
+	}
+
 	ethAddrStr, ok := ethAddrAny.(string)
 	if !ok {
-		return zeroAddr, fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Claim %s had unexpected type %T.", ethClaim, ethAddrAny))
+		return zeroAddr, false, fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Claim %s had unexpected type %T.", ethClaim, ethAddrAny))
 	}
 
 	if !common.IsHexAddress(ethAddrStr) {
-		return zeroAddr, fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Claim %s is not a valid Ethereum address.", ethClaim))
+		return zeroAddr, false, fiber.NewError(fiber.StatusUnauthorized, fmt.Sprintf("Claim %s is not a valid Ethereum address.", ethClaim))
 	}
 
-	return common.HexToAddress(ethAddrStr), nil
+	return common.HexToAddress(ethAddrStr), true, nil
 }
 
 func GetLogger(c *fiber.Ctx, d *zerolog.Logger) *zerolog.Logger {

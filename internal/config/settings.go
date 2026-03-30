@@ -40,7 +40,6 @@ type Settings struct {
 	DeviceDefinitionsAPIEndpoint url.URL `yaml:"DEVICE_DEFINITIONS_API_ENDPOINT"`
 	DevicesGRPCEndpoint          string  `yaml:"DEVICES_GRPC_ADDR"`
 	DisableDevicesGRPC           bool    `yaml:"DISABLE_DEVICES_GRPC" default:"false"`
-
 	DimoAuthURL               url.URL        `yaml:"DIMO_AUTH_URL"`
 	DimoAuthClientID          common.Address `yaml:"DIMO_AUTH_CLIENT_ID"`
 	DimoAuthDomain            url.URL        `yaml:"DIMO_AUTH_DOMAIN"`
