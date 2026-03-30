@@ -17,6 +17,7 @@ service TeslaOracle {
 
   rpc GetVinByTokenId(GetVinByTokenIdRequest) returns (GetVinByTokenIdResponse);
   rpc GetFleetStatusByTokenId(GetFleetStatusByTokenIdRequest) returns (GetFleetStatusByTokenIdResponse);
+  rpc GetFleetTelemetryConfigByTokenId(GetFleetTelemetryConfigByTokenIdRequest) returns (GetFleetTelemetryConfigByTokenIdResponse);
 }
 
 message GetVinByTokenIdRequest {
@@ -39,6 +40,17 @@ message GetFleetStatusByTokenIdResponse {
   string fleet_telemetry_version = 5;
   uint32 number_of_keys = 6;
   google.protobuf.BoolValue safety_screen_streaming_toggle_enabled = 7;
+}
+
+message GetFleetTelemetryConfigByTokenIdRequest {
+  uint32 vehicle_token_id = 1;
+}
+
+message GetFleetTelemetryConfigByTokenIdResponse {
+  bool synced = 1;
+  bool configured = 2;
+  bool limit_reached = 3;
+  bool key_paired = 4;
 }
 
 message RegisterNewSyntheticDeviceRequest {
