@@ -166,10 +166,13 @@ func ErrorHandler(c *fiber.Ctx, err error, logger *zerolog.Logger) error {
 	codeStr := strconv.Itoa(code)
 
 	if code != fiber.StatusNotFound {
-		logger.Err(err).Str("httpStatusCode", codeStr).
+		entry := logger.Err(err).Str("httpStatusCode", codeStr).
 			Str("httpMethod", c.Method()).
-			Str("httpPath", c.Path()).
-			Msg("caught an error from http request")
+			Str("httpPath", c.Path())
+		if user, ok, userErr := helpers.GetOptionalJWTEthAddr(c); userErr == nil && ok {
+			entry = entry.Str("user", user.Hex())
+		}
+		entry.Msg("caught an error from http request")
 	}
 
 	return c.Status(code).JSON(ErrorRes{
