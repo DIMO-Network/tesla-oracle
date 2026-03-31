@@ -755,6 +755,94 @@ func (x *SyntheticDevice) GetSubscriptionStatus() string {
 	return ""
 }
 
+type WakeUpCarRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	VehicleTokenId uint32                 `protobuf:"varint,1,opt,name=vehicle_token_id,json=vehicleTokenId,proto3" json:"vehicle_token_id,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *WakeUpCarRequest) Reset() {
+	*x = WakeUpCarRequest{}
+	mi := &file_pkg_grpc_tesla_oracle_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WakeUpCarRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WakeUpCarRequest) ProtoMessage() {}
+
+func (x *WakeUpCarRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_grpc_tesla_oracle_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WakeUpCarRequest.ProtoReflect.Descriptor instead.
+func (*WakeUpCarRequest) Descriptor() ([]byte, []int) {
+	return file_pkg_grpc_tesla_oracle_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *WakeUpCarRequest) GetVehicleTokenId() uint32 {
+	if x != nil {
+		return x.VehicleTokenId
+	}
+	return 0
+}
+
+type WakeUpCarResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	State         string                 `protobuf:"bytes,1,opt,name=state,proto3" json:"state,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WakeUpCarResponse) Reset() {
+	*x = WakeUpCarResponse{}
+	mi := &file_pkg_grpc_tesla_oracle_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WakeUpCarResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WakeUpCarResponse) ProtoMessage() {}
+
+func (x *WakeUpCarResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_pkg_grpc_tesla_oracle_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WakeUpCarResponse.ProtoReflect.Descriptor instead.
+func (*WakeUpCarResponse) Descriptor() ([]byte, []int) {
+	return file_pkg_grpc_tesla_oracle_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *WakeUpCarResponse) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
 var File_pkg_grpc_tesla_oracle_proto protoreflect.FileDescriptor
 
 const file_pkg_grpc_tesla_oracle_proto_rawDesc = "" +
@@ -809,14 +897,19 @@ const file_pkg_grpc_tesla_oracle_proto_rawDesc = "" +
 	"\x10wallet_child_num\x18\x03 \x01(\x04R\x0ewalletChildNum\x12\x19\n" +
 	"\btoken_id\x18\x04 \x01(\x04R\atokenId\x12(\n" +
 	"\x10vehicle_token_id\x18\x05 \x01(\x04R\x0evehicleTokenId\x12/\n" +
-	"\x13subscription_status\x18\x06 \x01(\tR\x12subscriptionStatus2\xfd\x05\n" +
+	"\x13subscription_status\x18\x06 \x01(\tR\x12subscriptionStatus\"<\n" +
+	"\x10WakeUpCarRequest\x12(\n" +
+	"\x10vehicle_token_id\x18\x01 \x01(\rR\x0evehicleTokenId\")\n" +
+	"\x11WakeUpCarResponse\x12\x14\n" +
+	"\x05state\x18\x01 \x01(\tR\x05state2\xcb\x06\n" +
 	"\vTeslaOracle\x12\x7f\n" +
 	"\x1aRegisterNewSyntheticDevice\x12/.tesla_oracle.RegisterNewSyntheticDeviceRequest\x1a0.tesla_oracle.RegisterNewSyntheticDeviceResponse\x12\x85\x01\n" +
 	"\x1cRegisterNewSyntheticDeviceV2\x121.tesla_oracle.RegisterNewSyntheticDeviceV2Request\x1a2.tesla_oracle.RegisterNewSyntheticDeviceV2Response\x12y\n" +
 	"\x18GetSyntheticDevicesByVIN\x12-.tesla_oracle.GetSyntheticDevicesByVINRequest\x1a..tesla_oracle.GetSyntheticDevicesByVINResponse\x12^\n" +
 	"\x0fGetVinByTokenId\x12$.tesla_oracle.GetVinByTokenIdRequest\x1a%.tesla_oracle.GetVinByTokenIdResponse\x12v\n" +
 	"\x17GetFleetStatusByTokenId\x12,.tesla_oracle.GetFleetStatusByTokenIdRequest\x1a-.tesla_oracle.GetFleetStatusByTokenIdResponse\x12\x91\x01\n" +
-	" GetFleetTelemetryConfigByTokenId\x125.tesla_oracle.GetFleetTelemetryConfigByTokenIdRequest\x1a6.tesla_oracle.GetFleetTelemetryConfigByTokenIdResponseB/Z-github.com/DIMO-Network/tesla-oracle/pkg/grpcb\x06proto3"
+	" GetFleetTelemetryConfigByTokenId\x125.tesla_oracle.GetFleetTelemetryConfigByTokenIdRequest\x1a6.tesla_oracle.GetFleetTelemetryConfigByTokenIdResponse\x12L\n" +
+	"\tWakeUpCar\x12\x1e.tesla_oracle.WakeUpCarRequest\x1a\x1f.tesla_oracle.WakeUpCarResponseB/Z-github.com/DIMO-Network/tesla-oracle/pkg/grpcb\x06proto3"
 
 var (
 	file_pkg_grpc_tesla_oracle_proto_rawDescOnce sync.Once
@@ -830,7 +923,7 @@ func file_pkg_grpc_tesla_oracle_proto_rawDescGZIP() []byte {
 	return file_pkg_grpc_tesla_oracle_proto_rawDescData
 }
 
-var file_pkg_grpc_tesla_oracle_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_pkg_grpc_tesla_oracle_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
 var file_pkg_grpc_tesla_oracle_proto_goTypes = []any{
 	(*GetVinByTokenIdRequest)(nil),                   // 0: tesla_oracle.GetVinByTokenIdRequest
 	(*GetVinByTokenIdResponse)(nil),                  // 1: tesla_oracle.GetVinByTokenIdResponse
@@ -845,13 +938,15 @@ var file_pkg_grpc_tesla_oracle_proto_goTypes = []any{
 	(*GetSyntheticDevicesByVINRequest)(nil),          // 10: tesla_oracle.GetSyntheticDevicesByVINRequest
 	(*GetSyntheticDevicesByVINResponse)(nil),         // 11: tesla_oracle.GetSyntheticDevicesByVINResponse
 	(*SyntheticDevice)(nil),                          // 12: tesla_oracle.SyntheticDevice
-	(*wrapperspb.BoolValue)(nil),                     // 13: google.protobuf.BoolValue
-	(*timestamppb.Timestamp)(nil),                    // 14: google.protobuf.Timestamp
+	(*WakeUpCarRequest)(nil),                         // 13: tesla_oracle.WakeUpCarRequest
+	(*WakeUpCarResponse)(nil),                        // 14: tesla_oracle.WakeUpCarResponse
+	(*wrapperspb.BoolValue)(nil),                     // 15: google.protobuf.BoolValue
+	(*timestamppb.Timestamp)(nil),                    // 16: google.protobuf.Timestamp
 }
 var file_pkg_grpc_tesla_oracle_proto_depIdxs = []int32{
-	13, // 0: tesla_oracle.GetFleetStatusByTokenIdResponse.safety_screen_streaming_toggle_enabled:type_name -> google.protobuf.BoolValue
-	14, // 1: tesla_oracle.RegisterNewSyntheticDeviceV2Request.access_token_expiry:type_name -> google.protobuf.Timestamp
-	14, // 2: tesla_oracle.RegisterNewSyntheticDeviceV2Request.refresh_token_expiry:type_name -> google.protobuf.Timestamp
+	15, // 0: tesla_oracle.GetFleetStatusByTokenIdResponse.safety_screen_streaming_toggle_enabled:type_name -> google.protobuf.BoolValue
+	16, // 1: tesla_oracle.RegisterNewSyntheticDeviceV2Request.access_token_expiry:type_name -> google.protobuf.Timestamp
+	16, // 2: tesla_oracle.RegisterNewSyntheticDeviceV2Request.refresh_token_expiry:type_name -> google.protobuf.Timestamp
 	12, // 3: tesla_oracle.GetSyntheticDevicesByVINResponse.synthetic_devices:type_name -> tesla_oracle.SyntheticDevice
 	6,  // 4: tesla_oracle.TeslaOracle.RegisterNewSyntheticDevice:input_type -> tesla_oracle.RegisterNewSyntheticDeviceRequest
 	8,  // 5: tesla_oracle.TeslaOracle.RegisterNewSyntheticDeviceV2:input_type -> tesla_oracle.RegisterNewSyntheticDeviceV2Request
@@ -859,14 +954,16 @@ var file_pkg_grpc_tesla_oracle_proto_depIdxs = []int32{
 	0,  // 7: tesla_oracle.TeslaOracle.GetVinByTokenId:input_type -> tesla_oracle.GetVinByTokenIdRequest
 	2,  // 8: tesla_oracle.TeslaOracle.GetFleetStatusByTokenId:input_type -> tesla_oracle.GetFleetStatusByTokenIdRequest
 	4,  // 9: tesla_oracle.TeslaOracle.GetFleetTelemetryConfigByTokenId:input_type -> tesla_oracle.GetFleetTelemetryConfigByTokenIdRequest
-	7,  // 10: tesla_oracle.TeslaOracle.RegisterNewSyntheticDevice:output_type -> tesla_oracle.RegisterNewSyntheticDeviceResponse
-	9,  // 11: tesla_oracle.TeslaOracle.RegisterNewSyntheticDeviceV2:output_type -> tesla_oracle.RegisterNewSyntheticDeviceV2Response
-	11, // 12: tesla_oracle.TeslaOracle.GetSyntheticDevicesByVIN:output_type -> tesla_oracle.GetSyntheticDevicesByVINResponse
-	1,  // 13: tesla_oracle.TeslaOracle.GetVinByTokenId:output_type -> tesla_oracle.GetVinByTokenIdResponse
-	3,  // 14: tesla_oracle.TeslaOracle.GetFleetStatusByTokenId:output_type -> tesla_oracle.GetFleetStatusByTokenIdResponse
-	5,  // 15: tesla_oracle.TeslaOracle.GetFleetTelemetryConfigByTokenId:output_type -> tesla_oracle.GetFleetTelemetryConfigByTokenIdResponse
-	10, // [10:16] is the sub-list for method output_type
-	4,  // [4:10] is the sub-list for method input_type
+	13, // 10: tesla_oracle.TeslaOracle.WakeUpCar:input_type -> tesla_oracle.WakeUpCarRequest
+	7,  // 11: tesla_oracle.TeslaOracle.RegisterNewSyntheticDevice:output_type -> tesla_oracle.RegisterNewSyntheticDeviceResponse
+	9,  // 12: tesla_oracle.TeslaOracle.RegisterNewSyntheticDeviceV2:output_type -> tesla_oracle.RegisterNewSyntheticDeviceV2Response
+	11, // 13: tesla_oracle.TeslaOracle.GetSyntheticDevicesByVIN:output_type -> tesla_oracle.GetSyntheticDevicesByVINResponse
+	1,  // 14: tesla_oracle.TeslaOracle.GetVinByTokenId:output_type -> tesla_oracle.GetVinByTokenIdResponse
+	3,  // 15: tesla_oracle.TeslaOracle.GetFleetStatusByTokenId:output_type -> tesla_oracle.GetFleetStatusByTokenIdResponse
+	5,  // 16: tesla_oracle.TeslaOracle.GetFleetTelemetryConfigByTokenId:output_type -> tesla_oracle.GetFleetTelemetryConfigByTokenIdResponse
+	14, // 17: tesla_oracle.TeslaOracle.WakeUpCar:output_type -> tesla_oracle.WakeUpCarResponse
+	11, // [11:18] is the sub-list for method output_type
+	4,  // [4:11] is the sub-list for method input_type
 	4,  // [4:4] is the sub-list for extension type_name
 	4,  // [4:4] is the sub-list for extension extendee
 	0,  // [0:4] is the sub-list for field type_name
@@ -883,7 +980,7 @@ func file_pkg_grpc_tesla_oracle_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_pkg_grpc_tesla_oracle_proto_rawDesc), len(file_pkg_grpc_tesla_oracle_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   15,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

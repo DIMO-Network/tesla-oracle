@@ -18,6 +18,7 @@ service TeslaOracle {
   rpc GetVinByTokenId(GetVinByTokenIdRequest) returns (GetVinByTokenIdResponse);
   rpc GetFleetStatusByTokenId(GetFleetStatusByTokenIdRequest) returns (GetFleetStatusByTokenIdResponse);
   rpc GetFleetTelemetryConfigByTokenId(GetFleetTelemetryConfigByTokenIdRequest) returns (GetFleetTelemetryConfigByTokenIdResponse);
+  rpc WakeUpCar(WakeUpCarRequest) returns (WakeUpCarResponse);
 }
 
 message GetVinByTokenIdRequest {
@@ -91,4 +92,12 @@ message SyntheticDevice {
   uint64 token_id = 4;
   uint64 vehicle_token_id = 5;
   string subscription_status = 6;
+}
+
+message WakeUpCarRequest {
+  uint32 vehicle_token_id = 1;
+}
+
+message WakeUpCarResponse {
+  string state = 1;
 }
