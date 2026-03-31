@@ -897,14 +897,19 @@ const file_pkg_grpc_tesla_oracle_proto_rawDesc = "" +
 	"\x10wallet_child_num\x18\x03 \x01(\x04R\x0ewalletChildNum\x12\x19\n" +
 	"\btoken_id\x18\x04 \x01(\x04R\atokenId\x12(\n" +
 	"\x10vehicle_token_id\x18\x05 \x01(\x04R\x0evehicleTokenId\x12/\n" +
-	"\x13subscription_status\x18\x06 \x01(\tR\x12subscriptionStatus\"\x3c\n\x10WakeUpCarRequest\x12(\n\x10vehicle_token_id\x18\x01 \x01(\rR\x0evehicleTokenId\"\x29\n\x11WakeUpCarResponse\x12\x14\n\x05state\x18\x01 \x01(\tR\x05state2\xcb\x06\n" +
+	"\x13subscription_status\x18\x06 \x01(\tR\x12subscriptionStatus\"<\n" +
+	"\x10WakeUpCarRequest\x12(\n" +
+	"\x10vehicle_token_id\x18\x01 \x01(\rR\x0evehicleTokenId\")\n" +
+	"\x11WakeUpCarResponse\x12\x14\n" +
+	"\x05state\x18\x01 \x01(\tR\x05state2\xcb\x06\n" +
 	"\vTeslaOracle\x12\x7f\n" +
 	"\x1aRegisterNewSyntheticDevice\x12/.tesla_oracle.RegisterNewSyntheticDeviceRequest\x1a0.tesla_oracle.RegisterNewSyntheticDeviceResponse\x12\x85\x01\n" +
 	"\x1cRegisterNewSyntheticDeviceV2\x121.tesla_oracle.RegisterNewSyntheticDeviceV2Request\x1a2.tesla_oracle.RegisterNewSyntheticDeviceV2Response\x12y\n" +
 	"\x18GetSyntheticDevicesByVIN\x12-.tesla_oracle.GetSyntheticDevicesByVINRequest\x1a..tesla_oracle.GetSyntheticDevicesByVINResponse\x12^\n" +
 	"\x0fGetVinByTokenId\x12$.tesla_oracle.GetVinByTokenIdRequest\x1a%.tesla_oracle.GetVinByTokenIdResponse\x12v\n" +
 	"\x17GetFleetStatusByTokenId\x12,.tesla_oracle.GetFleetStatusByTokenIdRequest\x1a-.tesla_oracle.GetFleetStatusByTokenIdResponse\x12\x91\x01\n" +
-	" GetFleetTelemetryConfigByTokenId\x125.tesla_oracle.GetFleetTelemetryConfigByTokenIdRequest\x1a6.tesla_oracle.GetFleetTelemetryConfigByTokenIdResponse\x12\x4c\n\tWakeUpCar\x12\x1e.tesla_oracle.WakeUpCarRequest\x1a\x1f.tesla_oracle.WakeUpCarResponseB/Z-github.com/DIMO-Network/tesla-oracle/pkg/grpcb\x06proto3"
+	" GetFleetTelemetryConfigByTokenId\x125.tesla_oracle.GetFleetTelemetryConfigByTokenIdRequest\x1a6.tesla_oracle.GetFleetTelemetryConfigByTokenIdResponse\x12L\n" +
+	"\tWakeUpCar\x12\x1e.tesla_oracle.WakeUpCarRequest\x1a\x1f.tesla_oracle.WakeUpCarResponseB/Z-github.com/DIMO-Network/tesla-oracle/pkg/grpcb\x06proto3"
 
 var (
 	file_pkg_grpc_tesla_oracle_proto_rawDescOnce sync.Once
