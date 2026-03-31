@@ -225,6 +225,43 @@ func (t *TeslaRPCService) GetFleetStatusByTokenId(ctx context.Context, req *grpc
 	return resp, nil
 }
 
+func (t *TeslaRPCService) WakeUpCar(ctx context.Context, req *grpc.WakeUpCarRequest) (*grpc.WakeUpCarResponse, error) {
+	if req.GetVehicleTokenId() == 0 {
+		return nil, status.Error(codes.InvalidArgument, "vehicle_token_id is required")
+	}
+
+	sd, err := t.vehicles.GetSyntheticDeviceByTokenID(ctx, int64(req.GetVehicleTokenId()))
+	if err != nil {
+		if errors.Is(err, repository.ErrVehicleNotFound) || errors.Is(err, sql.ErrNoRows) {
+			return nil, status.Error(codes.NotFound, "vehicle not found")
+		}
+		return nil, status.Errorf(codes.Internal, "failed to load vehicle: %v", err)
+	}
+
+	if sd == nil || sd.AccessToken.String == "" || sd.RefreshToken.String == "" {
+		return nil, status.Error(codes.FailedPrecondition, "no Tesla credentials found for vehicle")
+	}
+
+	accessToken, err := t.tokenManager.GetOrRefreshAccessToken(ctx, sd)
+	if err != nil {
+		switch {
+		case errors.Is(err, core.ErrNoCredentials), errors.Is(err, core.ErrTokenExpired):
+			return nil, status.Errorf(codes.FailedPrecondition, "Tesla credentials unavailable: %v", err)
+		case errors.Is(err, core.ErrCredentialDecryption):
+			return nil, status.Errorf(codes.Internal, "failed to decrypt Tesla credentials: %v", err)
+		default:
+			return nil, status.Errorf(codes.Unavailable, "failed to acquire Tesla access token: %v", err)
+		}
+	}
+
+	vehicle, err := t.fleetAPI.WakeUpVehicle(ctx, accessToken, sd.Vin)
+	if err != nil {
+		return nil, status.Errorf(codes.Unavailable, "failed to wake up vehicle: %v", err)
+	}
+
+	return &grpc.WakeUpCarResponse{State: vehicle.State}, nil
+}
+
 func (t *TeslaRPCService) GetFleetTelemetryConfigByTokenId(ctx context.Context, req *grpc.GetFleetTelemetryConfigByTokenIdRequest) (*grpc.GetFleetTelemetryConfigByTokenIdResponse, error) {
 	if req.GetVehicleTokenId() == 0 {
 		return nil, status.Error(codes.InvalidArgument, "vehicle_token_id is required")
