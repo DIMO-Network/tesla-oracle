@@ -123,6 +123,7 @@ type VehicleTelemetryStatus struct {
 	Configured   bool
 	LimitReached bool
 	KeyPaired    bool
+	Response     map[string]any
 }
 
 type SubscribeForTelemetryDataRequest struct {
@@ -706,11 +707,18 @@ func (t *teslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Contex
 		return nil, err
 	}
 
+	var rawResp TeslaResponseWrapper[map[string]any]
+	err = json.Unmarshal(body, &rawResp)
+	if err != nil {
+		return nil, err
+	}
+
 	return &VehicleTelemetryStatus{
 		KeyPaired:    statResp.Response.KeyPaired,
 		Synced:       statResp.Response.Synced,
 		Configured:   statResp.Response.Config != nil,
 		LimitReached: statResp.Response.LimitReached,
+		Response:     rawResp.Response,
 	}, nil
 }
 

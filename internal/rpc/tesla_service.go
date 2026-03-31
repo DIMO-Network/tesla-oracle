@@ -19,6 +19,7 @@ import (
 	"github.com/rs/zerolog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/structpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
@@ -296,10 +297,19 @@ func (t *TeslaRPCService) GetFleetTelemetryConfigByTokenId(ctx context.Context, 
 		return nil, status.Errorf(codes.Unavailable, "failed to fetch Tesla fleet telemetry config: %v", err)
 	}
 
+	var teslaResponse *structpb.Struct
+	if telemetryStatus.Response != nil {
+		teslaResponse, err = structpb.NewStruct(telemetryStatus.Response)
+		if err != nil {
+			return nil, status.Errorf(codes.Internal, "failed to marshal Tesla fleet telemetry config response: %v", err)
+		}
+	}
+
 	return &grpc.GetFleetTelemetryConfigByTokenIdResponse{
-		Synced:       telemetryStatus.Synced,
-		Configured:   telemetryStatus.Configured,
-		LimitReached: telemetryStatus.LimitReached,
-		KeyPaired:    telemetryStatus.KeyPaired,
+		Synced:        telemetryStatus.Synced,
+		Configured:    telemetryStatus.Configured,
+		LimitReached:  telemetryStatus.LimitReached,
+		KeyPaired:     telemetryStatus.KeyPaired,
+		TeslaResponse: teslaResponse,
 	}, nil
 }

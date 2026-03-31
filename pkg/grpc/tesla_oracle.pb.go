@@ -9,6 +9,7 @@ package grpc
 import (
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
+	structpb "google.golang.org/protobuf/types/known/structpb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
 	wrapperspb "google.golang.org/protobuf/types/known/wrapperspb"
 	reflect "reflect"
@@ -297,6 +298,7 @@ type GetFleetTelemetryConfigByTokenIdResponse struct {
 	Configured    bool                   `protobuf:"varint,2,opt,name=configured,proto3" json:"configured,omitempty"`
 	LimitReached  bool                   `protobuf:"varint,3,opt,name=limit_reached,json=limitReached,proto3" json:"limit_reached,omitempty"`
 	KeyPaired     bool                   `protobuf:"varint,4,opt,name=key_paired,json=keyPaired,proto3" json:"key_paired,omitempty"`
+	TeslaResponse *structpb.Struct       `protobuf:"bytes,5,opt,name=tesla_response,json=teslaResponse,proto3" json:"tesla_response,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -357,6 +359,13 @@ func (x *GetFleetTelemetryConfigByTokenIdResponse) GetKeyPaired() bool {
 		return x.KeyPaired
 	}
 	return false
+}
+
+func (x *GetFleetTelemetryConfigByTokenIdResponse) GetTeslaResponse() *structpb.Struct {
+	if x != nil {
+		return x.TeslaResponse
+	}
+	return nil
 }
 
 type RegisterNewSyntheticDeviceRequest struct {
@@ -847,7 +856,7 @@ var File_pkg_grpc_tesla_oracle_proto protoreflect.FileDescriptor
 
 const file_pkg_grpc_tesla_oracle_proto_rawDesc = "" +
 	"\n" +
-	"\x1bpkg/grpc/tesla_oracle.proto\x12\ftesla_oracle\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1egoogle/protobuf/wrappers.proto\"3\n" +
+	"\x1bpkg/grpc/tesla_oracle.proto\x12\ftesla_oracle\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1egoogle/protobuf/wrappers.proto\"3\n" +
 	"\x16GetVinByTokenIdRequest\x12\x19\n" +
 	"\btoken_id\x18\x01 \x01(\rR\atokenId\"+\n" +
 	"\x17GetVinByTokenIdResponse\x12\x10\n" +
@@ -864,7 +873,7 @@ const file_pkg_grpc_tesla_oracle_proto_rawDesc = "" +
 	"\x0enumber_of_keys\x18\x06 \x01(\rR\fnumberOfKeys\x12n\n" +
 	"&safety_screen_streaming_toggle_enabled\x18\a \x01(\v2\x1a.google.protobuf.BoolValueR\"safetyScreenStreamingToggleEnabled\"S\n" +
 	"'GetFleetTelemetryConfigByTokenIdRequest\x12(\n" +
-	"\x10vehicle_token_id\x18\x01 \x01(\rR\x0evehicleTokenId\"\xa6\x01\n" +
+	"\x10vehicle_token_id\x18\x01 \x01(\rR\x0evehicleTokenId\"\xe6\x01\n" +
 	"(GetFleetTelemetryConfigByTokenIdResponse\x12\x16\n" +
 	"\x06synced\x18\x01 \x01(\bR\x06synced\x12\x1e\n" +
 	"\n" +
@@ -872,7 +881,8 @@ const file_pkg_grpc_tesla_oracle_proto_rawDesc = "" +
 	"configured\x12#\n" +
 	"\rlimit_reached\x18\x03 \x01(\bR\flimitReached\x12\x1d\n" +
 	"\n" +
-	"key_paired\x18\x04 \x01(\bR\tkeyPaired\"\x99\x01\n" +
+	"key_paired\x18\x04 \x01(\bR\tkeyPaired\x12>\n" +
+	"\x0etesla_response\x18\x05 \x01(\v2\x17.google.protobuf.StructR\rteslaResponse\"\x99\x01\n" +
 	"!RegisterNewSyntheticDeviceRequest\x12\x10\n" +
 	"\x03vin\x18\x01 \x01(\tR\x03vin\x128\n" +
 	"\x18synthetic_device_address\x18\x02 \x01(\fR\x16syntheticDeviceAddress\x12(\n" +
@@ -941,32 +951,34 @@ var file_pkg_grpc_tesla_oracle_proto_goTypes = []any{
 	(*WakeUpCarRequest)(nil),                         // 13: tesla_oracle.WakeUpCarRequest
 	(*WakeUpCarResponse)(nil),                        // 14: tesla_oracle.WakeUpCarResponse
 	(*wrapperspb.BoolValue)(nil),                     // 15: google.protobuf.BoolValue
-	(*timestamppb.Timestamp)(nil),                    // 16: google.protobuf.Timestamp
+	(*structpb.Struct)(nil),                          // 16: google.protobuf.Struct
+	(*timestamppb.Timestamp)(nil),                    // 17: google.protobuf.Timestamp
 }
 var file_pkg_grpc_tesla_oracle_proto_depIdxs = []int32{
 	15, // 0: tesla_oracle.GetFleetStatusByTokenIdResponse.safety_screen_streaming_toggle_enabled:type_name -> google.protobuf.BoolValue
-	16, // 1: tesla_oracle.RegisterNewSyntheticDeviceV2Request.access_token_expiry:type_name -> google.protobuf.Timestamp
-	16, // 2: tesla_oracle.RegisterNewSyntheticDeviceV2Request.refresh_token_expiry:type_name -> google.protobuf.Timestamp
-	12, // 3: tesla_oracle.GetSyntheticDevicesByVINResponse.synthetic_devices:type_name -> tesla_oracle.SyntheticDevice
-	6,  // 4: tesla_oracle.TeslaOracle.RegisterNewSyntheticDevice:input_type -> tesla_oracle.RegisterNewSyntheticDeviceRequest
-	8,  // 5: tesla_oracle.TeslaOracle.RegisterNewSyntheticDeviceV2:input_type -> tesla_oracle.RegisterNewSyntheticDeviceV2Request
-	10, // 6: tesla_oracle.TeslaOracle.GetSyntheticDevicesByVIN:input_type -> tesla_oracle.GetSyntheticDevicesByVINRequest
-	0,  // 7: tesla_oracle.TeslaOracle.GetVinByTokenId:input_type -> tesla_oracle.GetVinByTokenIdRequest
-	2,  // 8: tesla_oracle.TeslaOracle.GetFleetStatusByTokenId:input_type -> tesla_oracle.GetFleetStatusByTokenIdRequest
-	4,  // 9: tesla_oracle.TeslaOracle.GetFleetTelemetryConfigByTokenId:input_type -> tesla_oracle.GetFleetTelemetryConfigByTokenIdRequest
-	13, // 10: tesla_oracle.TeslaOracle.WakeUpCar:input_type -> tesla_oracle.WakeUpCarRequest
-	7,  // 11: tesla_oracle.TeslaOracle.RegisterNewSyntheticDevice:output_type -> tesla_oracle.RegisterNewSyntheticDeviceResponse
-	9,  // 12: tesla_oracle.TeslaOracle.RegisterNewSyntheticDeviceV2:output_type -> tesla_oracle.RegisterNewSyntheticDeviceV2Response
-	11, // 13: tesla_oracle.TeslaOracle.GetSyntheticDevicesByVIN:output_type -> tesla_oracle.GetSyntheticDevicesByVINResponse
-	1,  // 14: tesla_oracle.TeslaOracle.GetVinByTokenId:output_type -> tesla_oracle.GetVinByTokenIdResponse
-	3,  // 15: tesla_oracle.TeslaOracle.GetFleetStatusByTokenId:output_type -> tesla_oracle.GetFleetStatusByTokenIdResponse
-	5,  // 16: tesla_oracle.TeslaOracle.GetFleetTelemetryConfigByTokenId:output_type -> tesla_oracle.GetFleetTelemetryConfigByTokenIdResponse
-	14, // 17: tesla_oracle.TeslaOracle.WakeUpCar:output_type -> tesla_oracle.WakeUpCarResponse
-	11, // [11:18] is the sub-list for method output_type
-	4,  // [4:11] is the sub-list for method input_type
-	4,  // [4:4] is the sub-list for extension type_name
-	4,  // [4:4] is the sub-list for extension extendee
-	0,  // [0:4] is the sub-list for field type_name
+	16, // 1: tesla_oracle.GetFleetTelemetryConfigByTokenIdResponse.tesla_response:type_name -> google.protobuf.Struct
+	17, // 2: tesla_oracle.RegisterNewSyntheticDeviceV2Request.access_token_expiry:type_name -> google.protobuf.Timestamp
+	17, // 3: tesla_oracle.RegisterNewSyntheticDeviceV2Request.refresh_token_expiry:type_name -> google.protobuf.Timestamp
+	12, // 4: tesla_oracle.GetSyntheticDevicesByVINResponse.synthetic_devices:type_name -> tesla_oracle.SyntheticDevice
+	6,  // 5: tesla_oracle.TeslaOracle.RegisterNewSyntheticDevice:input_type -> tesla_oracle.RegisterNewSyntheticDeviceRequest
+	8,  // 6: tesla_oracle.TeslaOracle.RegisterNewSyntheticDeviceV2:input_type -> tesla_oracle.RegisterNewSyntheticDeviceV2Request
+	10, // 7: tesla_oracle.TeslaOracle.GetSyntheticDevicesByVIN:input_type -> tesla_oracle.GetSyntheticDevicesByVINRequest
+	0,  // 8: tesla_oracle.TeslaOracle.GetVinByTokenId:input_type -> tesla_oracle.GetVinByTokenIdRequest
+	2,  // 9: tesla_oracle.TeslaOracle.GetFleetStatusByTokenId:input_type -> tesla_oracle.GetFleetStatusByTokenIdRequest
+	4,  // 10: tesla_oracle.TeslaOracle.GetFleetTelemetryConfigByTokenId:input_type -> tesla_oracle.GetFleetTelemetryConfigByTokenIdRequest
+	13, // 11: tesla_oracle.TeslaOracle.WakeUpCar:input_type -> tesla_oracle.WakeUpCarRequest
+	7,  // 12: tesla_oracle.TeslaOracle.RegisterNewSyntheticDevice:output_type -> tesla_oracle.RegisterNewSyntheticDeviceResponse
+	9,  // 13: tesla_oracle.TeslaOracle.RegisterNewSyntheticDeviceV2:output_type -> tesla_oracle.RegisterNewSyntheticDeviceV2Response
+	11, // 14: tesla_oracle.TeslaOracle.GetSyntheticDevicesByVIN:output_type -> tesla_oracle.GetSyntheticDevicesByVINResponse
+	1,  // 15: tesla_oracle.TeslaOracle.GetVinByTokenId:output_type -> tesla_oracle.GetVinByTokenIdResponse
+	3,  // 16: tesla_oracle.TeslaOracle.GetFleetStatusByTokenId:output_type -> tesla_oracle.GetFleetStatusByTokenIdResponse
+	5,  // 17: tesla_oracle.TeslaOracle.GetFleetTelemetryConfigByTokenId:output_type -> tesla_oracle.GetFleetTelemetryConfigByTokenIdResponse
+	14, // 18: tesla_oracle.TeslaOracle.WakeUpCar:output_type -> tesla_oracle.WakeUpCarResponse
+	12, // [12:19] is the sub-list for method output_type
+	5,  // [5:12] is the sub-list for method input_type
+	5,  // [5:5] is the sub-list for extension type_name
+	5,  // [5:5] is the sub-list for extension extendee
+	0,  // [0:5] is the sub-list for field type_name
 }
 
 func init() { file_pkg_grpc_tesla_oracle_proto_init() }

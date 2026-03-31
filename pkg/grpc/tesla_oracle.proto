@@ -5,6 +5,7 @@ option go_package = "github.com/DIMO-Network/tesla-oracle/pkg/grpc";
 package tesla_oracle;
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
 import "google/protobuf/wrappers.proto";
 
 /*
@@ -52,6 +53,7 @@ message GetFleetTelemetryConfigByTokenIdResponse {
   bool configured = 2;
   bool limit_reached = 3;
   bool key_paired = 4;
+  google.protobuf.Struct tesla_response = 5;
 }
 
 message RegisterNewSyntheticDeviceRequest {

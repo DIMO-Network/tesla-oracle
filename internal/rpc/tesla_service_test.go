@@ -272,6 +272,21 @@ func TestGetFleetTelemetryConfigByTokenId(t *testing.T) {
 			Configured:   true,
 			LimitReached: false,
 			KeyPaired:    true,
+			Response: map[string]any{
+				"synced": true,
+				"config": map[string]any{
+					"hostname": "test-telemetry.com",
+					"port":     float64(4443),
+					"fields": map[string]any{
+						"DriveRail": map[string]any{
+							"interval_seconds": float64(1800),
+						},
+					},
+					"alert_types": []any{"service"},
+				},
+				"limit_reached": false,
+				"key_paired":    true,
+			},
 		}, nil).Once()
 
 		resp, err := svc.GetFleetTelemetryConfigByTokenId(ctx, &grpcpb.GetFleetTelemetryConfigByTokenIdRequest{VehicleTokenId: 123})
@@ -280,6 +295,10 @@ func TestGetFleetTelemetryConfigByTokenId(t *testing.T) {
 		require.True(t, resp.Configured)
 		require.False(t, resp.LimitReached)
 		require.True(t, resp.KeyPaired)
+		require.NotNil(t, resp.TeslaResponse)
+		require.Equal(t, "test-telemetry.com", resp.TeslaResponse.Fields["config"].GetStructValue().Fields["hostname"].GetStringValue())
+		require.Equal(t, float64(4443), resp.TeslaResponse.Fields["config"].GetStructValue().Fields["port"].GetNumberValue())
+		require.Equal(t, "service", resp.TeslaResponse.Fields["config"].GetStructValue().Fields["alert_types"].GetListValue().Values[0].GetStringValue())
 	})
 
 	t.Run("missing vehicle token id returns invalid argument", func(t *testing.T) {
