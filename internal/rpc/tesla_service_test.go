@@ -111,7 +111,11 @@ func (m *mockRPCTeslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.C
 }
 
 func (m *mockRPCTeslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*core.VehicleTelemetryStatus, error) {
-	panic("not implemented")
+	args := m.Called(ctx, token, vin)
+	if args.Get(0) != nil {
+		return args.Get(0).(*core.VehicleTelemetryStatus), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *mockRPCTeslaFleetAPIService) GetPartnersToken(ctx context.Context) (*core.PartnersAccessTokenResponse, error) {
@@ -227,6 +231,103 @@ func TestGetFleetStatusByTokenId(t *testing.T) {
 		fleetAPI.On("RefreshToken", mock.Anything, "refresh-token").Return(nil, core.ErrTokenRefreshFailed).Once()
 
 		_, err := svc.GetFleetStatusByTokenId(ctx, &grpcpb.GetFleetStatusByTokenIdRequest{VehicleTokenId: 126})
+		require.Equal(t, codes.Unavailable, status.Code(err))
+	})
+}
+
+func TestGetFleetTelemetryConfigByTokenId(t *testing.T) {
+	ctx := context.Background()
+	logger := zerolog.New(nil)
+	vehicleRepo := new(mockRPCVehicleRepository)
+	fleetAPI := new(mockRPCTeslaFleetAPIService)
+	cip := new(cipher.ROT13Cipher)
+	tokenManager := core.NewTeslaTokenManager(cip, vehicleRepo, fleetAPI, &logger)
+
+	svc := &TeslaRPCService{
+		dbs:          func() *db.ReaderWriter { return nil },
+		logger:       &logger,
+		vehicles:     vehicleRepo,
+		tokenManager: tokenManager,
+		fleetAPI:     fleetAPI,
+	}
+
+	makeDevice := func() *dbmodels.SyntheticDevice {
+		access, _ := cip.Encrypt("access-token")
+		refresh, _ := cip.Encrypt("refresh-token")
+		return &dbmodels.SyntheticDevice{
+			Vin:              "5YJ3E1EA7KF317000",
+			VehicleTokenID:   null.IntFrom(123),
+			AccessToken:      null.StringFrom(access),
+			RefreshToken:     null.StringFrom(refresh),
+			AccessExpiresAt:  null.TimeFrom(time.Now().Add(time.Hour)),
+			RefreshExpiresAt: null.TimeFrom(time.Now().Add(24 * time.Hour)),
+		}
+	}
+
+	t.Run("returns parsed telemetry config status", func(t *testing.T) {
+		sd := makeDevice()
+		vehicleRepo.On("GetSyntheticDeviceByTokenID", mock.Anything, int64(123)).Return(sd, nil).Once()
+		fleetAPI.On("GetTelemetrySubscriptionStatus", mock.Anything, "access-token", sd.Vin).Return(&core.VehicleTelemetryStatus{
+			Synced:       true,
+			Configured:   true,
+			LimitReached: false,
+			KeyPaired:    true,
+		}, nil).Once()
+
+		resp, err := svc.GetFleetTelemetryConfigByTokenId(ctx, &grpcpb.GetFleetTelemetryConfigByTokenIdRequest{VehicleTokenId: 123})
+		require.NoError(t, err)
+		require.True(t, resp.Synced)
+		require.True(t, resp.Configured)
+		require.False(t, resp.LimitReached)
+		require.True(t, resp.KeyPaired)
+	})
+
+	t.Run("missing vehicle token id returns invalid argument", func(t *testing.T) {
+		_, err := svc.GetFleetTelemetryConfigByTokenId(ctx, &grpcpb.GetFleetTelemetryConfigByTokenIdRequest{})
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	})
+
+	t.Run("unknown token id returns not found", func(t *testing.T) {
+		vehicleRepo.On("GetSyntheticDeviceByTokenID", mock.Anything, int64(404)).Return(nil, repository.ErrVehicleNotFound).Once()
+
+		_, err := svc.GetFleetTelemetryConfigByTokenId(ctx, &grpcpb.GetFleetTelemetryConfigByTokenIdRequest{VehicleTokenId: 404})
+		require.Equal(t, codes.NotFound, status.Code(err))
+	})
+
+	t.Run("missing credentials returns failed precondition", func(t *testing.T) {
+		vehicleRepo.On("GetSyntheticDeviceByTokenID", mock.Anything, int64(125)).Return(&dbmodels.SyntheticDevice{
+			Vin:            "5YJ3E1EA7KF317001",
+			VehicleTokenID: null.IntFrom(125),
+		}, nil).Once()
+
+		_, err := svc.GetFleetTelemetryConfigByTokenId(ctx, &grpcpb.GetFleetTelemetryConfigByTokenIdRequest{VehicleTokenId: 125})
+		require.Equal(t, codes.FailedPrecondition, status.Code(err))
+	})
+
+	t.Run("token refresh failure returns unavailable", func(t *testing.T) {
+		access, _ := cip.Encrypt("expired-access")
+		refresh, _ := cip.Encrypt("refresh-token")
+		sd := &dbmodels.SyntheticDevice{
+			Vin:              "5YJ3E1EA7KF317002",
+			VehicleTokenID:   null.IntFrom(126),
+			AccessToken:      null.StringFrom(access),
+			RefreshToken:     null.StringFrom(refresh),
+			AccessExpiresAt:  null.TimeFrom(time.Now().Add(-time.Hour)),
+			RefreshExpiresAt: null.TimeFrom(time.Now().Add(time.Hour)),
+		}
+		vehicleRepo.On("GetSyntheticDeviceByTokenID", mock.Anything, int64(126)).Return(sd, nil).Once()
+		fleetAPI.On("RefreshToken", mock.Anything, "refresh-token").Return(nil, core.ErrTokenRefreshFailed).Once()
+
+		_, err := svc.GetFleetTelemetryConfigByTokenId(ctx, &grpcpb.GetFleetTelemetryConfigByTokenIdRequest{VehicleTokenId: 126})
+		require.Equal(t, codes.Unavailable, status.Code(err))
+	})
+
+	t.Run("telemetry config fetch failure returns unavailable", func(t *testing.T) {
+		sd := makeDevice()
+		vehicleRepo.On("GetSyntheticDeviceByTokenID", mock.Anything, int64(123)).Return(sd, nil).Once()
+		fleetAPI.On("GetTelemetrySubscriptionStatus", mock.Anything, "access-token", sd.Vin).Return(nil, core.ErrTeslaAPICall).Once()
+
+		_, err := svc.GetFleetTelemetryConfigByTokenId(ctx, &grpcpb.GetFleetTelemetryConfigByTokenIdRequest{VehicleTokenId: 123})
 		require.Equal(t, codes.Unavailable, status.Code(err))
 	})
 }

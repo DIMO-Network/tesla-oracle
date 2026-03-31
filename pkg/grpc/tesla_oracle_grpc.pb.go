@@ -19,11 +19,12 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	TeslaOracle_RegisterNewSyntheticDevice_FullMethodName   = "/tesla_oracle.TeslaOracle/RegisterNewSyntheticDevice"
-	TeslaOracle_RegisterNewSyntheticDeviceV2_FullMethodName = "/tesla_oracle.TeslaOracle/RegisterNewSyntheticDeviceV2"
-	TeslaOracle_GetSyntheticDevicesByVIN_FullMethodName     = "/tesla_oracle.TeslaOracle/GetSyntheticDevicesByVIN"
-	TeslaOracle_GetVinByTokenId_FullMethodName              = "/tesla_oracle.TeslaOracle/GetVinByTokenId"
-	TeslaOracle_GetFleetStatusByTokenId_FullMethodName      = "/tesla_oracle.TeslaOracle/GetFleetStatusByTokenId"
+	TeslaOracle_RegisterNewSyntheticDevice_FullMethodName       = "/tesla_oracle.TeslaOracle/RegisterNewSyntheticDevice"
+	TeslaOracle_RegisterNewSyntheticDeviceV2_FullMethodName     = "/tesla_oracle.TeslaOracle/RegisterNewSyntheticDeviceV2"
+	TeslaOracle_GetSyntheticDevicesByVIN_FullMethodName         = "/tesla_oracle.TeslaOracle/GetSyntheticDevicesByVIN"
+	TeslaOracle_GetVinByTokenId_FullMethodName                  = "/tesla_oracle.TeslaOracle/GetVinByTokenId"
+	TeslaOracle_GetFleetStatusByTokenId_FullMethodName          = "/tesla_oracle.TeslaOracle/GetFleetStatusByTokenId"
+	TeslaOracle_GetFleetTelemetryConfigByTokenId_FullMethodName = "/tesla_oracle.TeslaOracle/GetFleetTelemetryConfigByTokenId"
 )
 
 // TeslaOracleClient is the client API for TeslaOracle service.
@@ -37,6 +38,7 @@ type TeslaOracleClient interface {
 	GetSyntheticDevicesByVIN(ctx context.Context, in *GetSyntheticDevicesByVINRequest, opts ...grpc.CallOption) (*GetSyntheticDevicesByVINResponse, error)
 	GetVinByTokenId(ctx context.Context, in *GetVinByTokenIdRequest, opts ...grpc.CallOption) (*GetVinByTokenIdResponse, error)
 	GetFleetStatusByTokenId(ctx context.Context, in *GetFleetStatusByTokenIdRequest, opts ...grpc.CallOption) (*GetFleetStatusByTokenIdResponse, error)
+	GetFleetTelemetryConfigByTokenId(ctx context.Context, in *GetFleetTelemetryConfigByTokenIdRequest, opts ...grpc.CallOption) (*GetFleetTelemetryConfigByTokenIdResponse, error)
 }
 
 type teslaOracleClient struct {
@@ -97,6 +99,16 @@ func (c *teslaOracleClient) GetFleetStatusByTokenId(ctx context.Context, in *Get
 	return out, nil
 }
 
+func (c *teslaOracleClient) GetFleetTelemetryConfigByTokenId(ctx context.Context, in *GetFleetTelemetryConfigByTokenIdRequest, opts ...grpc.CallOption) (*GetFleetTelemetryConfigByTokenIdResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetFleetTelemetryConfigByTokenIdResponse)
+	err := c.cc.Invoke(ctx, TeslaOracle_GetFleetTelemetryConfigByTokenId_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // TeslaOracleServer is the server API for TeslaOracle service.
 // All implementations must embed UnimplementedTeslaOracleServer
 // for forward compatibility.
@@ -108,6 +120,7 @@ type TeslaOracleServer interface {
 	GetSyntheticDevicesByVIN(context.Context, *GetSyntheticDevicesByVINRequest) (*GetSyntheticDevicesByVINResponse, error)
 	GetVinByTokenId(context.Context, *GetVinByTokenIdRequest) (*GetVinByTokenIdResponse, error)
 	GetFleetStatusByTokenId(context.Context, *GetFleetStatusByTokenIdRequest) (*GetFleetStatusByTokenIdResponse, error)
+	GetFleetTelemetryConfigByTokenId(context.Context, *GetFleetTelemetryConfigByTokenIdRequest) (*GetFleetTelemetryConfigByTokenIdResponse, error)
 	mustEmbedUnimplementedTeslaOracleServer()
 }
 
@@ -132,6 +145,9 @@ func (UnimplementedTeslaOracleServer) GetVinByTokenId(context.Context, *GetVinBy
 }
 func (UnimplementedTeslaOracleServer) GetFleetStatusByTokenId(context.Context, *GetFleetStatusByTokenIdRequest) (*GetFleetStatusByTokenIdResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method GetFleetStatusByTokenId not implemented")
+}
+func (UnimplementedTeslaOracleServer) GetFleetTelemetryConfigByTokenId(context.Context, *GetFleetTelemetryConfigByTokenIdRequest) (*GetFleetTelemetryConfigByTokenIdResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetFleetTelemetryConfigByTokenId not implemented")
 }
 func (UnimplementedTeslaOracleServer) mustEmbedUnimplementedTeslaOracleServer() {}
 func (UnimplementedTeslaOracleServer) testEmbeddedByValue()                     {}
@@ -244,6 +260,24 @@ func _TeslaOracle_GetFleetStatusByTokenId_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _TeslaOracle_GetFleetTelemetryConfigByTokenId_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetFleetTelemetryConfigByTokenIdRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(TeslaOracleServer).GetFleetTelemetryConfigByTokenId(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: TeslaOracle_GetFleetTelemetryConfigByTokenId_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(TeslaOracleServer).GetFleetTelemetryConfigByTokenId(ctx, req.(*GetFleetTelemetryConfigByTokenIdRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // TeslaOracle_ServiceDesc is the grpc.ServiceDesc for TeslaOracle service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -270,6 +304,10 @@ var TeslaOracle_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "GetFleetStatusByTokenId",
 			Handler:    _TeslaOracle_GetFleetStatusByTokenId_Handler,
+		},
+		{
+			MethodName: "GetFleetTelemetryConfigByTokenId",
+			Handler:    _TeslaOracle_GetFleetTelemetryConfigByTokenId_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
