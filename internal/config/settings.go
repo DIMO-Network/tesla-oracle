@@ -85,6 +85,10 @@ type Settings struct {
 	PartnersTeslaFleetURL string `yaml:"PARTNERS_FLEET_URL"`
 
 	MobileAppDevLicense common.Address `yaml:"MOBILE_APP_DEV_LICENSE"`
+
+	DISAttestationURL    url.URL `yaml:"DIS_ATTESTATION_URL"`
+	DexURL               url.URL `yaml:"DEX_URL"`
+	DevLicenseRedirectURL string `yaml:"DEV_LICENSE_REDIRECT_URL"`
 }
 
 func (app *Settings) IsProduction() bool {

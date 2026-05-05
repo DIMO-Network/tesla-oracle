@@ -61,10 +61,17 @@ type SingleDeviceDefinition struct {
 }
 
 type DeviceDefinition struct {
-	DeviceDefinitionID string       `json:"deviceDefinitionId"`
-	Manufacturer       Manufacturer `json:"manufacturer"`
-	Model              string       `json:"model"`
-	Year               int          `json:"year"`
+	DeviceDefinitionID string             `json:"deviceDefinitionId"`
+	Manufacturer       Manufacturer       `json:"manufacturer"`
+	Model              string             `json:"model"`
+	Year               int                `json:"year"`
+	DeviceType         string             `json:"deviceType,omitempty"`
+	Attributes         []DeviceDefAttribute `json:"attributes,omitempty"`
+}
+
+type DeviceDefAttribute struct {
+	Name  string `json:"name"`
+	Value string `json:"value"`
 }
 
 type Manufacturer struct {
