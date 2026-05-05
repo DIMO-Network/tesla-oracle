@@ -9,6 +9,7 @@ import (
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/redis"
+	"github.com/DIMO-Network/tesla-oracle/internal/attestation"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
@@ -152,6 +153,15 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 	logger.Debug().Msg("Added onboarding worker")
 
+	ddAttestWorker, err := attestation.NewDDAttestWorker(logger, settings, identityService)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create DD attestation worker: %w", err)
+	}
+	if err := river.AddWorkerSafely(workers, ddAttestWorker); err != nil {
+		return nil, nil, fmt.Errorf("failed to add DD attestation worker: %w", err)
+	}
+	logger.Debug().Msg("Added device definition attestation worker")
+
 	// Create and register Tesla command worker
 
 	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger, 1*time.Minute)
@@ -190,6 +200,9 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create river client: %w", err)
 	}
+
+	// Inject the River client back into workers that need to enqueue follow-up jobs.
+	onboardingWorker.SetRiverClient(riverClient)
 
 	return riverClient, dbPool, nil
 }

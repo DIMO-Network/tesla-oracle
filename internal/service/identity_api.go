@@ -202,6 +202,11 @@ const DeviceDefinitionByIDQuery = `{
     	}
     	model
     	year
+    	deviceType
+    	attributes {
+      		name
+      		value
+    	}
   	}
 }`
 

@@ -13,6 +13,7 @@ import (
 	registry "github.com/DIMO-Network/go-transactions/contracts"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
+	"github.com/DIMO-Network/tesla-oracle/internal/attestation"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
@@ -25,6 +26,7 @@ import (
 	"github.com/ethereum/go-ethereum/crypto"
 	signer "github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"github.com/friendsofgo/errors"
+	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
@@ -104,13 +106,14 @@ func (a OnboardingArgs) InsertOpts() river.InsertOpts {
 }
 
 type OnboardingWorker struct {
-	settings *config.Settings
-	logger   zerolog.Logger
-	identity service.IdentityAPIService
-	dbs      *db.Store
-	tr       *transactions.Client
-	ws       wallet.SDWalletsAPI
-	m        sync.RWMutex
+	settings    *config.Settings
+	logger      zerolog.Logger
+	identity    service.IdentityAPIService
+	dbs         *db.Store
+	tr          *transactions.Client
+	ws          wallet.SDWalletsAPI
+	m           sync.RWMutex
+	riverClient *river.Client[pgx.Tx]
 	//vendor   VendorOnboardingAPI
 
 	river.WorkerDefaults[OnboardingArgs]
@@ -125,6 +128,36 @@ func NewOnboardingWorker(settings *config.Settings, logger zerolog.Logger, ident
 		tr:       tr,
 		ws:       ws,
 		//vendor:   vendor,
+	}
+}
+
+// SetRiverClient is called after the River client is constructed so the worker
+// can enqueue follow-up jobs (e.g., device-definition attestation uploads).
+func (w *OnboardingWorker) SetRiverClient(c *river.Client[pgx.Tx]) {
+	w.riverClient = c
+}
+
+// enqueueDDAttestation schedules a best-effort upload of the device-definition
+// document for a freshly minted vehicle. Failures here must not roll back the
+// mint; the ddbackfill tool catches anything we miss.
+func (w *OnboardingWorker) enqueueDDAttestation(ctx context.Context, vehicleTokenID int64, definitionID string) {
+	if w.riverClient == nil {
+		w.logger.Warn().Msg("River client not set on OnboardingWorker; skipping DD attestation enqueue")
+		return
+	}
+	if definitionID == "" {
+		w.logger.Warn().Int64(logfields.VehicleTokenID, vehicleTokenID).Msg("No device definition ID; skipping DD attestation enqueue")
+		return
+	}
+	_, err := w.riverClient.Insert(ctx, attestation.DDAttestArgs{
+		VehicleTokenID:     vehicleTokenID,
+		DeviceDefinitionID: definitionID,
+	}, nil)
+	if err != nil {
+		w.logger.Error().Err(err).
+			Int64(logfields.VehicleTokenID, vehicleTokenID).
+			Str(logfields.DefinitionID, definitionID).
+			Msg("Failed to enqueue device definition attestation job")
 	}
 }
 
@@ -308,6 +341,8 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 
 	w.logger.Debug().Str(logfields.VIN, args.VIN).Int64(logfields.VehicleTokenID, record.VehicleTokenID.Int64).Msg("OnboardingService minted")
 	w.logger.Debug().Str(logfields.VIN, args.VIN).Int64("syntheticDeviceTokenId", record.SyntheticTokenID.Int64).Msg("SD minted")
+
+	w.enqueueDDAttestation(ctx, record.VehicleTokenID.Int64, record.DeviceDefinitionID.String)
 
 	return record, nil
 }
