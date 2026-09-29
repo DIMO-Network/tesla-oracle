@@ -91,6 +91,9 @@ ingress:
     nginx.ingress.kubernetes.io/enable-cors: 'true'
     nginx.ingress.kubernetes.io/cors-allow-origin: https://tesla-oracle.dimo.zone, https://app.dimo.zone, https://localtesla.dimo.org:4443
     external-dns.alpha.kubernetes.io/hostname: tesla-oracle.dimo.zone
+    # Onboarding keeps the Tesla OAuth credentials in pod memory between calls,
+    # so each user's requests have to keep reaching the same pod.
+    nginx.ingress.kubernetes.io/upstream-hash-by: $http_authorization
   hosts:
     - host: tesla-oracle.dimo.zone
       paths:

@@ -16,7 +16,6 @@ import (
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
 	"github.com/DIMO-Network/shared/pkg/privileges"
-	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
@@ -46,7 +45,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
 
-	"github.com/testcontainers/testcontainers-go/wait"
 )
 
 const vin = "1HGCM82633A123456"
@@ -435,13 +433,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 		_, _ = onboardings.Delete(s.ctx, s.pdb.DBS().Writer)
 	}()
 
-	redisContainer, credStore, err := s.setupRedisContainer()
-	require.NoError(s.T(), err)
-	defer func() {
-		if err := redisContainer.Terminate(s.ctx); err != nil {
-			s.T().Logf("failed to terminate Redis container: %v", err)
-		}
-	}()
+	credStore := repository.NewTempCredsStore(new(cipher.ROT13Cipher))
 
 	// when
 	mockIdentitySvc, mockTeslaService, mockDDService := s.setupListVehiclesMocks()
@@ -494,13 +486,7 @@ func (s *TeslaControllerTestSuite) TestReauthenticate() {
 		_, _ = synthDevice.Delete(s.ctx, s.pdb.DBS().Writer)
 	}()
 
-	redisContainer, credStore, err := s.setupRedisContainer()
-	require.NoError(s.T(), err)
-	defer func() {
-		if err := redisContainer.Terminate(s.ctx); err != nil {
-			s.T().Logf("failed to terminate Redis container: %v", err)
-		}
-	}()
+	credStore := repository.NewTempCredsStore(new(cipher.ROT13Cipher))
 
 	// when
 	mockIdentitySvc, mockTeslaService, mockDDService := s.setupListVehiclesMocks()
@@ -1863,47 +1849,6 @@ func (s *TeslaControllerTestSuite) setupMockIdentityService() *test.MockIdentity
 	}
 	mockIdentitySvc.On("FetchVehicleByTokenID", int64(vehicleTokenID)).Return(mockVehicle, nil)
 	return mockIdentitySvc
-}
-
-func (s *TeslaControllerTestSuite) setupRedisContainer() (testcontainers.Container, *repository.TempCredsStore, error) {
-	// Spin up a local Redis container
-	redisContainer, err := testcontainers.GenericContainer(s.ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "redis:latest",
-			ExposedPorts: []string{"6379/tcp"},
-			WaitingFor:   wait.ForListeningPort("6379/tcp"),
-		},
-		Started: true,
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Get the Redis container's host and port
-	redisHost, err := redisContainer.Host(s.ctx)
-	if err != nil {
-		return nil, nil, err
-	}
-	redisPort, err := redisContainer.MappedPort(s.ctx, "6379")
-	if err != nil {
-		return nil, nil, err
-	}
-
-	// Create cacheService
-	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
-	cacheService := redis.NewRedisCacheService(false, redis.Settings{
-		URL:       redisAddr,
-		Password:  "",
-		TLS:       false,
-		KeyPrefix: "tesla-oracle",
-	})
-
-	credStore := &repository.TempCredsStore{
-		Cache:  cacheService,
-		Cipher: new(cipher.ROT13Cipher),
-	}
-
-	return redisContainer, credStore, nil
 }
 
 func (s *TeslaControllerTestSuite) setupTestAppForListVehicles(controller *TeslaController) *fiber.App {

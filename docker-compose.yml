@@ -8,11 +8,6 @@ services:
       - POSTGRES_PASSWORD=dimo
       - POSTGRES_DB=tesla_oracle
 
-  redis:
-    image: redis:latest
-    ports:
-      - "6379:6379"
-
   zookeeper:
     image: "wurstmeister/zookeeper:latest"
     ports:

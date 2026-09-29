@@ -8,7 +8,6 @@ import (
 	"github.com/DIMO-Network/go-transactions"
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
-	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
@@ -21,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/patrickmn/go-cache"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/rs/zerolog"
@@ -226,32 +224,10 @@ func createCipher(settings *config.Settings, logger *zerolog.Logger) cipher.Ciph
 	}
 }
 
-// createCredentialStore creates the appropriate credential store implementation
+// createCredentialStore creates the in-memory store for credentials between a Tesla
+// OAuth exchange and onboarding.
 func createCredentialStore(settings *config.Settings, logger *zerolog.Logger) repository.CredentialRepository {
-	cip := createCipher(settings, logger)
-
-	// Create cache service
-	cacheService := redis.NewRedisCacheService(settings.IsProduction(), redis.Settings{
-		URL:       settings.RedisURL,
-		Password:  settings.RedisPassword,
-		TLS:       settings.RedisTLS,
-		KeyPrefix: "tesla-oracle",
-	})
-
-	// Return appropriate credential store implementation
-	if settings.EnableLocalCache {
-		logger.Info().Msg("Using LocalCache for CredStore.")
-		return &repository.TempCredsLocalStore{
-			Cache:  cache.New(5*time.Minute, 10*time.Minute),
-			Cipher: cip,
-		}
-	} else {
-		logger.Info().Msg("Using redis CredStore implementation.")
-		return &repository.TempCredsStore{
-			Cache:  cacheService,
-			Cipher: cip,
-		}
-	}
+	return repository.NewTempCredsStore(createCipher(settings, logger))
 }
 
 // createKMS creates a KMS cipher for encryption

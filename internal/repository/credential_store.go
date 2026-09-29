@@ -5,18 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/DIMO-Network/shared/pkg/cipher"
-	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/ethereum/go-ethereum/common"
-	rd "github.com/go-redis/redis/v8"
 	"github.com/patrickmn/go-cache"
 )
 
 const (
-	// We want to be closer to follow Redis key naming conventions
-	prefix   = "credentials:"
+	prefix = "credentials:"
+	// duration is how long credentials from a Tesla OAuth exchange stay
+	// available for onboarding.
 	duration = 5 * time.Minute
 )
 
@@ -24,10 +24,25 @@ var (
 	ErrNotFound = errors.New("no credentials found for user")
 )
 
-// TempCredsStore implements CredentialRepository using Redis
+// TempCredsStore holds the credentials from a Tesla OAuth exchange, encrypted, in
+// this process's memory until onboarding moves them onto the synthetic device.
+// Another replica can't see them, so all of a user's onboarding calls have to
+// reach the same pod; the prod ingress hashes requests on the Authorization
+// header for this.
 type TempCredsStore struct {
-	Cache  redis.CacheService
-	Cipher cipher.Cipher
+	cache  *cache.Cache
+	cipher cipher.Cipher
+	// takeMu makes RetrieveAndDelete's read and delete one step, so concurrent
+	// callers can't both take the same credentials.
+	takeMu sync.Mutex
+}
+
+// NewTempCredsStore returns an empty in-memory credential store.
+func NewTempCredsStore(cip cipher.Cipher) *TempCredsStore {
+	return &TempCredsStore{
+		cache:  cache.New(duration, 2*duration),
+		cipher: cip,
+	}
 }
 
 type Credential struct {
@@ -38,125 +53,58 @@ type Credential struct {
 }
 
 // Store stores the given credential for the given user.
-func (s *TempCredsStore) Store(ctx context.Context, user common.Address, cred *Credential) error {
+func (s *TempCredsStore) Store(_ context.Context, user common.Address, cred *Credential) error {
 	credJSON, err := json.Marshal(cred)
 	if err != nil {
 		return fmt.Errorf("failed to marshal credentials: %w", err)
 	}
 
-	encCred, err := s.Cipher.Encrypt(string(credJSON))
+	encCred, err := s.cipher.Encrypt(string(credJSON))
 	if err != nil {
 		return fmt.Errorf("failed to encrypt credentials: %w", err)
 	}
 
-	cacheKey := prefix + user.Hex()
-	s.Cache.Set(ctx, cacheKey, encCred, duration)
+	s.cache.Set(prefix+user.Hex(), encCred, duration)
 
 	return nil
 }
 
-func (s *TempCredsStore) RetrieveAndDelete(ctx context.Context, user common.Address) (*Credential, error) {
-	cacheKey := prefix + user.Hex()
-	cachedCred := s.Cache.Get(ctx, cacheKey)
-
-	encCred, err := cachedCred.Result()
-	if err != nil {
-		if errors.Is(err, rd.Nil) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to retrieve cached credentials: %w", err)
+// Retrieve returns the credential stored for the given user and leaves it in place.
+func (s *TempCredsStore) Retrieve(_ context.Context, user common.Address) (*Credential, error) {
+	encCred, ok := s.cache.Get(prefix + user.Hex())
+	if !ok {
+		return nil, ErrNotFound
 	}
+
+	return s.decrypt(encCred.(string))
+}
+
+// RetrieveAndDelete returns the credential stored for the given user and removes it.
+func (s *TempCredsStore) RetrieveAndDelete(_ context.Context, user common.Address) (*Credential, error) {
+	cacheKey := prefix + user.Hex()
 
 	// Don't want a second call to pick this up. Use it or lose it.
-	if _, err := s.Cache.Del(ctx, cacheKey).Result(); err != nil {
-		return nil, fmt.Errorf("failed to delete cached credentials: %w", err)
-	}
+	s.takeMu.Lock()
+	encCred, ok := s.cache.Get(cacheKey)
+	s.cache.Delete(cacheKey)
+	s.takeMu.Unlock()
 
-	if len(encCred) == 0 {
-		return nil, fmt.Errorf("no credential found")
-	}
-
-	credJSON, err := s.Cipher.Decrypt(encCred)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
-	}
-
-	var cred Credential
-	if err := json.Unmarshal([]byte(credJSON), &cred); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
-	}
-
-	if cred.AccessToken == "" || cred.RefreshToken == "" || cred.AccessExpiry.IsZero() || cred.RefreshExpiry.IsZero() {
-		return nil, errors.New("credential was missing a required field")
-	}
-
-	return &cred, nil
-}
-
-// Retrieve retrieves the credential for the given user from the cache, decrypts it, delete it and returns it.
-func (s *TempCredsStore) Retrieve(ctx context.Context, user common.Address) (*Credential, error) {
-	cacheKey := prefix + user.Hex()
-	cachedCred := s.Cache.Get(ctx, cacheKey)
-
-	encCred, err := cachedCred.Result()
-	if err != nil {
-		if errors.Is(err, rd.Nil) {
-			return nil, ErrNotFound
-		}
-		return nil, fmt.Errorf("failed to retrieve cached credentials: %w", err)
-	}
-
-	if len(encCred) == 0 {
-		return nil, fmt.Errorf("no credential found")
-	}
-
-	credJSON, err := s.Cipher.Decrypt(encCred)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
-	}
-
-	var cred Credential
-	if err := json.Unmarshal([]byte(credJSON), &cred); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
-	}
-
-	if cred.AccessToken == "" || cred.RefreshToken == "" || cred.AccessExpiry.IsZero() || cred.RefreshExpiry.IsZero() {
-		return nil, errors.New("credential was missing a required field")
-	}
-
-	return &cred, nil
-}
-
-func (s *TempCredsStore) RetrieveWithTokensEncrypted(ctx context.Context, user common.Address) (*Credential, error) {
-	cacheKey := prefix + user.Hex()
-	cachedCred := s.Cache.Get(ctx, cacheKey)
-
-	encCred, err := cachedCred.Result()
-	if errors.Is(err, rd.Nil) {
+	if !ok {
 		return nil, ErrNotFound
-	} else if err != nil {
-		return nil, fmt.Errorf("failed to retrieve cached credentials: %w", err)
 	}
 
-	if len(encCred) == 0 {
-		return nil, fmt.Errorf("no credential found")
-	}
+	return s.decrypt(encCred.(string))
+}
 
-	credJSON, err := s.Cipher.Decrypt(encCred)
+// RetrieveWithTokensEncrypted returns the credential stored for the given user
+// with each token encrypted, ready to save on a synthetic device.
+func (s *TempCredsStore) RetrieveWithTokensEncrypted(ctx context.Context, user common.Address) (*Credential, error) {
+	cred, err := s.Retrieve(ctx, user)
 	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
+		return nil, err
 	}
 
-	var cred Credential
-	if err := json.Unmarshal([]byte(credJSON), &cred); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
-	}
-
-	if cred.AccessToken == "" || cred.RefreshToken == "" || cred.AccessExpiry.IsZero() || cred.RefreshExpiry.IsZero() {
-		return nil, errors.New("credential was missing a required field")
-	}
-
-	credsWithEncryptedTokens, err := s.EncryptTokens(&cred)
+	credsWithEncryptedTokens, err := s.EncryptTokens(cred)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt credentials: %w", err)
 	}
@@ -165,12 +113,12 @@ func (s *TempCredsStore) RetrieveWithTokensEncrypted(ctx context.Context, user c
 }
 
 func (s *TempCredsStore) EncryptTokens(cred *Credential) (*Credential, error) {
-	encAccess, err := s.Cipher.Encrypt(cred.AccessToken)
+	encAccess, err := s.cipher.Encrypt(cred.AccessToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt access token: %w", err)
 	}
 
-	encRefresh, err := s.Cipher.Encrypt(cred.RefreshToken)
+	encRefresh, err := s.cipher.Encrypt(cred.RefreshToken)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encrypt refresh token: %w", err)
 	}
@@ -183,45 +131,12 @@ func (s *TempCredsStore) EncryptTokens(cred *Credential) (*Credential, error) {
 	}, nil
 }
 
-// TempCredsLocalStore implements CredentialRepository using local cache
-// For local development, we use a different store implementation
-type TempCredsLocalStore struct {
-	Cache  *cache.Cache
-	Cipher cipher.Cipher
-}
-
-// Store stores the given credential for the given user.
-func (s *TempCredsLocalStore) Store(_ context.Context, user common.Address, cred *Credential) error {
-	credJSON, err := json.Marshal(cred)
-	if err != nil {
-		return fmt.Errorf("failed to marshal credentials: %w", err)
-	}
-
-	encCred, err := s.Cipher.Encrypt(string(credJSON))
-	if err != nil {
-		return fmt.Errorf("failed to encrypt credentials: %w", err)
-	}
-
-	cacheKey := prefix + user.Hex()
-	s.Cache.Set(cacheKey, encCred, duration)
-
-	return nil
-}
-
-func (s *TempCredsLocalStore) Retrieve(_ context.Context, user common.Address) (*Credential, error) {
-	cacheKey := prefix + user.Hex()
-	cachedCred, ok := s.Cache.Get(cacheKey)
-	if !ok {
-		return nil, ErrNotFound
-	}
-
-	encCred := cachedCred.(string)
-
+func (s *TempCredsStore) decrypt(encCred string) (*Credential, error) {
 	if len(encCred) == 0 {
 		return nil, fmt.Errorf("no credential found")
 	}
 
-	credJSON, err := s.Cipher.Decrypt(encCred)
+	credJSON, err := s.cipher.Decrypt(encCred)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
 	}
@@ -236,91 +151,4 @@ func (s *TempCredsLocalStore) Retrieve(_ context.Context, user common.Address) (
 	}
 
 	return &cred, nil
-}
-
-func (s *TempCredsLocalStore) RetrieveAndDelete(_ context.Context, user common.Address) (*Credential, error) {
-	cacheKey := prefix + user.Hex()
-	cachedCred, ok := s.Cache.Get(cacheKey)
-	if !ok {
-		return nil, ErrNotFound
-	}
-
-	encCred := cachedCred.(string)
-
-	// Don't want a second call to pick this up. Use it or lose it.
-	s.Cache.Delete(cacheKey)
-
-	if len(encCred) == 0 {
-		return nil, fmt.Errorf("no credential found")
-	}
-
-	credJSON, err := s.Cipher.Decrypt(encCred)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
-	}
-
-	var cred Credential
-	if err := json.Unmarshal([]byte(credJSON), &cred); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
-	}
-
-	if cred.AccessToken == "" || cred.RefreshToken == "" || cred.AccessExpiry.IsZero() || cred.RefreshExpiry.IsZero() {
-		return nil, errors.New("credential was missing a required field")
-	}
-
-	return &cred, nil
-}
-
-func (s *TempCredsLocalStore) RetrieveWithTokensEncrypted(_ context.Context, user common.Address) (*Credential, error) {
-	cacheKey := prefix + user.Hex()
-	cachedCred, ok := s.Cache.Get(cacheKey)
-	if !ok {
-		return nil, ErrNotFound
-	}
-
-	encCred := cachedCred.(string)
-
-	if len(encCred) == 0 {
-		return nil, fmt.Errorf("no credential found")
-	}
-
-	credJSON, err := s.Cipher.Decrypt(encCred)
-	if err != nil {
-		return nil, fmt.Errorf("failed to decrypt credentials: %w", err)
-	}
-
-	var cred Credential
-	if err := json.Unmarshal([]byte(credJSON), &cred); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal credentials: %w", err)
-	}
-
-	if cred.AccessToken == "" || cred.RefreshToken == "" || cred.AccessExpiry.IsZero() || cred.RefreshExpiry.IsZero() {
-		return nil, errors.New("credential was missing a required field")
-	}
-
-	credsWithEncryptedTokens, err := s.EncryptTokens(&cred)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt credentials: %w", err)
-	}
-
-	return credsWithEncryptedTokens, nil
-}
-
-func (s *TempCredsLocalStore) EncryptTokens(cred *Credential) (*Credential, error) {
-	encAccess, err := s.Cipher.Encrypt(cred.AccessToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt access token: %w", err)
-	}
-
-	encRefresh, err := s.Cipher.Encrypt(cred.RefreshToken)
-	if err != nil {
-		return nil, fmt.Errorf("failed to encrypt refresh token: %w", err)
-	}
-
-	return &Credential{
-		AccessToken:   encAccess,
-		RefreshToken:  encRefresh,
-		AccessExpiry:  cred.AccessExpiry,
-		RefreshExpiry: cred.RefreshExpiry,
-	}, nil
 }
