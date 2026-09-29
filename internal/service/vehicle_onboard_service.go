@@ -855,9 +855,13 @@ func (s *vehicleOnboardService) requireTeslaLogin(ctx context.Context, walletAdd
 }
 
 // identityWaitAttempts and identityWaitDelay bound how long finalize waits for
-// identity-api to index a vehicle minted moments ago.
+// identity-api to index a vehicle minted moments ago. identity-api reads the same
+// contract-event topic this service does, which in prod delivers a mint about 10s
+// after submit, so 30s leaves room for a slow indexer while staying under the
+// ingress's 60s read timeout. A finalize that still times out keeps the Tesla
+// login, so the user can press Continue again.
 var (
-	identityWaitAttempts = 10
+	identityWaitAttempts = 30
 	identityWaitDelay    = time.Second
 )
 
