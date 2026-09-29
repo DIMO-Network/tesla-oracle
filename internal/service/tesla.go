@@ -256,17 +256,6 @@ func (ts *TeslaService) processVehicleOnboarding(ctx context.Context, vin string
 
 // CompleteOAuthFlow handles the complete OAuth flow including vehicle list processing
 func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress common.Address, teslaAuth *core.TeslaAuthCodeResponse, withOnboarding bool, updateDBCredentials bool) ([]models.TeslaVehicleRes, error) {
-	// Store credentials in cache
-	creds := &repository.Credential{
-		AccessToken:   teslaAuth.AccessToken,
-		RefreshToken:  teslaAuth.RefreshToken,
-		AccessExpiry:  teslaAuth.Expiry,
-		RefreshExpiry: time.Now().AddDate(0, 3, 0),
-	}
-	if err := ts.repositories.Credential.Store(ctx, walletAddress, creds); err != nil {
-		return nil, fmt.Errorf("%w: %s", core.ErrCredentialStore, err.Error())
-	}
-
 	// Get vehicle list from Tesla
 	vehicles, err := ts.fleetAPISvc.GetVehicles(ctx, teslaAuth.AccessToken)
 	if err != nil {
@@ -274,6 +263,23 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 			return nil, fmt.Errorf("%w: region detection failed", core.ErrOAuthVehiclesFetch)
 		}
 		return nil, fmt.Errorf("%w: %s", core.ErrOAuthVehiclesFetch, err.Error())
+	}
+
+	// Store credentials in cache, with the VINs this Tesla login can see: onboarding
+	// accepts only those.
+	vins := make([]string, 0, len(vehicles))
+	for _, v := range vehicles {
+		vins = append(vins, v.VIN)
+	}
+	creds := &repository.Credential{
+		AccessToken:   teslaAuth.AccessToken,
+		RefreshToken:  teslaAuth.RefreshToken,
+		AccessExpiry:  teslaAuth.Expiry,
+		RefreshExpiry: time.Now().AddDate(0, 3, 0),
+		VINs:          vins,
+	}
+	if err := ts.repositories.Credential.Store(ctx, walletAddress, creds); err != nil {
+		return nil, fmt.Errorf("%w: %s", core.ErrCredentialStore, err.Error())
 	}
 
 	// Reauthentication writes the new tokens only to devices the caller owns.

@@ -49,6 +49,10 @@ func (m *mockRPCVehicleRepository) GetSyntheticDeviceByTokenID(ctx context.Conte
 	return nil, args.Error(1)
 }
 
+func (m *mockRPCVehicleRepository) CompleteOnboarding(ctx context.Context, device *dbmodels.SyntheticDevice, onboarding *dbmodels.Onboarding) (bool, error) {
+	panic("not used")
+}
+
 func (m *mockRPCVehicleRepository) GetSyntheticDeviceByAddress(ctx context.Context, address common.Address) (*dbmodels.SyntheticDevice, error) {
 	panic("not implemented")
 }

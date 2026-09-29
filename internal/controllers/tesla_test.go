@@ -14,6 +14,7 @@ import (
 
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
+	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/shared/pkg/middleware/privilegetoken"
 	"github.com/DIMO-Network/shared/pkg/privileges"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -292,13 +293,13 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 
 func (s *TeslaControllerTestSuite) TestEnsureVehicleDataFlow() {
 	testCases := []struct {
-		name               string
-		fleetStatus        *core.VehicleFleetStatus
+		name                string
+		fleetStatus         *core.VehicleFleetStatus
 		telemetryConfigured bool
-		expectSubscribe    bool
-		expectPolling      bool
-		expectErr          bool
-		expectedStatus     string
+		expectSubscribe     bool
+		expectPolling       bool
+		expectErr           bool
+		expectedStatus      string
 	}{
 		{
 			name: "Start Streaming",
@@ -458,6 +459,11 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 	assert.NoError(s.T(), err)
 	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
 	s.assertListVehiclesResponse(resp)
+
+	// The Tesla login is kept with the VINs Tesla listed: onboarding only accepts those.
+	creds, err := credStore.Retrieve(s.ctx, wallet)
+	require.NoError(s.T(), err)
+	assert.Equal(s.T(), []string{vin}, creds.VINs)
 
 	mockIdentitySvc.AssertExpectations(s.T())
 	mockTeslaService.AssertExpectations(s.T())
@@ -983,8 +989,10 @@ func (s *TeslaControllerTestSuite) TestGetStatusWithTokenRefreshErrors() {
 			expectedMessage:    "Token refresh failed: Internal server error occurred.. Please try again.",
 		},
 		{
-			name:               "Non-JSON token expired error",
-			refreshError:       fmt.Errorf("token has expired"),
+			// How RefreshToken returns it in prod: shttp's status message, wrapped.
+			name: "Tesla login_required as RefreshToken returns it",
+			refreshError: fmt.Errorf("failed to perform request: %w", shttp.BuildResponseError(401, fmt.Errorf(
+				`received non success status code 401 for url https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token with body: {"error":"login_required","error_description":"user session flushed"}`))),
 			expectedStatusCode: fiber.StatusOK,
 			expectedAction:     service.ActionLoginRequired,
 			expectedMessage:    service.MessageGenericLoginRequired,

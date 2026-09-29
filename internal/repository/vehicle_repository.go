@@ -11,12 +11,16 @@ import (
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
+	"github.com/aarondl/sqlboiler/v4/queries/qm"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/rs/zerolog"
 )
 
 var (
 	ErrVehicleNotFound = errors.New("vehicle not found")
+	// ErrVehicleAlreadyConnected: the vehicle already has a synthetic device row
+	// with a minted SD, so onboarding can't store another one for it.
+	ErrVehicleAlreadyConnected = errors.New("vehicle already has a connected synthetic device")
 )
 
 type vehicleRepository struct {
@@ -166,6 +170,67 @@ func (r *vehicleRepository) InsertSyntheticDevice(ctx context.Context, device *d
 		return fmt.Errorf("failed to insert synthetic device: %w", err)
 	}
 	return nil
+}
+
+// CompleteOnboarding stores the synthetic device of a finished onboarding and
+// deletes its onboarding record, in one transaction, so a failure leaves both as
+// they were and the finalize can be retried.
+//
+// If the vehicle has a disconnected row (its SD burned), that row is updated in
+// place: its subscription status and the command history that references it stay.
+// It reports whether it reconnected such a row.
+func (r *vehicleRepository) CompleteOnboarding(ctx context.Context, device *dbmodels.SyntheticDevice, onboarding *dbmodels.Onboarding) (reconnected bool, err error) {
+	tx, err := r.db.DBS().Writer.BeginTx(ctx, nil)
+	if err != nil {
+		return false, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	existing, err := dbmodels.SyntheticDevices(
+		dbmodels.SyntheticDeviceWhere.VehicleTokenID.EQ(device.VehicleTokenID),
+		qm.For("UPDATE"),
+	).One(ctx, tx)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		if err = device.Insert(ctx, tx, boil.Infer()); err != nil {
+			return false, fmt.Errorf("failed to insert synthetic device: %w", err)
+		}
+	case err != nil:
+		return false, fmt.Errorf("failed to look up the vehicle's synthetic device: %w", err)
+	case existing.TokenID.Valid:
+		err = fmt.Errorf("%w: vehicle %d, synthetic device %d", ErrVehicleAlreadyConnected, existing.VehicleTokenID.Int, existing.TokenID.Int)
+		return false, err
+	default:
+		// The address is the primary key, so this can't go through the model's Update.
+		_, err = dbmodels.SyntheticDevices(dbmodels.SyntheticDeviceWhere.Address.EQ(existing.Address)).UpdateAll(ctx, tx, dbmodels.M{
+			dbmodels.SyntheticDeviceColumns.Address:           device.Address,
+			dbmodels.SyntheticDeviceColumns.Vin:               device.Vin,
+			dbmodels.SyntheticDeviceColumns.TokenID:           device.TokenID,
+			dbmodels.SyntheticDeviceColumns.WalletChildNumber: device.WalletChildNumber,
+			dbmodels.SyntheticDeviceColumns.AccessToken:       device.AccessToken,
+			dbmodels.SyntheticDeviceColumns.AccessExpiresAt:   device.AccessExpiresAt,
+			dbmodels.SyntheticDeviceColumns.RefreshToken:      device.RefreshToken,
+			dbmodels.SyntheticDeviceColumns.RefreshExpiresAt:  device.RefreshExpiresAt,
+		})
+		if err != nil {
+			return false, fmt.Errorf("failed to reconnect synthetic device: %w", err)
+		}
+		reconnected = true
+	}
+
+	if _, err = onboarding.Delete(ctx, tx); err != nil {
+		return false, fmt.Errorf("failed to delete onboarding record: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return false, fmt.Errorf("failed to commit onboarding: %w", err)
+	}
+
+	return reconnected, nil
 }
 
 // DeleteSyntheticDevice deletes a synthetic device by its address (primary key)
