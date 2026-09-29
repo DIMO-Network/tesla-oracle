@@ -2,13 +2,16 @@ package service
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
 
+	shttp "github.com/DIMO-Network/shared/pkg/http"
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
+	"github.com/gofiber/fiber/v2"
 )
 
 const (
@@ -147,23 +150,32 @@ func IsFirmwareFleetTelemetryCapable(v string) (bool, error) {
 	return year > 2025 || (year == 2025 && week >= 20), nil
 }
 
-// TokenRefreshDecisionTree determines the appropriate action and message based on token refresh error
+// TokenRefreshDecisionTree determines the appropriate action and message based on token refresh error.
+//
+// Only Tesla itself can say the user's login is gone: a login_required from its
+// OAuth endpoint, a 401 from it, or our stored refresh token being past its expiry.
+// Everything else (network, TLS, KMS decryption, malformed responses) is ours or
+// transient, and gets retry_refresh so polling survives it.
 func TokenRefreshDecisionTree(refreshError error) (*models.StatusDecision, error) {
 	if refreshError == nil {
 		return nil, fmt.Errorf("no error provided")
 	}
 
-	errorMessage := refreshError.Error()
-	var action string
-	var message string
+	if errors.Is(refreshError, core.ErrTokenExpired) {
+		return &models.StatusDecision{Action: ActionLoginRequired, Message: MessageRefreshTokenExpired}, nil
+	}
 
-	// Try to parse as JSON error response
-	var teslaError core.TeslaFleetAPIError
-	if err := json.Unmarshal([]byte(errorMessage), &teslaError); err == nil {
-		// Successfully parsed as JSON, handle Tesla API specific errors
-		if teslaError.Error == "login_required" {
-			action = ActionLoginRequired
+	if !errors.Is(refreshError, core.ErrCredentialDecryption) {
+		if teslaError, ok := parseTeslaOAuthError(refreshError); ok {
+			if teslaError.Error != "login_required" {
+				// Other Tesla API errors - retry might work
+				return &models.StatusDecision{
+					Action:  ActionRetryRefresh,
+					Message: fmt.Sprintf("Token refresh failed: %s. Please try again.", teslaError.ErrorDescription),
+				}, nil
+			}
 
+			var message string
 			switch {
 			case strings.Contains(teslaError.ErrorDescription, "refresh_token is expired"):
 				message = MessageRefreshTokenExpired
@@ -174,28 +186,47 @@ func TokenRefreshDecisionTree(refreshError error) (*models.StatusDecision, error
 			default:
 				message = MessageGenericLoginRequired
 			}
-
-		} else {
-			// Other Tesla API errors - retry might work
-			action = ActionRetryRefresh
-			message = fmt.Sprintf("Token refresh failed: %s. Please try again.", teslaError.ErrorDescription)
+			return &models.StatusDecision{Action: ActionLoginRequired, Message: message}, nil
 		}
-	} else {
-		// Not a JSON error, handle as generic error
-		if strings.Contains(strings.ToLower(errorMessage), "expired") ||
-			strings.Contains(strings.ToLower(errorMessage), "invalid") ||
-			strings.Contains(strings.ToLower(errorMessage), "unauthorized") {
-			action = ActionLoginRequired
-			message = MessageGenericLoginRequired
-		} else {
-			// Generic error - might be network or temporary issue
-			action = ActionRetryRefresh
-			message = fmt.Sprintf("Token refresh failed: %s. Please try again.", errorMessage)
+
+		var respErr shttp.ResponseError
+		if errors.As(refreshError, &respErr) && respErr.StatusCode == fiber.StatusUnauthorized {
+			return &models.StatusDecision{Action: ActionLoginRequired, Message: MessageGenericLoginRequired}, nil
 		}
 	}
 
+	// Generic error - might be network or temporary issue
 	return &models.StatusDecision{
-		Action:  action,
-		Message: message,
+		Action:  ActionRetryRefresh,
+		Message: fmt.Sprintf("Token refresh failed: %s. Please try again.", refreshError.Error()),
 	}, nil
+}
+
+// teslaBodyMarker precedes the response body in the errors shttp builds for
+// non-2xx responses.
+const teslaBodyMarker = "with body:"
+
+// parseTeslaOAuthError finds Tesla's OAuth error JSON in a refresh error. The error
+// is either the bare JSON body, or shttp's "received non success status code ...
+// with body: {...}" message, possibly wrapped by RefreshToken.
+func parseTeslaOAuthError(err error) (core.TeslaFleetAPIError, bool) {
+	message := err.Error()
+	var respErr shttp.ResponseError
+	if errors.As(err, &respErr) {
+		message = respErr.Error()
+	}
+
+	candidates := []string{message}
+	if i := strings.LastIndex(message, teslaBodyMarker); i >= 0 {
+		candidates = append(candidates, message[i+len(teslaBodyMarker):])
+	}
+
+	for _, candidate := range candidates {
+		var teslaError core.TeslaFleetAPIError
+		if json.Unmarshal([]byte(strings.TrimSpace(candidate)), &teslaError) == nil && teslaError.Error != "" {
+			return teslaError, true
+		}
+	}
+
+	return core.TeslaFleetAPIError{}, false
 }
