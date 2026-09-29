@@ -317,9 +317,20 @@ export class TeslaElement extends BaseOnboardingElement {
         `
     }
 
+    private renderFailure() {
+        if (!this.failureMessage) {
+            return html``;
+        }
+
+        return html`
+            <div class="mb-6 p-4 border border-red-700 rounded-lg text-red-400 text-sm">${this.failureMessage}</div>
+        `;
+    }
+
     render() {
         return html`
             <div>
+                ${this.renderFailure()}
                 ${this.loadVehiclesTask.render({
                     initial: () => this.renderConnectPrompt(),
                     pending: () => html`

@@ -276,6 +276,19 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 		return nil, fmt.Errorf("%w: %s", core.ErrOAuthVehiclesFetch, err.Error())
 	}
 
+	// Reauthentication writes the new tokens only to devices the caller owns.
+	var ownedVehicleTokenIDs map[int64]bool
+	if updateDBCredentials {
+		ownedVehicles, err := ts.identitySvc.FetchVehiclesByWalletAddress(walletAddress.String())
+		if err != nil {
+			return nil, fmt.Errorf("failed to fetch vehicles owned by %s: %w", walletAddress.String(), err)
+		}
+		ownedVehicleTokenIDs = make(map[int64]bool, len(ownedVehicles))
+		for _, vehicle := range ownedVehicles {
+			ownedVehicleTokenIDs[vehicle.TokenID] = true
+		}
+	}
+
 	// Process each vehicle
 	response := make([]models.TeslaVehicleRes, 0, len(vehicles))
 	for _, v := range vehicles {
@@ -295,15 +308,7 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 
 		// Update DB credentials if requested (for reauthentication)
 		if updateDBCredentials {
-			sd, err := ts.repositories.Vehicle.GetSyntheticDeviceByVin(ctx, v.VIN)
-			if err != nil {
-				ts.logger.Warn().Err(err).Str("vin", v.VIN).Msg("Failed to get synthetic device for credential update, skipping.")
-			} else if sd != nil {
-				err = ts.repositories.Vehicle.UpdateSyntheticDeviceCredentials(ctx, sd, creds)
-				if err != nil {
-					ts.logger.Warn().Err(err).Str("vin", v.VIN).Msg("Failed to update synthetic device credentials.")
-				}
-			}
+			ts.updateOwnedDeviceCredentials(ctx, v.VIN, ownedVehicleTokenIDs, creds)
 		}
 
 		// Build response
@@ -320,6 +325,33 @@ func (ts *TeslaService) CompleteOAuthFlow(ctx context.Context, walletAddress com
 	}
 
 	return response, nil
+}
+
+// updateOwnedDeviceCredentials stores creds on the synthetic devices for vin whose
+// vehicle the caller owns. Several wallets can mint the same VIN, each with its own
+// row, so picking a row by VIN alone can hand one account's tokens to another.
+func (ts *TeslaService) updateOwnedDeviceCredentials(ctx context.Context, vin string, ownedVehicleTokenIDs map[int64]bool, creds *repository.Credential) {
+	devices, err := ts.repositories.Vehicle.GetSyntheticDevicesByVins(ctx, []string{vin})
+	if err != nil {
+		ts.logger.Warn().Err(err).Str("vin", vin).Msg("Failed to get synthetic devices for credential update, skipping.")
+		return
+	}
+
+	updated := 0
+	for _, sd := range devices {
+		if !sd.VehicleTokenID.Valid || !ownedVehicleTokenIDs[int64(sd.VehicleTokenID.Int)] {
+			continue
+		}
+		if err := ts.repositories.Vehicle.UpdateSyntheticDeviceCredentials(ctx, sd, creds); err != nil {
+			ts.logger.Warn().Err(err).Str("vin", vin).Int("vehicleTokenId", sd.VehicleTokenID.Int).Msg("Failed to update synthetic device credentials.")
+			continue
+		}
+		updated++
+	}
+
+	if updated == 0 {
+		ts.logger.Warn().Str("vin", vin).Int("devices", len(devices)).Msg("No synthetic device for this VIN belongs to the caller, skipping credential update.")
+	}
 }
 
 // GetVehicleStatus handles the complete vehicle status check workflow

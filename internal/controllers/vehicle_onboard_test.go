@@ -486,6 +486,91 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		assert.NilError(t, err)
 	})
 
+	// The same VIN can be minted by several wallets, so synthetic_devices can hold
+	// another wallet's connected row next to the caller's disconnected one.
+	// Reconnection has to find the caller's row by vehicle token ID, not by VIN.
+	sharedVin := "ABCDEFG1234567813"
+	for _, tc := range []struct {
+		name            string
+		stuckOnboarding bool
+	}{
+		{name: "no onboarding record"},
+		{name: "onboarding record stuck after a burned SD", stuckOnboarding: true},
+	} {
+		s.Run("Reconnects a disconnected vehicle whose VIN another wallet also minted: "+tc.name, func() {
+			t := s.T()
+			t.Cleanup(func() {
+				_, err := dbmodels.Onboardings(dbmodels.OnboardingWhere.Vin.EQ(sharedVin)).DeleteAll(s.ctx, s.pdb.DBS().Writer)
+				assert.NilError(t, err)
+				_, err = dbmodels.SyntheticDevices(dbmodels.SyntheticDeviceWhere.Vin.EQ(sharedVin)).DeleteAll(s.ctx, s.pdb.DBS().Writer)
+				assert.NilError(t, err)
+			})
+
+			otherWalletDevice := dbmodels.SyntheticDevice{
+				Address:            common.HexToAddress("0x00000000000000000000000000000000000000a1").Bytes(),
+				Vin:                sharedVin,
+				WalletChildNumber:  null.IntFrom(11),
+				VehicleTokenID:     null.IntFrom(130),
+				TokenID:            null.IntFrom(555),
+				SubscriptionStatus: null.StringFrom("active"),
+			}
+			require.NoError(t, otherWalletDevice.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+			disconnectedDevice := dbmodels.SyntheticDevice{
+				Address:            common.HexToAddress("0x00000000000000000000000000000000000000a2").Bytes(),
+				Vin:                sharedVin,
+				VehicleTokenID:     null.IntFrom(vehicleTokenIDnoSDValidDD),
+				SubscriptionStatus: null.StringFrom("pending"),
+			}
+			require.NoError(t, disconnectedDevice.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+			if tc.stuckOnboarding {
+				// A mint that succeeded but was never finalized, and whose SD was burned since.
+				stuck := dbmodels.Onboarding{
+					Vin:                sharedVin,
+					VehicleTokenID:     null.Int64From(vehicleTokenIDnoSDValidDD),
+					SyntheticTokenID:   null.Int64From(169178),
+					WalletIndex:        null.Int64From(170171),
+					OnboardingStatus:   53, // OnboardingStatusMintSuccess
+					DeviceDefinitionID: null.StringFrom("test-dd-2025"),
+				}
+				require.NoError(t, stuck.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+			}
+
+			payloadJSON, err := json.Marshal(VinsVerifyParams{
+				Vins: []service.VinWithTokenID{
+					{Vin: sharedVin, VehicleTokenID: vehicleTokenIDnoSDValidDD},
+				},
+			})
+			assert.NilError(t, err)
+
+			req := test.BuildRequest("POST", "/vehicle/verify", string(payloadJSON))
+			assert.NilError(s.T(), test.GenerateJWT(req))
+
+			response, _ := app.Test(req)
+			body, _ := io.ReadAll(response.Body)
+			assert.Equal(t, fiber.StatusOK, response.StatusCode, string(body))
+
+			expectedJSON, err := json.Marshal(StatusForVinsResponse{
+				Statuses: []service.VinStatus{
+					{
+						Vin:     sharedVin,
+						Status:  "Success",
+						Details: "Ready to mint Synthetic Device",
+					},
+				},
+			})
+			assert.NilError(t, err)
+			assert.Equal(t, string(body), string(expectedJSON))
+
+			record, err := dbmodels.FindOnboarding(s.ctx, s.pdb.DBS().Reader, sharedVin)
+			require.NoError(t, err)
+			assert.Equal(t, 23, record.OnboardingStatus) // OnboardingStatusVendorValidationSuccess
+			assert.Equal(t, int64(vehicleTokenIDnoSDValidDD), record.VehicleTokenID.Int64)
+			assert.Assert(t, !record.SyntheticTokenID.Valid, "stale synthetic token ID kept")
+			assert.Assert(t, !record.WalletIndex.Valid, "stale wallet index kept")
+		})
+	}
 }
 
 func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
