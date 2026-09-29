@@ -489,6 +489,9 @@ func (s *TeslaControllerTestSuite) TestReauthenticate() {
 
 	// when
 	mockIdentitySvc, mockTeslaService, mockDDService := s.setupListVehiclesMocks()
+	mockIdentitySvc.On("FetchVehiclesByWalletAddress", wallet.String()).Return([]mods.Vehicle{
+		{TokenID: vehicleTokenID, Owner: wallet.String()},
+	}, nil).Once()
 	repos := &repository.Repositories{
 		Vehicle:    vehicleRepo,
 		Credential: credStore,
@@ -523,6 +526,76 @@ func (s *TeslaControllerTestSuite) TestReauthenticate() {
 	mockIdentitySvc.AssertExpectations(s.T())
 	mockTeslaService.AssertExpectations(s.T())
 	mockDDService.AssertExpectations(s.T())
+}
+
+// Several wallets can mint the same VIN, each with its own synthetic_devices row.
+// Reauthentication must write the new tokens only to rows the caller owns.
+func (s *TeslaControllerTestSuite) TestReauthenticateSharedVin() {
+	// given
+	wallet := common.HexToAddress(walletAddress)
+	settings := &config.Settings{MobileAppDevLicense: wallet, DevicesGRPCEndpoint: "localhost:50051"}
+	logger := zerolog.New(zerolog.ConsoleWriter{Out: os.Stderr})
+	vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &logger)
+	onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &logger)
+
+	// Inserted first, so an unordered lookup by VIN finds it first.
+	otherWalletDevice := models.SyntheticDevice{
+		Address:           common.HexToAddress("0x00000000000000000000000000000000000000a1").Bytes(),
+		Vin:               vin,
+		WalletChildNumber: null.IntFrom(2),
+		VehicleTokenID:    null.IntFrom(130),
+		TokenID:           null.IntFrom(555),
+	}
+	require.NoError(s.T(), otherWalletDevice.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+	callerDevice := models.SyntheticDevice{
+		Address:           common.HexToAddress("0x00000000000000000000000000000000000000a2").Bytes(),
+		Vin:               vin,
+		WalletChildNumber: null.IntFrom(1),
+		VehicleTokenID:    null.IntFrom(vehicleTokenID),
+		TokenID:           null.IntFrom(456),
+	}
+	require.NoError(s.T(), callerDevice.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+
+	credStore := repository.NewTempCredsStore(new(cipher.ROT13Cipher))
+
+	// when
+	mockIdentitySvc, mockTeslaService, mockDDService := s.setupListVehiclesMocks()
+	mockIdentitySvc.On("FetchVehiclesByWalletAddress", wallet.String()).Return([]mods.Vehicle{
+		{TokenID: vehicleTokenID, Owner: wallet.String()},
+	}, nil).Once()
+	repos := &repository.Repositories{
+		Vehicle:    vehicleRepo,
+		Credential: credStore,
+		Onboarding: onboardingRepo,
+	}
+	tokenManager := core.NewTeslaTokenManager(new(cipher.ROT13Cipher), repos.Vehicle, mockTeslaService, &logger)
+	teslaSvc := service.NewTeslaService(settings, &logger, repos, mockTeslaService, mockIdentitySvc, mockDDService, nil, *tokenManager)
+	controller := NewTeslaController(settings, &logger, teslaSvc, nil, nil)
+	app := s.setupTestAppForReauthenticate(controller)
+
+	// then
+	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
+	req, _ := http.NewRequest("POST", "/v1/reauthenticate", strings.NewReader(requestBody))
+	req.Header.Set("Content-Type", "application/json")
+	assert.NoError(s.T(), test.GenerateJWT(req))
+
+	resp, err := app.Test(req)
+
+	// verify
+	assert.NoError(s.T(), err)
+	assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
+
+	caller, err := models.FindSyntheticDevice(s.ctx, s.pdb.DBS().Reader, callerDevice.Address)
+	require.NoError(s.T(), err)
+	assert.True(s.T(), caller.AccessToken.Valid, "caller's row did not get the new tokens")
+	assert.True(s.T(), caller.RefreshToken.Valid, "caller's row did not get the new tokens")
+
+	other, err := models.FindSyntheticDevice(s.ctx, s.pdb.DBS().Reader, otherWalletDevice.Address)
+	require.NoError(s.T(), err)
+	assert.False(s.T(), other.AccessToken.Valid, "another wallet's row got the caller's tokens")
+	assert.False(s.T(), other.RefreshToken.Valid, "another wallet's row got the caller's tokens")
+
+	mockIdentitySvc.AssertExpectations(s.T())
 }
 
 func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {

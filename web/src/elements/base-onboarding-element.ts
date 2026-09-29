@@ -88,6 +88,9 @@ export class BaseOnboardingElement extends LitElement {
 
     @state() sessionExpiresIn: number = 0;
 
+    // why the last onboarding attempt failed; children render it
+    @state() protected failureMessage: string = "";
+
     protected api: ApiService;
     protected signingService: SigningService;
 
@@ -100,10 +103,10 @@ export class BaseOnboardingElement extends LitElement {
         this.onboardResult = []
     }
 
-    // this method should be overridden by children
-    displayFailure(_alertText: string) {
+    displayFailure(alertText: string) {
         this.processing = false;
         this.processingMessage = "";
+        this.failureMessage = alertText;
     }
 
     updateResult(result : VinsOnboardingResult) {
@@ -125,23 +128,24 @@ export class BaseOnboardingElement extends LitElement {
         this.onboardResult = newResult
     }
 
-    async verifyVehicles(vehicles: VehicleOnboardingData[]) {
+    // returns why verification failed, or null when every VIN passed
+    async verifyVehicles(vehicles: VehicleOnboardingData[]): Promise<string | null> {
         const payload = {
             vins: vehicles
         }
 
         const verificationStatus = await this.api.callApi<VinsOnboardingResult>('POST', '/v1/vehicle/verify', payload, true);
         if (!verificationStatus.success || !verificationStatus.data) {
-            return false;
+            return verificationStatus.error || "unknown error";
         }
 
         for (const vinStatus of verificationStatus.data.statuses) {
             if (vinStatus.status != "Success") {
-                return false;
+                return vinStatus.details || vinStatus.status;
             }
         }
 
-        return true;
+        return null;
     }
 
     async getMintingData(vins: string[]) {
@@ -226,6 +230,7 @@ export class BaseOnboardingElement extends LitElement {
 
     // this does the minting of vehicle and synthetic. borrowed from fleet web app
     async onboardVINs(vehicles: VehicleOnboardingData[]): Promise<FinalizeResponse | null> {
+        this.failureMessage = "";
         // check vin validity
         let allVinsValid = true;
         for (const vehicle of vehicles) {
@@ -243,9 +248,9 @@ export class BaseOnboardingElement extends LitElement {
             return null;
         }
         // calls backend to make sure vehicle meets conditions. if a vehicle token id was passed in, verifies various things and updates record.
-        const verified = await this.verifyVehicles(vehicles);
-        if (!verified) {
-            this.displayFailure("Failed to verify vehicles");
+        const verifyError = await this.verifyVehicles(vehicles);
+        if (verifyError) {
+            this.displayFailure(`Failed to verify vehicles: ${verifyError}`);
             return null;
         }
         // get the typed data to be signed.
@@ -267,6 +272,7 @@ export class BaseOnboardingElement extends LitElement {
         // unique step for tesla. Creates record in the main oracle table, synthetic devices, and then deletes the onboarding record: Migrates the data.
         const finalized = await this.finalize(vins);
         if (!finalized.success || !finalized.data) {
+            this.displayFailure(`Failed to finalize onboarding: ${finalized.error || "unknown error"}`);
             return null;
         }
 

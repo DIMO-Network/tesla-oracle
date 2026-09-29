@@ -65,7 +65,8 @@ export class ApiService {
             if (!response.ok) {
                 return {
                     success: false,
-                    error: result.message || result || "HTTP error",
+                    // fiber errors carry "message"; handlers that build their own JSON use "error"
+                    error: (typeof result === "string" ? result : result?.message || result?.error) || "HTTP error",
                     status: response.status,
                 };
             }

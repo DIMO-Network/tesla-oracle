@@ -323,9 +323,12 @@ func (s *vehicleOnboardService) createOnboardingRecordForReconnection(ctx contex
 		Str(logfields.FunctionName, "createOnboardingRecordForReconnection").
 		Logger()
 
-	// Check if this is a reconnection (disconnected device exists in synthetic_devices)
-	disconnectedDevice, err := s.repositories.Vehicle.GetSyntheticDeviceByVin(ctx, vehicle.Vin)
+	// Check if this is a reconnection (disconnected device exists in synthetic_devices).
+	// Look it up by vehicle token ID, not VIN: several wallets can mint the same VIN,
+	// and a VIN lookup can return another wallet's row.
+	disconnectedDevice, err := s.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, vehicle.VehicleTokenID)
 	isDisconnected := err == nil && disconnectedDevice != nil &&
+		disconnectedDevice.Vin == vehicle.Vin &&
 		!disconnectedDevice.TokenID.Valid &&
 		disconnectedDevice.VehicleTokenID.Valid
 
@@ -360,11 +363,14 @@ func (s *vehicleOnboardService) createOnboardingRecordForReconnection(ctx contex
 		return fmt.Errorf("vehicle %d is already connected with synthetic device %d", vehicle.VehicleTokenID, identityVehicle.SyntheticDevice.TokenID)
 	}
 
-	// Create onboarding record for reconnection
+	// Create onboarding record for reconnection. The upsert overwrites every column,
+	// so a record left behind by an earlier mint that was never finalized (its SD
+	// since burned) loses its stale synthetic token ID and wallet index.
 	onboardingRecord := &dbmodels.Onboarding{
 		Vin:                vehicle.Vin,
 		VehicleTokenID:     null.Int64From(vehicle.VehicleTokenID),
 		SyntheticTokenID:   null.Int64{Valid: false}, // NULL - needs minting
+		WalletIndex:        null.Int64{Valid: false}, // NULL - the mint allocates a fresh one
 		DeviceDefinitionID: null.StringFrom(identityVehicle.Definition.ID),
 		OnboardingStatus:   OnboardingStatusVendorValidationSuccess, // 23 - ready to mint
 	}
