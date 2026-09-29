@@ -8,6 +8,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	work "github.com/DIMO-Network/tesla-oracle/internal/workers"
+	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
 	"github.com/rs/zerolog"
 )
 
@@ -20,9 +21,16 @@ func backfillLegacyPolls(ctx context.Context, logger *zerolog.Logger, settings *
 
 	scheduler := work.NewLegacyTeslaPollScheduler(services.RiverClient, logger)
 
-	devices, err := services.Repositories.Vehicle.GetSyntheticDevicesBySubscriptionStatus(ctx, "active")
-	if err != nil {
-		return fmt.Errorf("list active synthetic devices: %w", err)
+	// Pending covers legacy vehicles whose /start failed before the device was
+	// marked active. Pending devices that need reauthentication fail the token
+	// or fleet status check below and are skipped.
+	var devices dbmodels.SyntheticDeviceSlice
+	for _, status := range []string{"active", "pending"} {
+		byStatus, err := services.Repositories.Vehicle.GetSyntheticDevicesBySubscriptionStatus(ctx, status)
+		if err != nil {
+			return fmt.Errorf("list %s synthetic devices: %w", status, err)
+		}
+		devices = append(devices, byStatus...)
 	}
 
 	var (
@@ -41,30 +49,38 @@ func backfillLegacyPolls(ctx context.Context, logger *zerolog.Logger, settings *
 		accessToken, err := services.TokenManager.GetOrRefreshAccessToken(ctx, device)
 		if err != nil {
 			skipped++
-			entry.Warn().Err(err).Msg("Skipping active device; unable to get Tesla access token")
+			entry.Warn().Err(err).Msg("Skipping device; unable to get Tesla access token")
 			continue
 		}
 
 		fleetStatus, err := services.TeslaFleetAPIService.VirtualKeyConnectionStatus(ctx, accessToken, device.Vin)
 		if err != nil {
 			skipped++
-			entry.Warn().Err(err).Msg("Skipping active device; unable to fetch Tesla fleet status")
+			entry.Warn().Err(err).Msg("Skipping device; unable to fetch Tesla fleet status")
 			continue
 		}
 
 		decision, err := service.DecisionTreeAction(fleetStatus, int64(device.VehicleTokenID.Int))
 		if err != nil {
 			skipped++
-			entry.Warn().Err(err).Msg("Skipping active device; unable to classify telemetry mode")
+			entry.Warn().Err(err).Msg("Skipping device; unable to classify telemetry mode")
 			continue
 		}
 
 		if decision.Action != service.ActionStartPolling {
-			entry.Debug().Str("action", decision.Action).Msg("Active device is not legacy polling eligible")
+			entry.Debug().Str("action", decision.Action).Msg("Device is not legacy polling eligible")
 			continue
 		}
 
 		matched++
+		// The poll job stops on its first run for a device that isn't active.
+		if device.SubscriptionStatus.String != "active" {
+			if err := services.Repositories.Vehicle.UpdateSyntheticDeviceSubscriptionStatus(ctx, device, "active"); err != nil {
+				skipped++
+				entry.Warn().Err(err).Msg("Failed to mark device active")
+				continue
+			}
+		}
 		if err := scheduler.ScheduleLegacyPoll(ctx, device); err != nil {
 			skipped++
 			entry.Warn().Err(err).Msg("Failed to enqueue legacy polling job")
@@ -76,7 +92,7 @@ func backfillLegacyPolls(ctx context.Context, logger *zerolog.Logger, settings *
 	}
 
 	logger.Info().
-		Int("activeDevices", len(devices)).
+		Int("devices", len(devices)).
 		Int("matchedLegacy", matched).
 		Int("scheduled", scheduled).
 		Int("skipped", skipped).

@@ -27,10 +27,6 @@ type Settings struct {
 	UseLocalTLS                 bool        `yaml:"USE_LOCAL_TLS"`
 
 	// For temp credentials cache
-	RedisURL         string `yaml:"REDIS_URL"`
-	RedisPassword    string `yaml:"REDIS_PASSWORD"`
-	RedisTLS         bool   `yaml:"REDIS_TLS"`
-	EnableLocalCache bool   `yaml:"ENABLE_LOCAL_CACHE" default:"false"`
 
 	// KMS and AWS
 	AWSRegion string `yaml:"AWS_REGION"`

@@ -135,11 +135,8 @@ func (ts *TeslaService) EnsureVehicleDataFlow(ctx context.Context, tokenID int64
 			}
 		}
 	case ActionStartPolling:
-		if ts.pollScheduler == nil {
-			return fmt.Errorf("%w: legacy poll scheduler unavailable", core.ErrTelemetryConfigFailed)
-		}
-		if err := ts.pollScheduler.ScheduleLegacyPoll(ctx, sd); err != nil {
-			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
+		if err := ts.startLegacyPolling(ctx, sd); err != nil {
+			return err
 		}
 	default:
 		return core.ErrTelemetryNotReady
@@ -772,15 +769,34 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 		}
 
 	case ActionStartPolling:
-		if ts.pollScheduler == nil {
-			return fmt.Errorf("%w: legacy poll scheduler unavailable", core.ErrTelemetryConfigFailed)
-		}
-		if err := ts.pollScheduler.ScheduleLegacyPoll(ctx, sd); err != nil {
-			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
+		if err := ts.startLegacyPolling(ctx, sd); err != nil {
+			return err
 		}
 
 	default:
 		return core.ErrTelemetryNotReady
+	}
+
+	return nil
+}
+
+// startLegacyPolling marks the device active, then schedules its poll job. The
+// job stops on its first run for a device that isn't active, and River can pick
+// it up as soon as it's inserted, so the status has to be saved first.
+func (ts *TeslaService) startLegacyPolling(ctx context.Context, sd *dbmodels.SyntheticDevice) error {
+	if ts.pollScheduler == nil {
+		return fmt.Errorf("%w: legacy poll scheduler unavailable", core.ErrTelemetryConfigFailed)
+	}
+
+	if sd.SubscriptionStatus.String != "active" {
+		if err := ts.repositories.Vehicle.UpdateSyntheticDeviceSubscriptionStatus(ctx, sd, "active"); err != nil {
+			ts.logger.Err(err).Msg("Failed to update subscription status.")
+			return fmt.Errorf("%w: %s", core.ErrSubscriptionStatusUpdate, err.Error())
+		}
+	}
+
+	if err := ts.pollScheduler.ScheduleLegacyPoll(ctx, sd); err != nil {
+		return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
 	}
 
 	return nil

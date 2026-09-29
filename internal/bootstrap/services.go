@@ -8,7 +8,6 @@ import (
 	"github.com/DIMO-Network/go-transactions"
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
-	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/onboarding"
@@ -21,7 +20,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/kms"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/patrickmn/go-cache"
 	"github.com/riverqueue/river"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/rs/zerolog"
@@ -143,6 +141,14 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 
 // initializeRiver creates River client with workers and database pool
 func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws wallet.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories, legacyPollSender *work.LegacyPollSender) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
+	// Create database pool
+	dbURL := settings.DB.BuildConnectionString(true)
+	dbPool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+	logger.Debug().Msg("DB pool for workers created")
+
 	workers := river.NewWorkers()
 
 	// Create and register workers
@@ -160,19 +166,11 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 	logger.Debug().Msg("Added Tesla command worker")
 
-	legacyPollWorker := work.NewLegacyTeslaPollWorker(teslaFleetAPI, tokenManager, repositories.Vehicle, legacyPollSender, &logger, 5*time.Minute)
+	legacyPollWorker := work.NewLegacyTeslaPollWorker(dbPool, teslaFleetAPI, tokenManager, repositories.Vehicle, legacyPollSender, &logger, 5*time.Minute)
 	if err := river.AddWorkerSafely(workers, legacyPollWorker); err != nil {
 		return nil, nil, fmt.Errorf("failed to add legacy Tesla poll worker: %w", err)
 	}
 	logger.Debug().Msg("Added legacy Tesla poll worker")
-
-	// Create database pool
-	dbURL := settings.DB.BuildConnectionString(true)
-	dbPool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
-	logger.Debug().Msg("DB pool for workers created")
 
 	// Create Tesla command error handler
 	errorHandler := work.NewTeslaCommandErrorHandler(logger, repositories)
@@ -226,32 +224,10 @@ func createCipher(settings *config.Settings, logger *zerolog.Logger) cipher.Ciph
 	}
 }
 
-// createCredentialStore creates the appropriate credential store implementation
+// createCredentialStore creates the in-memory store for credentials between a Tesla
+// OAuth exchange and onboarding.
 func createCredentialStore(settings *config.Settings, logger *zerolog.Logger) repository.CredentialRepository {
-	cip := createCipher(settings, logger)
-
-	// Create cache service
-	cacheService := redis.NewRedisCacheService(settings.IsProduction(), redis.Settings{
-		URL:       settings.RedisURL,
-		Password:  settings.RedisPassword,
-		TLS:       settings.RedisTLS,
-		KeyPrefix: "tesla-oracle",
-	})
-
-	// Return appropriate credential store implementation
-	if settings.EnableLocalCache {
-		logger.Info().Msg("Using LocalCache for CredStore.")
-		return &repository.TempCredsLocalStore{
-			Cache:  cache.New(5*time.Minute, 10*time.Minute),
-			Cipher: cip,
-		}
-	} else {
-		logger.Info().Msg("Using redis CredStore implementation.")
-		return &repository.TempCredsStore{
-			Cache:  cacheService,
-			Cipher: cip,
-		}
-	}
+	return repository.NewTempCredsStore(createCipher(settings, logger))
 }
 
 // createKMS creates a KMS cipher for encryption

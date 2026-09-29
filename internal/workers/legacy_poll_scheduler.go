@@ -3,7 +3,6 @@ package workers
 import (
 	"context"
 	"fmt"
-	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
@@ -52,15 +51,16 @@ func (s *LegacyTeslaPollScheduler) ScheduleLegacyPoll(ctx context.Context, devic
 	return nil
 }
 
+// legacyPollUniqueStates are the states in which a vehicle's poll job already
+// exists, so starting data flow again doesn't add a second poll loop. River
+// rejects any unique insert whose states leave out available, pending, running
+// or scheduled.
 func legacyPollUniqueStates() []rivertype.JobState {
 	return []rivertype.JobState{
 		rivertype.JobStateAvailable,
 		rivertype.JobStatePending,
 		rivertype.JobStateRetryable,
+		rivertype.JobStateRunning,
 		rivertype.JobStateScheduled,
 	}
-}
-
-func nextLegacyPollTime(now time.Time, interval time.Duration) time.Time {
-	return now.UTC().Add(interval)
 }

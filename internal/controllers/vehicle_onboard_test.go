@@ -14,7 +14,6 @@ import (
 
 	"github.com/DIMO-Network/shared/pkg/cipher"
 	"github.com/DIMO-Network/shared/pkg/db"
-	"github.com/DIMO-Network/shared/pkg/redis"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
@@ -24,7 +23,6 @@ import (
 	"github.com/aarondl/null/v8"
 	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/ethereum/go-ethereum/common"
-	rd "github.com/go-redis/redis/v8"
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
@@ -33,7 +31,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/wait"
 	"gotest.tools/v3/assert"
 )
 
@@ -495,58 +492,14 @@ func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {
 	t := s.T()
 	mockDeps := createMockDependencies(t)
 
-	// Spin up a local Redis container
-	redisContainer, err := testcontainers.GenericContainer(s.ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: testcontainers.ContainerRequest{
-			Image:        "redis:latest",
-			ExposedPorts: []string{"6379/tcp"},
-			WaitingFor:   wait.ForListeningPort("6379/tcp"),
-		},
-		Started: true,
-	})
-	require.NoError(s.T(), err)
-	defer func() {
-		if err := redisContainer.Terminate(s.ctx); err != nil {
-			s.T().Logf("failed to terminate Redis container: %v", err)
-		}
-	}()
-
-	// Get the Redis container's host and port
-	redisHost, err := redisContainer.Host(s.ctx)
-	require.NoError(s.T(), err)
-	redisPort, err := redisContainer.MappedPort(s.ctx, "6379")
-	require.NoError(s.T(), err)
-
-	// Connect to Redis
-	redisAddr := fmt.Sprintf("%s:%s", redisHost, redisPort.Port())
-	redisClient := rd.NewClient(&rd.Options{
-		Addr: redisAddr,
-	})
-	defer func() {
-		if err := redisClient.Close(); err != nil {
-			fmt.Printf("failed to close Redis client: %v\n", err)
-		}
-	}()
-
-	// Create cacheService
-	cacheService := redis.NewRedisCacheService(false, redis.Settings{
-		URL:       redisAddr,
-		Password:  "",
-		TLS:       false,
-		KeyPrefix: "tesla-oracle",
-	})
-
-	credStore := repository.TempCredsStore{
-		Cache:  cacheService,
-		Cipher: new(cipher.ROT13Cipher), // Example cipher
-	}
+	credStore := repository.NewTempCredsStore(new(cipher.ROT13Cipher))
 
 	// Create repositories struct
 	vehicleRepo := repository.NewVehicleRepository(&s.pdb, new(cipher.ROT13Cipher), &mockDeps.logger)
 	onboardingRepo := repository.NewOnboardingRepository(&s.pdb, &mockDeps.logger)
 	repos := &repository.Repositories{
 		Vehicle:    vehicleRepo,
-		Credential: &credStore,
+		Credential: credStore,
 		Onboarding: onboardingRepo,
 	}
 
