@@ -4,14 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
-	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
 	"github.com/rs/zerolog"
 )
@@ -64,38 +62,49 @@ func NewLegacyTeslaPollWorker(
 	}
 }
 
+// Work polls the vehicle once, then snoozes this job so the same job polls again
+// after pollInterval. Inserting a follow-up job from here instead would be
+// skipped as a duplicate of this running one and end the loop. Returning nil
+// ends polling for the vehicle; a later /start schedules it again.
 func (w *LegacyTeslaPollWorker) Work(ctx context.Context, job *river.Job[LegacyTeslaPollArgs]) error {
+	logger := w.logger.With().
+		Int("vehicleTokenId", job.Args.VehicleTokenID).
+		Int64("jobId", job.ID).
+		Logger()
+
 	sd, err := w.vehicleRepo.GetSyntheticDeviceByTokenID(ctx, int64(job.Args.VehicleTokenID))
 	if err != nil {
 		if errors.Is(err, repository.ErrVehicleNotFound) {
 			return nil
 		}
-		return fmt.Errorf("load synthetic device: %w", err)
+		logger.Warn().Err(err).Msg("Failed to load synthetic device for legacy polling; will retry on next scheduled run")
+		return river.JobSnooze(w.pollInterval)
 	}
 
 	if !shouldContinueLegacyPolling(sd) {
 		return nil
 	}
 
-	logger := w.logger.With().
-		Int("vehicleTokenId", job.Args.VehicleTokenID).
-		Str("vin", sd.Vin).
-		Int64("jobId", job.ID).
-		Logger()
-
-	if err := w.scheduleNext(ctx, job.Args); err != nil {
-		return fmt.Errorf("schedule next legacy poll: %w", err)
+	logger = logger.With().Str("vin", sd.Vin).Logger()
+	if !w.poll(ctx, &logger, sd) {
+		return nil
 	}
 
+	return river.JobSnooze(w.pollInterval)
+}
+
+// poll fetches one legacy vehicle data sample and sends it to DIS. It reports
+// whether polling should continue.
+func (w *LegacyTeslaPollWorker) poll(ctx context.Context, logger *zerolog.Logger, sd *dbmodels.SyntheticDevice) bool {
 	accessToken, err := w.tokenManager.GetOrRefreshAccessToken(ctx, sd)
 	if err != nil {
 		if w.shouldDisablePolling(err) {
 			logger.Warn().Err(err).Msg("Stopping legacy polling until vehicle is reauthenticated")
-			return w.markPending(ctx, sd)
+			return !w.markPending(ctx, logger, sd)
 		}
 
 		logger.Warn().Err(err).Msg("Transient credential failure during legacy polling; will retry on next scheduled run")
-		return nil
+		return true
 	}
 
 	rawStatus, err := w.teslaFleetAPI.GetLegacyVehicleData(ctx, accessToken, sd.Vin)
@@ -103,55 +112,38 @@ func (w *LegacyTeslaPollWorker) Work(ctx context.Context, job *river.Job[LegacyT
 		switch {
 		case errors.Is(err, core.ErrVehicleUnavailable):
 			logger.Debug().Msg("Vehicle unavailable for legacy polling; skipping send")
-			return nil
 		case errors.Is(err, core.ErrFleetAPIUnauthorized):
 			logger.Warn().Err(err).Msg("Stopping legacy polling after unauthorized Tesla response")
-			return w.markPending(ctx, sd)
+			return !w.markPending(ctx, logger, sd)
 		default:
 			logger.Warn().Err(err).Msg("Transient Tesla vehicle data failure during legacy polling; will retry on next scheduled run")
-			return nil
 		}
+		return true
 	}
 
 	if len(rawStatus) == 0 || json.RawMessage(rawStatus) == nil {
-		return nil
+		return true
 	}
 
 	if err := w.sender.Send(ctx, sd, rawStatus); err != nil {
-		return fmt.Errorf("send legacy vehicle data: %w", err)
+		logger.Warn().Err(err).Msg("Failed to send legacy vehicle data; will retry on next scheduled run")
 	}
 
-	return nil
+	return true
 }
 
-func (w *LegacyTeslaPollWorker) scheduleNext(ctx context.Context, args LegacyTeslaPollArgs) error {
-	client, err := river.ClientFromContextSafely[pgx.Tx](ctx)
-	if err != nil {
-		return fmt.Errorf("get river client from context: %w", err)
-	}
-
-	res, err := client.Insert(ctx, args, &river.InsertOpts{
-		ScheduledAt: nextLegacyPollTime(time.Now(), w.pollInterval),
-	})
-	if err != nil {
-		return err
-	}
-
-	if res.UniqueSkippedAsDuplicate {
-		w.logger.Debug().
-			Int("vehicleTokenId", args.VehicleTokenID).
-			Str("vin", args.VIN).
-			Msg("Next legacy poll already scheduled")
-	}
-
-	return nil
-}
-
-func (w *LegacyTeslaPollWorker) markPending(ctx context.Context, sd *dbmodels.SyntheticDevice) error {
+// markPending records that the vehicle needs reauthentication. It reports
+// whether that was saved; when it wasn't, polling continues so the next run
+// tries again.
+func (w *LegacyTeslaPollWorker) markPending(ctx context.Context, logger *zerolog.Logger, sd *dbmodels.SyntheticDevice) bool {
 	if sd.SubscriptionStatus.Valid && sd.SubscriptionStatus.String == "pending" {
-		return nil
+		return true
 	}
-	return w.vehicleRepo.UpdateSyntheticDeviceSubscriptionStatus(ctx, sd, "pending")
+	if err := w.vehicleRepo.UpdateSyntheticDeviceSubscriptionStatus(ctx, sd, "pending"); err != nil {
+		logger.Error().Err(err).Msg("Failed to mark vehicle pending; will retry on next scheduled run")
+		return false
+	}
+	return true
 }
 
 func shouldContinueLegacyPolling(sd *dbmodels.SyntheticDevice) bool {

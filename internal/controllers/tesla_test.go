@@ -206,6 +206,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 		expectedAction             string
 		expectedStatusCode         int
 		expectedConfigLimitReached bool
+		expectedSubscriptionStatus string
 	}{
 		{
 			name: "Start Streaming",
@@ -227,6 +228,8 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			expectedAction:             service.ActionStartPolling,
 			expectedStatusCode:         fiber.StatusOK,
 			expectedConfigLimitReached: false,
+			// The poll job only runs for active devices.
+			expectedSubscriptionStatus: "active",
 		},
 		{
 			name: "Vehicle Not Ready",
@@ -280,7 +283,11 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			assert.NoError(s.T(), err)
 			assert.Equal(s.T(), tc.expectedStatusCode, resp.StatusCode)
 			s.assertMockCalls(mockTeslaService, mockPollScheduler, tc.expectedAction)
-			s.assertSubscriptionStatus("pending", vehicleTokenID) // Status should remain unchanged
+			expectedStatus := tc.expectedSubscriptionStatus
+			if expectedStatus == "" {
+				expectedStatus = "pending" // Status should remain unchanged
+			}
+			s.assertSubscriptionStatus(expectedStatus, vehicleTokenID)
 			mockIdentitySvc.AssertExpectations(s.T())
 		})
 	}
@@ -360,7 +367,7 @@ func (s *TeslaControllerTestSuite) TestEnsureVehicleDataFlow() {
 				mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, "mockAccessToken", vin).Return(nil)
 			}
 			if tc.expectPolling {
-				mockPollScheduler.On("ScheduleLegacyPoll", mock.Anything, mock.Anything).Return(nil)
+				s.expectLegacyPollScheduledWhileActive(mockPollScheduler)
 			}
 
 			err := teslaSvc.EnsureVehicleDataFlow(s.ctx, vehicleTokenID)
@@ -2069,12 +2076,21 @@ func (s *TeslaControllerTestSuite) setupMockServices(fleetStatus *core.VehicleFl
 		mockTeslaService.On("SubscribeForTelemetryData", mock.Anything, mock.Anything, vin).Return(nil)
 		mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&core.VehicleTelemetryStatus{LimitReached: limitReached}, nil)
 	case service.ActionStartPolling:
-		mockPollScheduler.On("ScheduleLegacyPoll", mock.Anything, mock.Anything).Return(nil)
+		s.expectLegacyPollScheduledWhileActive(mockPollScheduler)
 	case service.ActionDummy:
 		mockTeslaService.On("GetTelemetrySubscriptionStatus", mock.Anything, mock.Anything, vin).Return(&core.VehicleTelemetryStatus{LimitReached: limitReached}, nil)
 	}
 
 	return mockTeslaService, mockPollScheduler
+}
+
+// expectLegacyPollScheduledWhileActive expects one poll job to be scheduled, and
+// checks the device is already active in the DB at that moment: River can run
+// the job right away, and the job stops for a device that isn't active.
+func (s *TeslaControllerTestSuite) expectLegacyPollScheduledWhileActive(mockPollScheduler *test.MockLegacyPollScheduler) {
+	mockPollScheduler.On("ScheduleLegacyPoll", mock.Anything, mock.Anything).
+		Run(func(mock.Arguments) { s.assertSubscriptionStatus("active", vehicleTokenID) }).
+		Return(nil)
 }
 
 func (s *TeslaControllerTestSuite) assertSubscriptionStatus(expectedStatus string, vehicleTokenID int) {
