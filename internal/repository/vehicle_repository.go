@@ -115,28 +115,13 @@ func (r *vehicleRepository) GetSyntheticDeviceByAddress(ctx context.Context, add
 	return device, nil
 }
 
-// UpdateSyntheticDeviceSubscriptionStatus updates the subscription status of a synthetic device
+// UpdateSyntheticDeviceSubscriptionStatus updates the subscription status of a synthetic device.
+// It writes only that column: the rest of synthDevice may be stale, and writing
+// it back would undo concurrent changes, such as a burn clearing the credentials.
 func (r *vehicleRepository) UpdateSyntheticDeviceSubscriptionStatus(ctx context.Context, synthDevice *dbmodels.SyntheticDevice, status string) error {
-	tx, err := r.db.DBS().Writer.BeginTx(ctx, &sql.TxOptions{Isolation: sql.LevelReadCommitted})
-	if err != nil {
-		r.logger.Error().Err(err).Msg("Failed to begin transaction for updating subscription status.")
-		return err
-	}
-	defer func() {
-		if err != nil {
-			if rbErr := tx.Rollback(); rbErr != nil {
-				r.logger.Error().Err(rbErr).Msg("Failed to rollback transaction for updating subscription status.")
-			}
-		} else {
-			if cmErr := tx.Commit(); cmErr != nil {
-				r.logger.Error().Err(cmErr).Msg("Failed to commit transaction for updating subscription status.")
-			}
-		}
-	}()
-
 	synthDevice.SubscriptionStatus = null.String{String: status, Valid: true}
 
-	_, err = synthDevice.Update(ctx, tx, boil.Infer())
+	_, err := synthDevice.Update(ctx, r.db.DBS().Writer, boil.Whitelist(dbmodels.SyntheticDeviceColumns.SubscriptionStatus))
 	if err != nil {
 		r.logger.Error().Err(err).Msg("Failed to update synthetic device subscription status.")
 		return err

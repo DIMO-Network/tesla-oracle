@@ -141,6 +141,14 @@ func InitializeServices(ctx context.Context, logger *zerolog.Logger, settings *c
 
 // initializeRiver creates River client with workers and database pool
 func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, identityService service.IdentityAPIService, dbs *db.Store, tr *transactions.Client, ws wallet.SDWalletsAPI, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories, legacyPollSender *work.LegacyPollSender) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
+	// Create database pool
+	dbURL := settings.DB.BuildConnectionString(true)
+	dbPool, err := pgxpool.New(ctx, dbURL)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+	logger.Debug().Msg("DB pool for workers created")
+
 	workers := river.NewWorkers()
 
 	// Create and register workers
@@ -158,19 +166,11 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 	logger.Debug().Msg("Added Tesla command worker")
 
-	legacyPollWorker := work.NewLegacyTeslaPollWorker(teslaFleetAPI, tokenManager, repositories.Vehicle, legacyPollSender, &logger, 5*time.Minute)
+	legacyPollWorker := work.NewLegacyTeslaPollWorker(dbPool, teslaFleetAPI, tokenManager, repositories.Vehicle, legacyPollSender, &logger, 5*time.Minute)
 	if err := river.AddWorkerSafely(workers, legacyPollWorker); err != nil {
 		return nil, nil, fmt.Errorf("failed to add legacy Tesla poll worker: %w", err)
 	}
 	logger.Debug().Msg("Added legacy Tesla poll worker")
-
-	// Create database pool
-	dbURL := settings.DB.BuildConnectionString(true)
-	dbPool, err := pgxpool.New(ctx, dbURL)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to connect to database: %w", err)
-	}
-	logger.Debug().Msg("DB pool for workers created")
 
 	// Create Tesla command error handler
 	errorHandler := work.NewTeslaCommandErrorHandler(logger, repositories)
