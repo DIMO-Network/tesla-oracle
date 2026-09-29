@@ -331,6 +331,9 @@ type idVehicle struct {
 	ddID      string
 	sdTokenID int64
 	visibleAt time.Time // identity-api hasn't indexed the mint before this
+	// sdVisibleAt: identity-api shows the vehicle without its SD before this (an SD
+	// minted onto an existing vehicle, not indexed yet).
+	sdVisibleAt time.Time
 }
 
 type fakeIdentity struct {
@@ -360,7 +363,7 @@ func (f *fakeIdentity) setVehicle(tokenID int64, v idVehicle) {
 
 func (f *fakeIdentity) vehicleJSON(tokenID int64, v *idVehicle) map[string]any {
 	var sd any
-	if v.sdTokenID != 0 {
+	if v.sdTokenID != 0 && !time.Now().Before(v.sdVisibleAt) {
 		sd = map[string]any{"id": "sd", "tokenId": v.sdTokenID, "mintedAt": time.Now().UTC().Format(time.RFC3339)}
 	}
 	return map[string]any{

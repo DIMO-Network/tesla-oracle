@@ -305,7 +305,7 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 			if isMinted(dbVin.OnboardingStatus) {
 				// A mint that succeeded but was never finalized: the caller can finish it,
 				// if the minted vehicle is theirs and its SD is still the one minted.
-				if !s.isResumableMint(dbVin, walletAddress) {
+				if !s.isResumableMint(ctx, dbVin, walletAddress) {
 					return nil, errors.New("some of the VINs are not verified or already onboarded")
 				}
 				statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: DetailsReadyToFinalize})
@@ -393,14 +393,23 @@ func (s *vehicleOnboardService) createOnboardingRecordForReconnection(ctx contex
 		return fmt.Errorf("vehicle %d is not owned by wallet %s", vehicle.VehicleTokenID, walletAddress.String())
 	}
 
+	// This reconnection's own mint, not yet finalized, has a minted record. identity-api
+	// can lag the mint by a few seconds: without waiting for its SD, the vehicle looks
+	// disconnected and the upsert below would re-arm the record for a second SD mint.
+	record, err := s.repositories.Onboarding.GetOnboardingByVin(ctx, vehicle.Vin)
+	mintedHere := err == nil && isMinted(record.OnboardingStatus) &&
+		record.VehicleTokenID.Int64 == vehicle.VehicleTokenID && record.SyntheticTokenID.Valid
+	if mintedHere && identityVehicle.SyntheticDevice.TokenID == 0 && s.mintedRecently(ctx, vehicle.Vin) {
+		if minted := s.fetchMintedVehicle(ctx, record, true); minted != nil {
+			identityVehicle.SyntheticDevice = minted.SyntheticDevice
+		}
+	}
+
 	// Verify the vehicle is truly disconnected (no SD minted)
 	if identityVehicle.SyntheticDevice.TokenID != 0 {
-		// Unless that SD is this reconnection's own mint, not yet finalized: leave
-		// the minted record for verify to offer as ready to finalize.
-		record, err := s.repositories.Onboarding.GetOnboardingByVin(ctx, vehicle.Vin)
-		if err == nil && isMinted(record.OnboardingStatus) &&
-			record.VehicleTokenID.Int64 == vehicle.VehicleTokenID &&
-			record.SyntheticTokenID.Int64 == identityVehicle.SyntheticDevice.TokenID {
+		// Unless that SD is this reconnection's own mint: leave the minted record for
+		// verify to offer as ready to finalize.
+		if mintedHere && record.SyntheticTokenID.Int64 == identityVehicle.SyntheticDevice.TokenID {
 			return nil
 		}
 
@@ -854,8 +863,8 @@ func (s *vehicleOnboardService) requireTeslaLogin(ctx context.Context, walletAdd
 	return creds, nil
 }
 
-// identityWaitAttempts and identityWaitDelay bound how long finalize waits for
-// identity-api to index a vehicle minted moments ago. identity-api reads the same
+// identityWaitAttempts and identityWaitDelay bound how long verify and finalize wait
+// for identity-api to index a vehicle or SD minted moments ago. identity-api reads the same
 // contract-event topic this service does, which in prod delivers a mint about 10s
 // after submit, so 30s leaves room for a slow indexer while staying under the
 // ingress's 60s read timeout. A finalize that still times out keeps the Tesla
@@ -898,16 +907,67 @@ func (s *vehicleOnboardService) requireMintedToWallet(ctx context.Context, recor
 
 // isResumableMint reports whether a minted, unfinalized record can be finalized by
 // the wallet: its vehicle is the wallet's and still carries the minted SD.
-func (s *vehicleOnboardService) isResumableMint(record *dbmodels.Onboarding, walletAddress common.Address) bool {
+func (s *vehicleOnboardService) isResumableMint(ctx context.Context, record *dbmodels.Onboarding, walletAddress common.Address) bool {
 	if !record.VehicleTokenID.Valid || !record.SyntheticTokenID.Valid || !record.WalletIndex.Valid {
 		return false
 	}
-	vehicle, err := s.identitySvc.FetchVehicleByTokenID(record.VehicleTokenID.Int64)
-	if err != nil || vehicle == nil || vehicle.Owner == "" {
+	vehicle := s.fetchMintedVehicle(ctx, record, s.mintedRecently(ctx, record.Vin))
+	if vehicle == nil {
 		return false
 	}
 	return common.HexToAddress(vehicle.Owner) == walletAddress &&
 		vehicle.SyntheticDevice.TokenID == record.SyntheticTokenID.Int64
+}
+
+// fetchMintedVehicle fetches the record's minted vehicle from identity-api. A mint
+// from moments ago can take a few seconds to reach identity-api, so while the
+// vehicle isn't there yet it waits, like finalize does. With waitForSD it also waits
+// for the vehicle's SD. It returns the last vehicle identity-api returned, which can
+// lack the SD, or nil if the vehicle never showed up.
+func (s *vehicleOnboardService) fetchMintedVehicle(ctx context.Context, record *dbmodels.Onboarding, waitForSD bool) *models.Vehicle {
+	var last *models.Vehicle
+	for attempt := 1; ; attempt++ {
+		vehicle, err := s.identitySvc.FetchVehicleByTokenID(record.VehicleTokenID.Int64)
+		if err == nil && vehicle != nil && vehicle.Owner != "" {
+			if !waitForSD || vehicle.SyntheticDevice.TokenID != 0 {
+				return vehicle
+			}
+			last = vehicle
+		}
+
+		if attempt >= identityWaitAttempts {
+			return last
+		}
+
+		select {
+		case <-ctx.Done():
+			return last
+		case <-time.After(identityWaitDelay):
+		}
+	}
+}
+
+// recentMintWindow is how long after its mint job was queued a VIN's SD is expected
+// to be missing from identity-api only because it isn't indexed yet. Past it, a
+// minted record whose SD identity-api doesn't show had its SD burned.
+const recentMintWindow = 15 * time.Minute
+
+// mintedRecently reports whether a mint job was queued for the VIN within
+// recentMintWindow, so an SD missing from identity-api may just not be indexed yet.
+func (s *vehicleOnboardService) mintedRecently(ctx context.Context, vin string) bool {
+	if s.riverClient == nil {
+		return false
+	}
+	jobs, err := s.riverClient.JobList(ctx, river.NewJobListParams().
+		Kinds(OnboardingArgs{}.Kind()).
+		Where("args->>'vin' = @vin AND created_at > now() - make_interval(secs => @window)",
+			river.NamedArgs{"vin": vin, "window": recentMintWindow.Seconds()}).
+		First(1))
+	if err != nil {
+		s.logger.Warn().Err(err).Str(logfields.VIN, vin).Msg("Failed to look up recent mint jobs")
+		return false
+	}
+	return len(jobs.Jobs) > 0
 }
 
 // Helper methods

@@ -364,10 +364,12 @@ func TestTeslaOnboardingE2E(t *testing.T) {
 		vin4 = "7SAYGDEE1SA000004" // stuck at 53
 		vin5 = "7SAYGDEE1SA000005" // finalize fails once
 		vin6 = "7SAYGDEE1SA000006" // lost mint receipt
+		vin7 = "7SAYGDEE1SA000007" // reconnect, verify before identity-api shows the new SD
+		vin8 = "7SAYGDEE1SA000081" // new onboarding, verify before identity-api shows the mint
 		vinB = "5YJSA1E26GF000009" // attacker's own car
 	)
-	// Six VINs: Tesla's list pages at 5, so the last one only arrives on page 2.
-	h.tesla.addAccount("alice", vin1, vin3, vin4, vin5, "7SAYGDEE1SA000007", vin6)
+	// Seven VINs: Tesla's list pages at 5, so vin6 and vin8 only arrive on page 2.
+	h.tesla.addAccount("alice", vin1, vin3, vin4, vin5, vin7, vin6, vin8)
 	h.tesla.addAccount("mallory", vinB)
 
 	t.Run("1 new onboarding, identity lag", func(t *testing.T) {
@@ -686,6 +688,66 @@ func TestTeslaOnboardingE2E(t *testing.T) {
 			require.NoError(t, os.WriteFile(out, b, 0o600))
 			t.Logf("wrote %s", out)
 		}
+	})
+
+	// The user reloads or presses Continue right after the mint: verify used to ask
+	// identity-api once and fail with "already onboarded".
+	t.Run("11 verify right after a mint waits for identity-api", func(t *testing.T) {
+		h := h.with(t)
+		h.oauth(jwtA, "alice")
+		code, statuses, raw := h.verify(jwtA, vin8, 0)
+		require.Equal(t, http.StatusOK, code, raw)
+		require.Equal(t, "Ready to mint Vehicle and Synthetic Device", statuses[0].Details)
+
+		h.chain.expectMint(mintOutcome{vehicleID: 500081, sdID: 600081, owner: walletA, onMined: func() {
+			h.identity.setVehicle(500081, idVehicle{owner: walletA, ddID: ddID, sdTokenID: 600081, visibleAt: time.Now().Add(3 * time.Second)})
+		}})
+		h.mintAndSubmit(jwtA, ownerA, vin8)
+		h.waitMinted(jwtA, vin8)
+		sends := h.chain.sendCount()
+
+		start := time.Now()
+		code, statuses, raw = h.verify(jwtA, vin8, 0)
+		took := time.Since(start)
+		require.Equal(t, http.StatusOK, code, raw)
+		require.Equal(t, service.DetailsReadyToFinalize, statuses[0].Details)
+		require.Greater(t, took, 500*time.Millisecond, "verify should have waited for identity-api")
+
+		code, raw = h.finalize(jwtA, vin8)
+		require.Equal(t, http.StatusOK, code, raw)
+		require.Contains(t, raw, `"syntheticTokenId":600081`)
+		require.Equal(t, sends, h.chain.sendCount(), "no second mint")
+	})
+
+	// Worse for a reconnection: before identity-api shows the new SD, the vehicle looks
+	// disconnected, and verify used to re-arm the minted record for a second SD mint.
+	t.Run("12 reconnect verify right after the SD mint keeps the minted record", func(t *testing.T) {
+		h := h.with(t)
+		h.insertDevice(common.HexToAddress("0x0000000000000000000000000000000000007070"), vin7, 500070, nil, nil, "", "", time.Time{}, "active")
+		h.identity.setVehicle(500070, idVehicle{owner: walletA, ddID: ddID})
+
+		h.oauth(jwtA, "alice")
+		code, statuses, raw := h.verify(jwtA, vin7, 500070)
+		require.Equal(t, http.StatusOK, code, raw)
+		require.Equal(t, "Ready to mint Synthetic Device", statuses[0].Details)
+
+		h.chain.expectMint(mintOutcome{vehicleID: 500070, sdID: 600070, owner: walletA, onMined: func() {
+			h.identity.setVehicle(500070, idVehicle{owner: walletA, ddID: ddID, sdTokenID: 600070, sdVisibleAt: time.Now().Add(3 * time.Second)})
+		}})
+		h.mintAndSubmit(jwtA, ownerA, vin7)
+		h.waitMinted(jwtA, vin7)
+		sends := h.chain.sendCount()
+
+		code, statuses, raw = h.verify(jwtA, vin7, 500070)
+		require.Equal(t, http.StatusOK, code, raw)
+		require.Equal(t, service.DetailsReadyToFinalize, statuses[0].Details)
+		require.Equal(t, 1, h.count(`SELECT count(*) FROM tesla_oracle.onboarding WHERE vin=$1 AND onboarding_status=53 AND synthetic_token_id=600070`, vin7),
+			"the minted record must not be re-armed for a second mint")
+
+		code, raw = h.finalize(jwtA, vin7)
+		require.Equal(t, http.StatusOK, code, raw)
+		require.Equal(t, sends, h.chain.sendCount(), "no second mint")
+		require.Equal(t, 1, h.count(`SELECT count(*) FROM tesla_oracle.synthetic_devices WHERE vehicle_token_id=500070 AND token_id=600070 AND subscription_status='active'`))
 	})
 }
 
