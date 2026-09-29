@@ -1,4 +1,7 @@
-replicaCount: 2
+# One replica: onboarding keeps the Tesla OAuth credentials in pod memory between
+# calls (see TempCredsStore), and the ingress can't pin a user to a pod here
+# (service-upstream + Linkerd balance every request).
+replicaCount: 1
 image:
   repository: dimozone/tesla-oracle
   pullPolicy: IfNotPresent
@@ -91,9 +94,6 @@ ingress:
     nginx.ingress.kubernetes.io/enable-cors: 'true'
     nginx.ingress.kubernetes.io/cors-allow-origin: https://tesla-oracle.dimo.zone, https://app.dimo.zone, https://localtesla.dimo.org:4443
     external-dns.alpha.kubernetes.io/hostname: tesla-oracle.dimo.zone
-    # Onboarding keeps the Tesla OAuth credentials in pod memory between calls,
-    # so each user's requests have to keep reaching the same pod.
-    nginx.ingress.kubernetes.io/upstream-hash-by: $http_authorization
   hosts:
     - host: tesla-oracle.dimo.zone
       paths:
@@ -105,7 +105,7 @@ resources:
     cpu: 1
     memory: 1024Mi
   requests:
-    cpu: 100m
+    cpu: 250m
     memory: 256Mi
 autoscaling:
   enabled: false
@@ -116,7 +116,8 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 podDisruptionBudget:
-  minAvailable: 1
+  # With one replica, minAvailable 1 would block every node drain.
+  minAvailable: 0
 kafka:
   clusterName: kafka-prod-dimo-kafka
   topics: []

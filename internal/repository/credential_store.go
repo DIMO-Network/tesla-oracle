@@ -26,14 +26,13 @@ var (
 
 // TempCredsStore holds the credentials from a Tesla OAuth exchange, encrypted, in
 // this process's memory until onboarding moves them onto the synthetic device.
-// Another replica can't see them, so all of a user's onboarding calls have to
-// reach the same pod; the prod ingress hashes requests on the Authorization
-// header for this.
+// Another replica can't see them, so the service runs as a single replica.
 type TempCredsStore struct {
 	cache  *cache.Cache
 	cipher cipher.Cipher
 	// takeMu makes RetrieveAndDelete's read and delete one step, so concurrent
-	// callers can't both take the same credentials.
+	// callers can't both take the same credentials, and a Store that lands
+	// meanwhile isn't deleted along with the credentials that were taken.
 	takeMu sync.Mutex
 }
 
@@ -64,7 +63,9 @@ func (s *TempCredsStore) Store(_ context.Context, user common.Address, cred *Cre
 		return fmt.Errorf("failed to encrypt credentials: %w", err)
 	}
 
+	s.takeMu.Lock()
 	s.cache.Set(prefix+user.Hex(), encCred, duration)
+	s.takeMu.Unlock()
 
 	return nil
 }

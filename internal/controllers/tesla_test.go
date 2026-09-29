@@ -44,7 +44,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/testcontainers/testcontainers-go"
-
 )
 
 const vin = "1HGCM82633A123456"
