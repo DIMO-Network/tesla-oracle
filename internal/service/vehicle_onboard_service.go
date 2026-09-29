@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/riverqueue/river"
@@ -36,6 +37,7 @@ var vinRegexp, _ = regexp.Compile("^[A-HJ-NPR-Z0-9]{17}$")
 const (
 	OnboardingStatusVendorValidationSuccess = 23
 	OnboardingStatusMintFailure             = 52
+	OnboardingStatusMintSuccess             = 53
 	OnboardingStatusMintSubmitUnknown       = 30
 	OnboardingStatusMintSubmitFailure       = 32
 	OnboardingStatusMintSubmitPending       = 31
@@ -103,6 +105,14 @@ func getDetailedStatus(status int) string {
 	return detailedStatus
 }
 
+// ErrTeslaLoginRequired: the caller has no current Tesla login that lists the VIN.
+// Onboarding a VIN requires the caller's own Tesla account to see that vehicle.
+var ErrTeslaLoginRequired = errors.New("log in to Tesla again to continue")
+
+// DetailsReadyToFinalize is the verify status detail for a VIN whose mint already
+// succeeded: the caller skips minting and finalizes.
+const DetailsReadyToFinalize = "Ready to finalize"
+
 // OnboardingSacd represents SACD data structure
 type OnboardingSacd struct {
 	Grantee     common.Address `json:"grantee"`
@@ -111,7 +121,9 @@ type OnboardingSacd struct {
 	Source      string         `json:"source"`
 }
 
-// OnboardingArgs represents job arguments for River
+// OnboardingArgs represents job arguments for River. It is the only definition:
+// the onboarding worker aliases it, so the options the service inserts with are
+// the ones the worker was written for.
 type OnboardingArgs struct {
 	Owner     common.Address    `json:"owner"`
 	VIN       string            `json:"vin"`
@@ -122,6 +134,17 @@ type OnboardingArgs struct {
 
 func (OnboardingArgs) Kind() string {
 	return "onboard"
+}
+
+// InsertOpts makes a mint job run once. A retry after a mint whose transaction
+// landed but whose result was lost would mint a second vehicle and SD.
+func (OnboardingArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		MaxAttempts: 1,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs: false,
+		},
+	}
 }
 
 // VehicleOnboardService handles all business logic for vehicle onboarding operations
@@ -233,6 +256,10 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 	statuses := make([]VinStatus, 0, len(validVins))
 
 	if len(validVins) > 0 {
+		if _, err := s.requireTeslaLogin(ctx, walletAddress, validVins); err != nil {
+			return nil, err
+		}
+
 		// Check for reconnection cases - create onboarding records for disconnected devices
 		for _, vehicle := range vinsData {
 			if vehicle.VehicleTokenID != 0 {
@@ -242,13 +269,14 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 			}
 		}
 
-		// fetch all the onboarding records that could still be moved forward
+		// fetch all the onboarding records that could still be moved forward, including
+		// minted ones whose finalize never ran
 		dbVins, err := s.repositories.Onboarding.GetOnboardingsByVinsAndStatusRange(
 			ctx,
 			validVins,
 			OnboardingStatusVendorValidationSuccess,
 			OnboardingStatusMintFailure,
-			nil,
+			[]int{OnboardingStatusMintSuccess},
 		)
 		if err != nil {
 			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
@@ -271,6 +299,16 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 			vehicle, ok := indexedVehicles[dbVin.Vin]
 			if !ok {
 				statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Unknown", Details: "Unknown"})
+				continue
+			}
+
+			if isMinted(dbVin.OnboardingStatus) {
+				// A mint that succeeded but was never finalized: the caller can finish it,
+				// if the minted vehicle is theirs and its SD is still the one minted.
+				if !s.isResumableMint(dbVin, walletAddress) {
+					return nil, errors.New("some of the VINs are not verified or already onboarded")
+				}
+				statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: DetailsReadyToFinalize})
 				continue
 			}
 
@@ -357,6 +395,15 @@ func (s *vehicleOnboardService) createOnboardingRecordForReconnection(ctx contex
 
 	// Verify the vehicle is truly disconnected (no SD minted)
 	if identityVehicle.SyntheticDevice.TokenID != 0 {
+		// Unless that SD is this reconnection's own mint, not yet finalized: leave
+		// the minted record for verify to offer as ready to finalize.
+		record, err := s.repositories.Onboarding.GetOnboardingByVin(ctx, vehicle.Vin)
+		if err == nil && isMinted(record.OnboardingStatus) &&
+			record.VehicleTokenID.Int64 == vehicle.VehicleTokenID &&
+			record.SyntheticTokenID.Int64 == identityVehicle.SyntheticDevice.TokenID {
+			return nil
+		}
+
 		localLog.Warn().
 			Int64("syntheticTokenId", identityVehicle.SyntheticDevice.TokenID).
 			Msg("Vehicle already has synthetic device connected")
@@ -415,6 +462,10 @@ func (s *vehicleOnboardService) GetMintDataForVins(ctx context.Context, vins []s
 	mintingData := make([]VinTransactionData, 0, len(validVins))
 
 	if len(validVins) > 0 {
+		if _, err := s.requireTeslaLogin(ctx, ownerAddress, validVins); err != nil {
+			return nil, err
+		}
+
 		dbVins, err := s.repositories.Onboarding.GetOnboardingsByVinsAndStatusRange(
 			ctx,
 			validVins,
@@ -522,6 +573,10 @@ func (s *vehicleOnboardService) SubmitMintDataForVins(ctx context.Context, minti
 	statuses := make([]VinStatus, 0, len(mintingData))
 
 	if len(validVins) > 0 {
+		if _, err := s.requireTeslaLogin(ctx, walletAddress, validVins); err != nil {
+			return nil, err
+		}
+
 		dbVins, err := s.repositories.Onboarding.GetOnboardingsByVins(ctx, validVins)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -535,14 +590,17 @@ func (s *vehicleOnboardService) SubmitMintDataForVins(ctx context.Context, minti
 			indexedDbVins[vin.Vin] = vin
 		}
 
+		// Every VIN needs the record verify worked with. Creating one here made a
+		// record with no device definition: its mint failed, and the record then
+		// blocked the VIN for everyone.
 		for _, mint := range validVinsMintingData {
-			dbVin, ok := indexedDbVins[mint.Vin]
-			if !ok {
-				dbVin = &dbmodels.Onboarding{
-					Vin:              mint.Vin,
-					OnboardingStatus: OnboardingStatusMintSubmitUnknown,
-				}
+			if _, ok := indexedDbVins[mint.Vin]; !ok {
+				return nil, fmt.Errorf("VIN %s has not been verified for onboarding", mint.Vin)
 			}
+		}
+
+		for _, mint := range validVinsMintingData {
+			dbVin := indexedDbVins[mint.Vin]
 
 			var sacd *OnboardingSacd
 
@@ -687,127 +745,169 @@ func (s *vehicleOnboardService) FinalizeOnboarding(ctx context.Context, vins []s
 
 	vehicles := make([]OnboardedVehicle, 0, len(validVins))
 
-	if len(validVins) > 0 {
-		dbVins, err := s.repositories.Onboarding.GetOnboardingsByVins(ctx, validVins)
+	if len(validVins) == 0 {
+		return vehicles, nil
+	}
+
+	creds, err := s.requireTeslaLogin(ctx, walletAddress, validVins)
+	if err != nil {
+		return nil, err
+	}
+
+	encryptedCreds, err := s.repositories.Credential.EncryptTokens(creds)
+	if err != nil {
+		localLog.Error().Err(err).Msg("Failed to encrypt credentials")
+		return nil, fmt.Errorf("failed to encrypt credentials: %w", err)
+	}
+
+	dbVins, err := s.repositories.Onboarding.GetOnboardingsByVins(ctx, validVins)
+	if err != nil {
+		if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
+			return nil, errors.New("could not find vehicles")
+		}
+		return nil, fmt.Errorf("failed to load vehicles from database: %w", err)
+	}
+
+	indexedVins := make(map[string]*dbmodels.Onboarding)
+	for _, vin := range dbVins {
+		indexedVins[vin.Vin] = vin
+	}
+
+	for _, vin := range validVins {
+		dbVin, ok := indexedVins[vin]
+		if !ok {
+			return nil, fmt.Errorf("no onboarding in progress for VIN %s", vin)
+		}
+
+		if !isMinted(dbVin.OnboardingStatus) || !dbVin.VehicleTokenID.Valid || !dbVin.SyntheticTokenID.Valid || !dbVin.WalletIndex.Valid {
+			return nil, fmt.Errorf("VIN %s is not minted yet", vin)
+		}
+
+		// The caller's Tesla login goes onto this vehicle's synthetic device, so the
+		// vehicle has to be the caller's.
+		if err := s.requireMintedToWallet(ctx, dbVin, walletAddress); err != nil {
+			return nil, err
+		}
+
+		address, err := s.walletSvc.GetAddress(ctx, uint32(dbVin.WalletIndex.Int64))
 		if err != nil {
-			if errors.Is(err, repository.ErrOnboardingVehicleNotFound) {
-				return nil, errors.New("could not find vehicles")
-			}
-			return nil, fmt.Errorf("failed to load vehicles from database: %w", err)
+			return nil, fmt.Errorf("failed to get SD address by child index: %w", err)
 		}
 
-		indexedVins := make(map[string]*dbmodels.Onboarding)
-		for _, vin := range dbVins {
-			indexedVins[vin.Vin] = vin
+		sdRecord := &dbmodels.SyntheticDevice{
+			Address:            address.Bytes(),
+			Vin:                vin,
+			TokenID:            null.IntFrom(int(dbVin.SyntheticTokenID.Int64)),
+			VehicleTokenID:     null.IntFrom(int(dbVin.VehicleTokenID.Int64)),
+			WalletChildNumber:  null.IntFrom(int(dbVin.WalletIndex.Int64)),
+			AccessToken:        null.StringFrom(encryptedCreds.AccessToken),
+			AccessExpiresAt:    null.TimeFrom(encryptedCreds.AccessExpiry),
+			RefreshToken:       null.StringFrom(encryptedCreds.RefreshToken),
+			RefreshExpiresAt:   null.TimeFrom(encryptedCreds.RefreshExpiry),
+			SubscriptionStatus: null.StringFrom("pending"), // a reconnection keeps its own
 		}
 
-		for _, vin := range validVins {
-			dbVin, ok := indexedVins[vin]
-			if !ok {
-				continue
-			}
+		reconnected, err := s.repositories.Vehicle.CompleteOnboarding(ctx, sdRecord, dbVin)
+		if err != nil {
+			localLog.Error().Err(err).Str(logfields.VIN, vin).Msg("Failed to save the onboarded synthetic device")
+			return nil, fmt.Errorf("failed to save synthetic device: %w", err)
+		}
 
-			address, err := s.walletSvc.GetAddress(ctx, uint32(dbVin.WalletIndex.Int64))
-			if err != nil {
-				return nil, fmt.Errorf("failed to get SD address by child index: %w", err)
-			}
+		if reconnected {
+			localLog.Info().
+				Str("vin", vin).
+				Int64("vehicleTokenId", dbVin.VehicleTokenID.Int64).
+				Int64("newSyntheticTokenId", dbVin.SyntheticTokenID.Int64).
+				Msg("Successfully reconnected vehicle with preserved subscription status")
+		}
 
-			creds, err := s.repositories.Credential.RetrieveAndDelete(ctx, walletAddress)
-			if err != nil {
-				localLog.Error().Err(err).Msg("Failed to retrieve credentials")
-				return nil, fmt.Errorf("failed to retrieve credentials: %w", err)
-			}
+		vehicles = append(vehicles, OnboardedVehicle{
+			Vin:              vin,
+			VehicleTokenID:   big.NewInt(dbVin.VehicleTokenID.Int64),
+			SyntheticTokenID: big.NewInt(dbVin.SyntheticTokenID.Int64),
+		})
+	}
 
-			encryptedCreds, err := s.repositories.Credential.EncryptTokens(creds)
-			if err != nil {
-				localLog.Error().Err(err).Msg("Failed to encrypt credentials")
-				return nil, fmt.Errorf("failed to encrypt credentials: %w", err)
-			}
+	// The Tesla login is used up only now that every device is saved: a failure
+	// above leaves it for the retry.
+	s.repositories.Credential.DeleteIfUnchanged(ctx, walletAddress, creds)
 
-			// Check if this is a reconnection (existing disconnected device)
-			// Query by vehicle_token_id (not VIN) since multiple users can have same VIN
-			var existingDevice *dbmodels.SyntheticDevice
-			var isReconnection bool
+	return vehicles, nil
+}
 
-			if dbVin.VehicleTokenID.Valid && dbVin.VehicleTokenID.Int64 > 0 {
-				existingDevice, err = s.repositories.Vehicle.GetSyntheticDeviceByTokenID(ctx, dbVin.VehicleTokenID.Int64)
-				if err == nil && existingDevice != nil &&
-					!existingDevice.TokenID.Valid &&
-					existingDevice.VehicleTokenID.Valid {
-					// Found existing disconnected device (has vehicle_token_id but no sd token_id)
-					isReconnection = true
-					localLog.Debug().
-						Str("vin", vin).
-						Int64("vehicleTokenId", dbVin.VehicleTokenID.Int64).
-						Msg("Found disconnected device for reconnection")
-				} else if err != nil && !errors.Is(err, repository.ErrVehicleNotFound) {
-					localLog.Warn().Err(err).Int64("vehicleTokenId", dbVin.VehicleTokenID.Int64).Msg("Error checking for existing device by vehicle token ID")
-				}
-			}
+// requireTeslaLogin returns the caller's current Tesla login, if it lists every VIN.
+func (s *vehicleOnboardService) requireTeslaLogin(ctx context.Context, walletAddress common.Address, vins []string) (*repository.Credential, error) {
+	creds, err := s.repositories.Credential.Retrieve(ctx, walletAddress)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, fmt.Errorf("%w: your Tesla login has expired", ErrTeslaLoginRequired)
+		}
+		return nil, fmt.Errorf("failed to load Tesla login: %w", err)
+	}
 
-			var subscriptionStatus null.String
-			if isReconnection {
-				localLog.Info().
-					Str("vin", vin).
-					Int("oldVehicleTokenId", existingDevice.VehicleTokenID.Int).
-					Msg("Reconnection detected - preserving subscription status and vehicle data")
-
-				// Preserve subscription_status from old disconnected device
-				subscriptionStatus = existingDevice.SubscriptionStatus
-
-				// Delete old disconnected row
-				err = s.repositories.Vehicle.DeleteSyntheticDevice(ctx, existingDevice.Address)
-				if err != nil {
-					localLog.Error().Err(err).Msg("Failed to delete old disconnected device")
-					return nil, fmt.Errorf("failed to delete old disconnected device: %w", err)
-				}
-			} else {
-				// New onboarding - default subscription status
-				subscriptionStatus = null.StringFrom("pending")
-			}
-
-			sdRecord := &dbmodels.SyntheticDevice{
-				Address:            address.Bytes(),
-				Vin:                vin,
-				TokenID:            null.Int{Int: int(dbVin.SyntheticTokenID.Int64), Valid: true},
-				VehicleTokenID:     null.Int{Int: int(dbVin.VehicleTokenID.Int64), Valid: true},
-				WalletChildNumber:  null.IntFrom(int(dbVin.WalletIndex.Int64)),
-				AccessToken:        null.StringFrom(encryptedCreds.AccessToken),
-				AccessExpiresAt:    null.TimeFrom(encryptedCreds.AccessExpiry),
-				RefreshToken:       null.StringFrom(encryptedCreds.RefreshToken),
-				RefreshExpiresAt:   null.TimeFrom(encryptedCreds.RefreshExpiry),
-				SubscriptionStatus: subscriptionStatus, // Preserved for reconnection, default for new
-			}
-
-			err = s.repositories.Vehicle.InsertSyntheticDevice(ctx, sdRecord)
-			if err != nil {
-				localLog.Error().Err(err).Msg("Failed to insert Synthetic Device")
-				return nil, fmt.Errorf("failed to insert synthetic device: %w", err)
-			}
-
-			if isReconnection {
-				localLog.Info().
-					Str("vin", vin).
-					Int("vehicleTokenId", int(dbVin.VehicleTokenID.Int64)).
-					Int("newSyntheticTokenId", int(dbVin.SyntheticTokenID.Int64)).
-					Str("subscriptionStatus", subscriptionStatus.String).
-					Msg("Successfully reconnected vehicle with preserved subscription status")
-			}
-
-			err = s.repositories.Onboarding.DeleteOnboarding(ctx, dbVin)
-			if err != nil {
-				localLog.Error().Err(err).Msg("Failed to delete onboarding data from Database")
-			}
-
-			vehicles = append(vehicles, OnboardedVehicle{
-				Vin:              vin,
-				VehicleTokenID:   big.NewInt(dbVin.VehicleTokenID.Int64),
-				SyntheticTokenID: big.NewInt(dbVin.SyntheticTokenID.Int64),
-			})
+	for _, vin := range vins {
+		if !slices.Contains(creds.VINs, vin) {
+			return nil, fmt.Errorf("%w: VIN %s is not in the Tesla account you logged in with", ErrTeslaLoginRequired, vin)
 		}
 	}
 
-	return vehicles, nil
+	return creds, nil
+}
+
+// identityWaitAttempts and identityWaitDelay bound how long finalize waits for
+// identity-api to index a vehicle minted moments ago. identity-api reads the same
+// contract-event topic this service does, which in prod delivers a mint about 10s
+// after submit, so 30s leaves room for a slow indexer while staying under the
+// ingress's 60s read timeout. A finalize that still times out keeps the Tesla
+// login, so the user can press Continue again.
+var (
+	identityWaitAttempts = 30
+	identityWaitDelay    = time.Second
+)
+
+// requireMintedToWallet checks the record's minted vehicle belongs to the wallet
+// and still carries the record's SD. A just-minted vehicle can take a few seconds
+// to reach identity-api, so it waits for it.
+func (s *vehicleOnboardService) requireMintedToWallet(ctx context.Context, record *dbmodels.Onboarding, walletAddress common.Address) error {
+	for attempt := 1; ; attempt++ {
+		vehicle, err := s.identitySvc.FetchVehicleByTokenID(record.VehicleTokenID.Int64)
+		if err == nil && vehicle != nil && vehicle.Owner != "" {
+			if common.HexToAddress(vehicle.Owner) != walletAddress {
+				return fmt.Errorf("vehicle %d is not owned by wallet %s", record.VehicleTokenID.Int64, walletAddress.Hex())
+			}
+			if sd := vehicle.SyntheticDevice.TokenID; sd != 0 && sd != record.SyntheticTokenID.Int64 {
+				return fmt.Errorf("vehicle %d has synthetic device %d, not the minted %d", record.VehicleTokenID.Int64, sd, record.SyntheticTokenID.Int64)
+			}
+			return nil
+		}
+
+		if attempt >= identityWaitAttempts {
+			if err == nil {
+				err = errors.New("not indexed yet")
+			}
+			return fmt.Errorf("failed to confirm the owner of vehicle %d: %w", record.VehicleTokenID.Int64, err)
+		}
+
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(identityWaitDelay):
+		}
+	}
+}
+
+// isResumableMint reports whether a minted, unfinalized record can be finalized by
+// the wallet: its vehicle is the wallet's and still carries the minted SD.
+func (s *vehicleOnboardService) isResumableMint(record *dbmodels.Onboarding, walletAddress common.Address) bool {
+	if !record.VehicleTokenID.Valid || !record.SyntheticTokenID.Valid || !record.WalletIndex.Valid {
+		return false
+	}
+	vehicle, err := s.identitySvc.FetchVehicleByTokenID(record.VehicleTokenID.Int64)
+	if err != nil || vehicle == nil || vehicle.Owner == "" {
+		return false
+	}
+	return common.HexToAddress(vehicle.Owner) == walletAddress &&
+		vehicle.SyntheticDevice.TokenID == record.SyntheticTokenID.Int64
 }
 
 // Helper methods

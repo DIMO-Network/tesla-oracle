@@ -1,6 +1,8 @@
 package controllers
 
 import (
+	"errors"
+
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gofiber/fiber/v2"
@@ -19,6 +21,14 @@ func NewVehicleOnboardController(logger *zerolog.Logger, vehicleOnboardService s
 	}
 }
 
+// onboardingErrorStatus is the HTTP status for an onboarding service error.
+func onboardingErrorStatus(err error) int {
+	if errors.Is(err, service.ErrTeslaLoginRequired) {
+		return fiber.StatusForbidden
+	}
+	return fiber.StatusBadRequest
+}
+
 // VerifyVins godoc
 // @Summary     Verify vehicle before onboarding
 // @Description Verifies vehicle before onboarding. In case of already minted vehicle checks ownership, synthetic token ID (should be empty), etc.
@@ -30,6 +40,7 @@ func NewVehicleOnboardController(logger *zerolog.Logger, vehicleOnboardService s
 // @Success     200 {object} controllers.StatusForVinsResponse
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     403 {object} fiber.Error "No current Tesla login, or it doesn't list the VIN"
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/vehicle/verify [post]
 func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
@@ -45,7 +56,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 	statuses, err := v.vehicleOnboardService.VerifyVins(c.Context(), params.Vins, walletAddress)
 	if err != nil {
 		v.logger.Error().Err(err).Msg("Failed to verify VINs")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(onboardingErrorStatus(err)).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
@@ -66,6 +77,7 @@ func (v *VehicleController) VerifyVins(c *fiber.Ctx) error {
 // @Success     200 {object} controllers.MintDataForVins "Only `typedData` field is populated for each item"
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     403 {object} fiber.Error "No current Tesla login, or it doesn't list the VIN"
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/vehicle/mint [get]
 func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
@@ -80,7 +92,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 	mintingData, err := v.vehicleOnboardService.GetMintDataForVins(c.Context(), params.Vins, walletAddress)
 	if err != nil {
 		v.logger.Error().Err(err).Msg("Failed to get mint data for VINs")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(onboardingErrorStatus(err)).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
@@ -103,6 +115,7 @@ func (v *VehicleController) GetMintDataForVins(c *fiber.Ctx) error {
 // @Success     200 {object} controllers.StatusForVinsResponse
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     403 {object} fiber.Error "No current Tesla login, or it doesn't list the VIN"
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/vehicle/mint [post]
 func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
@@ -121,7 +134,7 @@ func (v *VehicleController) SubmitMintDataForVins(c *fiber.Ctx) error {
 	statuses, err := v.vehicleOnboardService.SubmitMintDataForVins(c.Context(), params.VinMintingData, walletAddress)
 	if err != nil {
 		v.logger.Error().Err(err).Msg("Failed to submit mint data for VINs")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(onboardingErrorStatus(err)).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
@@ -155,7 +168,7 @@ func (v *VehicleController) GetMintStatusForVins(c *fiber.Ctx) error {
 	statuses, err := v.vehicleOnboardService.GetMintStatusForVins(c.Context(), params.Vins)
 	if err != nil {
 		v.logger.Error().Err(err).Msg("Failed to get mint status for VINs")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(onboardingErrorStatus(err)).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}
@@ -176,6 +189,7 @@ func (v *VehicleController) GetMintStatusForVins(c *fiber.Ctx) error {
 // @Success     200 {object} controllers.FinalizeResponse
 // @Failure     400 {object} fiber.Error "Bad Request"
 // @Failure     401 {object} fiber.Error "Unauthorized"
+// @Failure     403 {object} fiber.Error "No current Tesla login, or it doesn't list the VIN"
 // @Failure     500 {object} fiber.Error "Internal server error"
 // @Router      /v1/vehicle/finalize [post]
 func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
@@ -191,7 +205,7 @@ func (v *VehicleController) FinalizeOnboarding(c *fiber.Ctx) error {
 	vehicles, err := v.vehicleOnboardService.FinalizeOnboarding(c.Context(), params.Vins, walletAddress)
 	if err != nil {
 		v.logger.Error().Err(err).Msg("Failed to finalize onboarding")
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+		return c.Status(onboardingErrorStatus(err)).JSON(fiber.Map{
 			"error": err.Error(),
 		})
 	}

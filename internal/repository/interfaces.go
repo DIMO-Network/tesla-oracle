@@ -12,6 +12,7 @@ type CredentialRepository interface {
 	Store(ctx context.Context, user common.Address, cred *Credential) error
 	Retrieve(ctx context.Context, user common.Address) (*Credential, error)
 	RetrieveAndDelete(ctx context.Context, user common.Address) (*Credential, error)
+	DeleteIfUnchanged(ctx context.Context, user common.Address, used *Credential)
 	RetrieveWithTokensEncrypted(ctx context.Context, user common.Address) (*Credential, error)
 	EncryptTokens(cred *Credential) (*Credential, error)
 }
@@ -27,6 +28,7 @@ type VehicleRepository interface {
 	UpdateSyntheticDeviceSubscriptionStatus(ctx context.Context, device *dbmodels.SyntheticDevice, status string) error
 	UpdateSyntheticDeviceCredentials(ctx context.Context, device *dbmodels.SyntheticDevice, creds *Credential) error
 	InsertSyntheticDevice(ctx context.Context, device *dbmodels.SyntheticDevice) error
+	CompleteOnboarding(ctx context.Context, device *dbmodels.SyntheticDevice, onboarding *dbmodels.Onboarding) (reconnected bool, err error)
 	DeleteSyntheticDevice(ctx context.Context, address []byte) error
 }
 

@@ -1,9 +1,12 @@
 package service
 
 import (
+	"errors"
 	"fmt"
 	"testing"
 
+	shttp "github.com/DIMO-Network/shared/pkg/http"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,22 +55,18 @@ func TestTokenRefreshDecisionTree(t *testing.T) {
 			expectedMessage: "Token refresh failed: Internal server error occurred.. Please try again.",
 		},
 		{
-			name:            "Non-JSON error with 'expired' keyword",
-			refreshError:    fmt.Errorf("token has expired"),
-			expectedAction:  ActionLoginRequired,
-			expectedMessage: MessageGenericLoginRequired,
+			// A transport or TLS error that happens to say "expired" is not a Tesla
+			// verdict on the user's login.
+			name:            "Non-JSON error with 'expired' keyword (should retry)",
+			refreshError:    fmt.Errorf("x509: certificate has expired or is not yet valid"),
+			expectedAction:  ActionRetryRefresh,
+			expectedMessage: "Token refresh failed: x509: certificate has expired or is not yet valid. Please try again.",
 		},
 		{
-			name:            "Non-JSON error with 'invalid' keyword",
-			refreshError:    fmt.Errorf("invalid token provided"),
-			expectedAction:  ActionLoginRequired,
-			expectedMessage: MessageGenericLoginRequired,
-		},
-		{
-			name:            "Non-JSON error with 'unauthorized' keyword",
-			refreshError:    fmt.Errorf("unauthorized access"),
-			expectedAction:  ActionLoginRequired,
-			expectedMessage: MessageGenericLoginRequired,
+			name:            "Non-JSON error with 'invalid' keyword (should retry)",
+			refreshError:    fmt.Errorf("invalid character '<' looking for beginning of value"),
+			expectedAction:  ActionRetryRefresh,
+			expectedMessage: "Token refresh failed: invalid character '<' looking for beginning of value. Please try again.",
 		},
 		{
 			name:            "Non-JSON generic network error (should retry)",
@@ -82,20 +81,22 @@ func TestTokenRefreshDecisionTree(t *testing.T) {
 			expectedMessage: "Token refresh failed: request timeout. Please try again.",
 		},
 		{
-			name:            "Case insensitive expired check",
-			refreshError:    fmt.Errorf("Token EXPIRED due to timeout"),
+			name:            "Stored refresh token past its expiry",
+			refreshError:    core.ErrTokenExpired,
 			expectedAction:  ActionLoginRequired,
-			expectedMessage: MessageGenericLoginRequired,
+			expectedMessage: MessageRefreshTokenExpired,
 		},
 		{
-			name:            "Case insensitive invalid check",
-			refreshError:    fmt.Errorf("INVALID credentials provided"),
-			expectedAction:  ActionLoginRequired,
-			expectedMessage: MessageGenericLoginRequired,
+			// KMS says "InvalidCiphertextException" when a key is rotated or revoked.
+			// That is our outage, not the user's: polling must survive it.
+			name:            "Credential decryption failure (should retry)",
+			refreshError:    fmt.Errorf("%w: InvalidCiphertextException: unauthorized", core.ErrCredentialDecryption),
+			expectedAction:  ActionRetryRefresh,
+			expectedMessage: "Token refresh failed: failed to decrypt credentials: InvalidCiphertextException: unauthorized. Please try again.",
 		},
 		{
-			name:            "Case insensitive unauthorized check",
-			refreshError:    fmt.Errorf("UNAUTHORIZED request"),
+			name:            "Tesla 401 without a JSON body",
+			refreshError:    fmt.Errorf("failed to perform request: %w", shttp.BuildResponseError(401, errors.New("received non success status code 401 for url https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token with body: <html>Unauthorized</html>"))),
 			expectedAction:  ActionLoginRequired,
 			expectedMessage: MessageGenericLoginRequired,
 		},
@@ -184,5 +185,43 @@ func TestTokenRefreshDecisionTreeErrorDescriptionMatching(t *testing.T) {
 			assert.Equal(t, ActionLoginRequired, decision.Action)
 			assert.Equal(t, tc.expectedMessage, decision.Message)
 		})
+	}
+}
+
+// TestTokenRefreshDecisionTreeProdErrors feeds the errors exactly as RefreshToken
+// returns them in prod: shttp wraps Tesla's JSON body inside a status-code message,
+// and RefreshToken wraps that again. Before, none of these parsed as JSON, and
+// "user session flushed" or a revoked consent came back as retry_refresh, so the
+// app never asked the user to log in again and polling retried the dead token forever.
+func TestTokenRefreshDecisionTreeProdErrors(t *testing.T) {
+	prodBody := func(description string) string {
+		return `received non success status code 401 for url https://fleet-auth.prd.vn.cloud.tesla.com/oauth2/v3/token with body: {"error":"login_required","error_description":"` + description + `"}` + "\n"
+	}
+
+	testCases := []struct {
+		name            string
+		description     string
+		expectedMessage string
+	}{
+		{name: "user session flushed", description: "user session flushed", expectedMessage: MessageGenericLoginRequired},
+		{name: "revoked consent", description: "The user has revoked the consent", expectedMessage: MessageConsentRevoked},
+		{name: "refresh token expired", description: "The refresh_token is expired.", expectedMessage: MessageRefreshTokenExpired},
+	}
+
+	for _, tc := range testCases {
+		for _, wrap := range []struct {
+			name string
+			err  error
+		}{
+			{name: "typed response error", err: fmt.Errorf("failed to perform request: %w", shttp.BuildResponseError(401, errors.New(prodBody(tc.description))))},
+			{name: "message only", err: fmt.Errorf("failed to perform request: %s", prodBody(tc.description))},
+		} {
+			t.Run(tc.name+"/"+wrap.name, func(t *testing.T) {
+				decision, err := TokenRefreshDecisionTree(wrap.err)
+				require.NoError(t, err)
+				assert.Equal(t, ActionLoginRequired, decision.Action)
+				assert.Equal(t, tc.expectedMessage, decision.Message)
+			})
+		}
 	}
 }

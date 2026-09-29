@@ -115,3 +115,55 @@ func TestTempCredsStore(t *testing.T) {
 		require.ErrorIs(t, err, ErrNotFound)
 	})
 }
+
+func TestTempCredsStoreOnboardingSession(t *testing.T) {
+	ctx := context.Background()
+	user := common.HexToAddress("0x73b423A85a9206f776aF9b3541A152766226b26F")
+	newCred := func(accessToken string) *Credential {
+		return &Credential{
+			AccessToken:   accessToken,
+			RefreshToken:  "refresh-token",
+			AccessExpiry:  time.Now().Add(time.Hour),
+			RefreshExpiry: time.Now().Add(24 * time.Hour),
+			VINs:          []string{"XP7YHCER3SB582506"},
+		}
+	}
+
+	t.Run("keeps the VINs the Tesla login listed", func(t *testing.T) {
+		store := NewTempCredsStore(new(cipher.ROT13Cipher))
+		require.NoError(t, store.Store(ctx, user, newCred("access-token")))
+
+		got, err := store.Retrieve(ctx, user)
+		require.NoError(t, err)
+		require.Equal(t, []string{"XP7YHCER3SB582506"}, got.VINs)
+	})
+
+	t.Run("lasts long enough for virtual key setup", func(t *testing.T) {
+		require.GreaterOrEqual(t, duration, 30*time.Minute)
+	})
+
+	t.Run("DeleteIfUnchanged deletes the credentials that were used", func(t *testing.T) {
+		store := NewTempCredsStore(new(cipher.ROT13Cipher))
+		used := newCred("access-token")
+		require.NoError(t, store.Store(ctx, user, used))
+
+		store.DeleteIfUnchanged(ctx, user, used)
+
+		_, err := store.Retrieve(ctx, user)
+		require.ErrorIs(t, err, ErrNotFound)
+	})
+
+	t.Run("DeleteIfUnchanged keeps a newer login", func(t *testing.T) {
+		store := NewTempCredsStore(new(cipher.ROT13Cipher))
+		used := newCred("access-token")
+		require.NoError(t, store.Store(ctx, user, used))
+		// The user logged in to Tesla again while the old credentials were in use.
+		require.NoError(t, store.Store(ctx, user, newCred("newer-access-token")))
+
+		store.DeleteIfUnchanged(ctx, user, used)
+
+		got, err := store.Retrieve(ctx, user)
+		require.NoError(t, err)
+		require.Equal(t, "newer-access-token", got.AccessToken)
+	})
+}

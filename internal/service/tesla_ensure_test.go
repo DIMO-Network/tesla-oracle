@@ -46,6 +46,10 @@ func (m *mockVehicleRepository) GetSyntheticDeviceByTokenID(ctx context.Context,
 	return nil, args.Error(1)
 }
 
+func (m *mockVehicleRepository) CompleteOnboarding(ctx context.Context, device *dbmodels.SyntheticDevice, onboarding *dbmodels.Onboarding) (bool, error) {
+	panic("not used")
+}
+
 func (m *mockVehicleRepository) GetSyntheticDeviceByAddress(ctx context.Context, address common.Address) (*dbmodels.SyntheticDevice, error) {
 	panic("not implemented")
 }
@@ -89,13 +93,13 @@ func TestEnsureVehicleDataFlow(t *testing.T) {
 		access, _ := cip.Encrypt("mockAccessToken")
 		refresh, _ := cip.Encrypt("mockRefreshToken")
 		return &dbmodels.SyntheticDevice{
-			Vin:             "1HGCM82633A123456",
-			VehicleTokenID:  null.NewInt(789, true),
-			TokenID:         null.NewInt(456, true),
-			AccessToken:     null.StringFrom(access),
-			RefreshToken:    null.StringFrom(refresh),
-			AccessExpiresAt: null.TimeFrom(time.Now().Add(time.Hour)),
-			RefreshExpiresAt: null.TimeFrom(time.Now().Add(time.Hour)),
+			Vin:                "1HGCM82633A123456",
+			VehicleTokenID:     null.NewInt(789, true),
+			TokenID:            null.NewInt(456, true),
+			AccessToken:        null.StringFrom(access),
+			RefreshToken:       null.StringFrom(refresh),
+			AccessExpiresAt:    null.TimeFrom(time.Now().Add(time.Hour)),
+			RefreshExpiresAt:   null.TimeFrom(time.Now().Add(time.Hour)),
 			SubscriptionStatus: null.StringFrom(status),
 		}
 	}

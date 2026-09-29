@@ -28,7 +28,7 @@ export class AuthProvider extends LitElement {
         const token = this.getToken();
 
         if (token) {
-            this._auth = { ...this._auth, token};
+            this._auth = { ...this._auth, token, vehicleTokenId: localStorage.getItem('vehicleTokenId') || ''};
         } else {
             this.logout();
         }
@@ -49,15 +49,26 @@ export class AuthProvider extends LitElement {
         });
     }
 
-    // when the webview is open from the mobile app, this is called to get the dimo JWT and optionally vehicle token id
+    // when the webview is open from the mobile app, this is called to get the dimo JWT and optionally vehicle token id.
+    // The app sends vehicle_token_id; vehicleTokenId is accepted too.
     parseQueryString() {
         const params = new URLSearchParams(window.location.search);
         let hadParams = false;
+
+        // A fresh open from the app carries the token. Drop any vehicle token id a
+        // previous session left behind, so it can't attach this car to another vehicle.
+        if (params.has('token')) {
+            localStorage.removeItem('vehicleTokenId');
+        }
+
         console.debug('QS Params:');
         params.forEach((value, key) => {
             console.debug(`${key}: ${value}`);
-            if (['token', 'vehicleTokenId'].includes(key)) {
-                localStorage.setItem(key, value);
+            if (key === 'token') {
+                localStorage.setItem('token', value);
+                hadParams = true;
+            } else if (key === 'vehicleTokenId' || key === 'vehicle_token_id') {
+                localStorage.setItem('vehicleTokenId', value);
                 hadParams = true;
             }
         });

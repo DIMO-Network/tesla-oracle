@@ -15,67 +15,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/v1/admin/{vehicleTokenId}/wakeup": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Wakes up a Tesla vehicle from sleep for admin users. Bypasses ownership validation.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "tesla"
-                ],
-                "summary": "Wake up Tesla vehicle (Admin)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Vehicle Token ID",
-                        "name": "vehicleTokenId",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Vehicle wake up response",
-                        "schema": {
-                            "$ref": "#/definitions/github_com_DIMO-Network_tesla-oracle_internal_core.TeslaVehicle"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized or no credentials found for the vehicle.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "404": {
-                        "description": "Vehicle not found or failed to get vehicle by token ID.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal server error, including wake up failures.",
-                        "schema": {
-                            "$ref": "#/definitions/fiber.Error"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/commands/{tokenID}": {
             "post": {
                 "security": [
@@ -535,6 +474,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/fiber.Error"
                         }
                     },
+                    "403": {
+                        "description": "No current Tesla login, or it doesn't list the VIN",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -595,6 +540,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/fiber.Error"
                         }
                     },
+                    "403": {
+                        "description": "No current Tesla login, or it doesn't list the VIN",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -647,6 +598,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "403": {
+                        "description": "No current Tesla login, or it doesn't list the VIN",
                         "schema": {
                             "$ref": "#/definitions/fiber.Error"
                         }
@@ -765,6 +722,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "403": {
+                        "description": "No current Tesla login, or it doesn't list the VIN",
                         "schema": {
                             "$ref": "#/definitions/fiber.Error"
                         }
@@ -1027,23 +990,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "message": {
-                    "type": "string"
-                }
-            }
-        },
-        "github_com_DIMO-Network_tesla-oracle_internal_core.TeslaVehicle": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "integer"
-                },
-                "state": {
-                    "type": "string"
-                },
-                "vehicle_id": {
-                    "type": "integer"
-                },
-                "vin": {
                     "type": "string"
                 }
             }
