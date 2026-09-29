@@ -1,11 +1,8 @@
-# One replica: onboarding keeps the Tesla OAuth credentials in pod memory between
-# calls (see TempCredsStore), and the ingress can't pin a user to a pod here
-# (service-upstream + Linkerd balance every request).
 replicaCount: 1
 image:
   repository: dimozone/tesla-oracle
   pullPolicy: IfNotPresent
-  tag: 0.6.4
+  tag: 0.6.5
 env:
   LOG_LEVEL: info
   ENVIRONMENT: prod
@@ -116,7 +113,6 @@ nodeSelector: {}
 tolerations: []
 affinity: {}
 podDisruptionBudget:
-  # With one replica, minAvailable 1 would block every node drain.
   minAvailable: 0
 kafka:
   clusterName: kafka-prod-dimo-kafka
