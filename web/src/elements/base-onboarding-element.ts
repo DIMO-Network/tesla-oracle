@@ -274,7 +274,14 @@ export class BaseOnboardingElement extends LitElement {
                 return null
             }
             // web3 operation to sign the passed in data, but signing is not done by the browser but instead by the host eg. mobile app
-            const signedMintData = await this.signMintingData(mintData);
+            let signedMintData;
+            try {
+                signedMintData = await this.signMintingData(mintData);
+            } catch (e) {
+                // the host never answered (passkey cancelled or ignored) and the wait timed out
+                this.displayFailure(`Signing didn't finish (${e}). Press Continue to try again.`);
+                return null;
+            }
             // this step actually does the minting. Can do both Vehicle and Synthetic. Submits a River Job.
             const minted = await this.submitMintingData(signedMintData);
 

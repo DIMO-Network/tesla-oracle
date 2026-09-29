@@ -416,7 +416,13 @@ export class TeslaElement extends BaseOnboardingElement {
             return;
         }
         // this blocks until the host completes the operation (uses a promise that waits for opened link to have a specific url). Has a timeout.
-        const openedUrl = await this.linkingService.openLink(this.teslaSettings.virtualKeyUrl);
+        let openedUrl;
+        try {
+            openedUrl = await this.linkingService.openLink(this.teslaSettings.virtualKeyUrl);
+        } catch (e) {
+            this.displayFailure(`Couldn't open Tesla's virtual key page (${e}). Try again.`);
+            return;
+        }
         // this should be true, but just in case. there could be timeouts
         if (openedUrl.url === this.teslaSettings.virtualKeyUrl) {
             this.linkOpened = true;
