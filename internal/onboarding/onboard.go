@@ -11,6 +11,7 @@ import (
 
 	"github.com/DIMO-Network/go-transactions"
 	registry "github.com/DIMO-Network/go-transactions/contracts"
+	"github.com/DIMO-Network/go-zerodev"
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
@@ -21,7 +22,6 @@ import (
 	"github.com/aarondl/sqlboiler/v4/boil"
 	"github.com/aarondl/sqlboiler/v4/queries"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/crypto"
 	signer "github.com/ethereum/go-ethereum/signer/core/apitypes"
 	"github.com/friendsofgo/errors"
@@ -76,31 +76,21 @@ func NewTransactionsClient(settings *config.Settings) (*transactions.Client, err
 	return transactionsClient, nil
 }
 
-type OnboardingSacd struct {
-	Grantee     common.Address `json:"grantee"`
-	Permissions *big.Int       `json:"permissions"`
-	Expiration  *big.Int       `json:"expiration"`
-	Source      string         `json:"source"`
-}
+// OnboardingSacd and OnboardingArgs are the service's types: the service inserts
+// the jobs this worker runs, and a second definition here once drifted from it
+// (the service's copy lacked InsertOpts, so jobs ran with River's 25 attempts).
+type (
+	OnboardingSacd = service.OnboardingSacd
+	OnboardingArgs = service.OnboardingArgs
+)
 
-type OnboardingArgs struct {
-	Owner     common.Address    `json:"owner"`
-	VIN       string            `json:"vin"`
-	TypedData *signer.TypedData `json:"typedData"`
-	Signature hexutil.Bytes     `json:"signature"`
-	Sacd      *OnboardingSacd   `json:"sacd,omitempty"`
-}
-
-func (a OnboardingArgs) Kind() string {
-	return "onboard"
-}
-func (a OnboardingArgs) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{
-		MaxAttempts: 1,
-		UniqueOpts: river.UniqueOpts{
-			ByArgs: false,
-		},
-	}
+// mintTransactor is the part of the transactions client the worker uses.
+type mintTransactor interface {
+	GetMintVehicleAndSDTypedDataV2(connectionID *big.Int) *signer.TypedData
+	GetMintSDTypedDataV2(connectionID *big.Int, vehicleNode *big.Int) *signer.TypedData
+	MintVehicleAndSDWithDD(data *registry.MintVehicleAndSdWithDdInput, waitForReceipt bool, getResult bool) (*zerodev.UserOperationResult, *transactions.MintVehicleAndSDWithDDResult, error)
+	MintVehicleAndSDWithDDAndSACD(data *registry.MintVehicleAndSdWithDdInput, sacdInput registry.SacdInput, waitForReceipt bool, getResult bool) (*zerodev.UserOperationResult, *transactions.MintVehicleAndSDWithDDResult, error)
+	MintSD(data *registry.MintSyntheticDeviceInput, waitForReceipt bool, getResult bool) (*zerodev.UserOperationResult, *transactions.MintSDResult, error)
 }
 
 type OnboardingWorker struct {
@@ -108,7 +98,7 @@ type OnboardingWorker struct {
 	logger   zerolog.Logger
 	identity service.IdentityAPIService
 	dbs      *db.Store
-	tr       *transactions.Client
+	tr       mintTransactor
 	ws       wallet.SDWalletsAPI
 	m        sync.RWMutex
 	//vendor   VendorOnboardingAPI
@@ -274,6 +264,10 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 		}
 		w.m.Unlock()
 
+		if result == nil {
+			return nil, w.markMintResultUnknown(record, args, sdIndex.NextVal, sdAddress)
+		}
+
 		record.WalletIndex = null.Int64From(int64(sdIndex.NextVal))
 		record.VehicleTokenID = null.Int64From(result.VehicleId.Int64())
 		record.SyntheticTokenID = null.Int64From(result.SyntheticDeviceNode.Int64())
@@ -299,6 +293,10 @@ func (w *OnboardingWorker) MintVehicleWithSDAndUpdate(ctx context.Context, recor
 			return nil, err
 		}
 		w.m.Unlock()
+
+		if result == nil {
+			return nil, w.markMintResultUnknown(record, args, sdIndex.NextVal, sdAddress)
+		}
 
 		record.WalletIndex = null.Int64From(int64(sdIndex.NextVal))
 		record.VehicleTokenID = null.Int64From(result.VehicleId.Int64())
@@ -369,6 +367,10 @@ func (w *OnboardingWorker) MintSDAndUpdate(ctx context.Context, record *dbmodels
 	}
 	w.m.Unlock()
 
+	if result == nil {
+		return nil, w.markMintResultUnknown(record, args, sdIndex.NextVal, sdAddress)
+	}
+
 	record.WalletIndex = null.Int64From(int64(sdIndex.NextVal))
 	record.SyntheticTokenID = null.Int64From(result.SyntheticDeviceNode.Int64())
 	record.OnboardingStatus = OnboardingStatusMintSuccess
@@ -410,6 +412,26 @@ func (w *OnboardingWorker) ConnectToVendorAndUpdate(ctx context.Context, record 
 	record.OnboardingStatus = OnboardingStatusConnectSuccess
 
 	return record, nil
+}
+
+// errMintResultUnknown: the mint was sent, but its result didn't come back.
+var errMintResultUnknown = errors.New("mint sent but its result is unknown")
+
+// markMintResultUnknown handles a mint that returned no error and no result. The
+// transactions client does that when the user operation was sent but its receipt
+// poll failed, so the mint is most likely on chain. Minting again would create a
+// second vehicle and SD, so the record is parked at MintUnknown, which is never
+// resubmitted, with the SD wallet index saved: the SD can be found on chain by
+// its address.
+func (w *OnboardingWorker) markMintResultUnknown(record *dbmodels.Onboarding, args OnboardingArgs, sdIndex uint32, sdAddress common.Address) error {
+	record.WalletIndex = null.Int64From(int64(sdIndex))
+	record.OnboardingStatus = OnboardingStatusMintUnknown
+	w.logger.Error().
+		Str(logfields.VIN, args.VIN).
+		Str("sdAddress", sdAddress.Hex()).
+		Uint32("walletIndex", sdIndex).
+		Msg("Mint sent but its result was lost; not retrying. Look the SD up by its address.")
+	return errMintResultUnknown
 }
 
 type SDWalletIndex struct {

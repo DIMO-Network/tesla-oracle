@@ -111,7 +111,9 @@ type OnboardingSacd struct {
 	Source      string         `json:"source"`
 }
 
-// OnboardingArgs represents job arguments for River
+// OnboardingArgs represents job arguments for River. It is the only definition:
+// the onboarding worker aliases it, so the options the service inserts with are
+// the ones the worker was written for.
 type OnboardingArgs struct {
 	Owner     common.Address    `json:"owner"`
 	VIN       string            `json:"vin"`
@@ -122,6 +124,17 @@ type OnboardingArgs struct {
 
 func (OnboardingArgs) Kind() string {
 	return "onboard"
+}
+
+// InsertOpts makes a mint job run once. A retry after a mint whose transaction
+// landed but whose result was lost would mint a second vehicle and SD.
+func (OnboardingArgs) InsertOpts() river.InsertOpts {
+	return river.InsertOpts{
+		MaxAttempts: 1,
+		UniqueOpts: river.UniqueOpts{
+			ByArgs: false,
+		},
+	}
 }
 
 // VehicleOnboardService handles all business logic for vehicle onboarding operations
