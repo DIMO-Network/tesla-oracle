@@ -474,6 +474,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/fiber.Error"
                         }
                     },
+                    "403": {
+                        "description": "No current Tesla login, or it doesn't list the VIN",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -534,6 +540,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/fiber.Error"
                         }
                     },
+                    "403": {
+                        "description": "No current Tesla login, or it doesn't list the VIN",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
                     "500": {
                         "description": "Internal server error",
                         "schema": {
@@ -586,6 +598,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "403": {
+                        "description": "No current Tesla login, or it doesn't list the VIN",
                         "schema": {
                             "$ref": "#/definitions/fiber.Error"
                         }
@@ -704,6 +722,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/fiber.Error"
+                        }
+                    },
+                    "403": {
+                        "description": "No current Tesla login, or it doesn't list the VIN",
                         "schema": {
                             "$ref": "#/definitions/fiber.Error"
                         }
