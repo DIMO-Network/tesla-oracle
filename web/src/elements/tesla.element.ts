@@ -284,7 +284,9 @@ export class TeslaElement extends BaseOnboardingElement {
                             ${this.checkVirtualKeyTask.render({
                                 initial: () => html``,
                                 pending: () => html`<span>Checking virtual key status...</span>`,
-                                complete: () => html`<span>Virtual key status: ${(this.checkVirtualKeyTask.value as VirtualKeyResponse).status}</span>`,
+                                complete: (value) => value && (value as VirtualKeyResponse).status
+                                    ? html`<span>Virtual key status: ${(value as VirtualKeyResponse).status}</span>`
+                                    : html`<span>Failed to check virtual key status. Log in to Tesla again and retry.</span>`,
                                 error: () => html`<span>Failed to check virtual key status</span>`,
                             })}
                         </div>

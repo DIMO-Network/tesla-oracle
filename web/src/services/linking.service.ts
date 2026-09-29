@@ -41,6 +41,9 @@ export class LinkingService {
         this.messageService.sendMessage({type: 'open', data: {url}});
         return new Promise<OpenMessageData>((resolve, reject) => {
             this.waitForOpenTimeout = setTimeout(() => {
+                // clear the pending open, or every later attempt is refused as "already scheduled"
+                this.waitForOpenTimeout = undefined;
+                this.waitForOpenResolve = undefined;
                 return reject('Link opening timed out')
             }, 120_000);
 

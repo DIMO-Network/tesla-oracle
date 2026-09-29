@@ -42,6 +42,9 @@ export class SigningService {
         // artificially waits until user completes operation by listening to a message coming from host with below onMessage, which is registered in useMessageService
         return new Promise<SignatureMessageData>((resolve, reject) => {
             this.waitForSignatureTimeout = setTimeout(() => {
+                // clear the pending signature, or every later attempt is refused as "already scheduled"
+                this.waitForSignatureTimeout = undefined;
+                this.waitForSignatureResolve = undefined;
                 return reject('Signature timed out')
             }, 120_000);
 

@@ -6,6 +6,14 @@ import qs from 'qs';
 import {range} from "lodash";
 import {delay} from "@utils/utils";
 
+// verify's status detail for a VIN an earlier attempt already minted (see the backend's DetailsReadyToFinalize)
+const READY_TO_FINALIZE = "Ready to finalize";
+
+// A mint can take minutes: the worker waits up to 240s for its receipt, after
+// any mints queued ahead of it. Poll for about 6 minutes.
+const MINT_STATUS_POLL_INTERVAL_MS = 5000;
+const MINT_STATUS_POLLS = 72;
+
 interface VehicleOnboardingData {
     vin: string;
     vehicleTokenId?: number;
@@ -128,24 +136,27 @@ export class BaseOnboardingElement extends LitElement {
         this.onboardResult = newResult
     }
 
-    // returns why verification failed, or null when every VIN passed
-    async verifyVehicles(vehicles: VehicleOnboardingData[]): Promise<string | null> {
+    // returns why verification failed (null when every VIN passed), and whether every
+    // VIN was already minted by an earlier attempt and only needs finalizing
+    async verifyVehicles(vehicles: VehicleOnboardingData[]): Promise<{error: string | null, readyToFinalize: boolean}> {
         const payload = {
             vins: vehicles
         }
 
         const verificationStatus = await this.api.callApi<VinsOnboardingResult>('POST', '/v1/vehicle/verify', payload, true);
         if (!verificationStatus.success || !verificationStatus.data) {
-            return verificationStatus.error || "unknown error";
+            return {error: verificationStatus.error || "unknown error", readyToFinalize: false};
         }
 
         for (const vinStatus of verificationStatus.data.statuses) {
             if (vinStatus.status != "Success") {
-                return vinStatus.details || vinStatus.status;
+                return {error: vinStatus.details || vinStatus.status, readyToFinalize: false};
             }
         }
 
-        return null;
+        const statuses = verificationStatus.data.statuses;
+        const readyToFinalize = statuses.length > 0 && statuses.every((s) => s.details === READY_TO_FINALIZE);
+        return {error: null, readyToFinalize};
     }
 
     async getMintingData(vins: string[]) {
@@ -193,7 +204,7 @@ export class BaseOnboardingElement extends LitElement {
         }
 
         let success = true
-        for (const attempt of range(30)) {
+        for (const attempt of range(MINT_STATUS_POLLS)) {
             success = true
             const query = qs.stringify({vins: mintingData.map(m => m.vin).join(',')}, {arrayFormat: 'comma'});
             // poll for the river job status, looking for Success
@@ -216,8 +227,8 @@ export class BaseOnboardingElement extends LitElement {
                 break;
             }
 
-            if (attempt < 29) {
-                await delay(5000);
+            if (attempt < MINT_STATUS_POLLS - 1) {
+                await delay(MINT_STATUS_POLL_INTERVAL_MS);
             }
         }
 
@@ -248,26 +259,29 @@ export class BaseOnboardingElement extends LitElement {
             return null;
         }
         // calls backend to make sure vehicle meets conditions. if a vehicle token id was passed in, verifies various things and updates record.
-        const verifyError = await this.verifyVehicles(vehicles);
-        if (verifyError) {
-            this.displayFailure(`Failed to verify vehicles: ${verifyError}`);
+        const verification = await this.verifyVehicles(vehicles);
+        if (verification.error) {
+            this.displayFailure(`Failed to verify vehicles: ${verification.error}`);
             return null;
         }
-        // get the typed data to be signed.
         const vins = vehicles.map((v) => v.vin);
-        const mintData = await this.getMintingData(vins);
-        if (mintData.length === 0) {
-            this.displayFailure("Failed to fetch minting data");
-            return null
-        }
-        // web3 operation to sign the passed in data, but signing is not done by the browser but instead by the host eg. mobile app
-        const signedMintData = await this.signMintingData(mintData);
-        // this step actually does the minting. Can do both Vehicle and Synthetic. Submits a River Job.
-        const minted = await this.submitMintingData(signedMintData);
+        // an earlier attempt already minted every VIN but never finalized: skip straight to finalize
+        if (!verification.readyToFinalize) {
+            // get the typed data to be signed.
+            const mintData = await this.getMintingData(vins);
+            if (mintData.length === 0) {
+                this.displayFailure("Failed to fetch minting data");
+                return null
+            }
+            // web3 operation to sign the passed in data, but signing is not done by the browser but instead by the host eg. mobile app
+            const signedMintData = await this.signMintingData(mintData);
+            // this step actually does the minting. Can do both Vehicle and Synthetic. Submits a River Job.
+            const minted = await this.submitMintingData(signedMintData);
 
-        if (!minted) {
-            this.displayFailure("Failed to onboard at least one VIN");
-            return null;
+            if (!minted) {
+                this.displayFailure("Failed to onboard at least one VIN");
+                return null;
+            }
         }
         // unique step for tesla. Creates record in the main oracle table, synthetic devices, and then deletes the onboarding record: Migrates the data.
         const finalized = await this.finalize(vins);

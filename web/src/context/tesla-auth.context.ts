@@ -11,4 +11,6 @@ export interface TeslaAuthContext {
     issuer: string;
 }
 
-export const teslaAuthContext = createContext<TeslaAuthContext>('auth');
+// Its own key: sharing 'auth' with authContext made consumers of authContext get
+// this context from the nearer tesla-auth-provider instead.
+export const teslaAuthContext = createContext<TeslaAuthContext>('tesla-auth');
