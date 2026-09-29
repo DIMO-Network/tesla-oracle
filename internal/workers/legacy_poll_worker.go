@@ -81,7 +81,8 @@ func (w *LegacyTeslaPollWorker) NextRetry(*river.Job[LegacyTeslaPollArgs]) time.
 // Work polls the vehicle once. Before calling Tesla it completes this job and
 // inserts the next poll in one transaction, so nothing that goes wrong during the
 // poll, including losing the pod, can end polling for the vehicle. Returning
-// before that ends polling; a later /start schedules it again.
+// nil before that ends polling until a later /start; an error retries the run
+// (see NextRetry).
 func (w *LegacyTeslaPollWorker) Work(ctx context.Context, job *river.Job[LegacyTeslaPollArgs]) error {
 	logger := w.logger.With().
 		Int("vehicleTokenId", job.Args.VehicleTokenID).
