@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bytes"
 	"context"
 	er "errors"
 	"fmt"
@@ -186,11 +187,27 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 		return fmt.Errorf("%w: %s", core.ErrSyntheticDeviceNotFound, err.Error())
 	}
 
-	// Unsubscribe from telemetry data
-	err = ts.fleetAPISvc.UnSubscribeFromTelemetryData(ctx, partnersTokenResp.AccessToken, device.Vin)
+	// Several vehicle NFTs can each hold a connection to the same car, and Tesla keeps
+	// one telemetry config per VIN for this app. Deleting it while another connection
+	// is active would stop that connection's data too, so only this row goes inactive.
+	otherActive, err := ts.countOtherActiveConnections(ctx, device)
 	if err != nil {
-		ts.logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
+		ts.logger.Err(err).Str("vin", device.Vin).Msg("Failed to look up the car's other connections.")
 		return fmt.Errorf("%w: %s", core.ErrTelemetryUnsubscribe, err.Error())
+	}
+
+	if otherActive > 0 {
+		ts.logger.Info().
+			Str("vin", device.Vin).
+			Int64("vehicleTokenId", tokenID).
+			Int("otherActiveConnections", otherActive).
+			Msg("Keeping the car's Tesla telemetry config: another connection is still active.")
+	} else {
+		err = ts.fleetAPISvc.UnSubscribeFromTelemetryData(ctx, partnersTokenResp.AccessToken, device.Vin)
+		if err != nil {
+			ts.logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
+			return fmt.Errorf("%w: %s", core.ErrTelemetryUnsubscribe, err.Error())
+		}
 	}
 
 	// Update subscription status
@@ -201,6 +218,26 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 	}
 
 	return nil
+}
+
+// countOtherActiveConnections counts the connections to device's car, other than
+// device itself, whose subscription is active.
+func (ts *TeslaService) countOtherActiveConnections(ctx context.Context, device *dbmodels.SyntheticDevice) (int, error) {
+	connections, err := ts.repositories.Vehicle.GetSyntheticDevicesByVIN(ctx, device.Vin)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, other := range connections {
+		if bytes.Equal(other.Address, device.Address) {
+			continue
+		}
+		if other.SubscriptionStatus.Valid && other.SubscriptionStatus.String == "active" {
+			count++
+		}
+	}
+	return count, nil
 }
 
 // ProcessAuthCodeExchange handles complete auth code exchange and validation flow

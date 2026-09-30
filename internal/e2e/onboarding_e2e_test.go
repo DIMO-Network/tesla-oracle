@@ -749,6 +749,36 @@ func TestTeslaOnboardingE2E(t *testing.T) {
 		require.Equal(t, sends, h.chain.sendCount(), "no second mint")
 		require.Equal(t, 1, h.count(`SELECT count(*) FROM tesla_oracle.synthetic_devices WHERE vehicle_token_id=500070 AND token_id=600070 AND subscription_status='active'`))
 	})
+
+	t.Run("13 unsubscribing one of a car's connections keeps the others streaming", func(t *testing.T) {
+		h := h.with(t)
+		const vin13 = "7SAYGDEE1SA000013"
+		addrA := common.HexToAddress("0x0000000000000000000000000000000000001301")
+		addrB := common.HexToAddress("0x0000000000000000000000000000000000001302")
+		// Two wallets' vehicle NFTs, each connected to the same Tesla.
+		h.insertDevice(addrA, vin13, 501301, ptr(int64(601301)), ptr(int64(1301)), "at-13a", "rt-13a", time.Now().Add(time.Hour), "active")
+		h.insertDevice(addrB, vin13, 501302, ptr(int64(601302)), ptr(int64(1302)), "at-13b", "rt-13b", time.Now().Add(time.Hour), "active")
+		h.identity.setVehicle(501301, idVehicle{owner: walletA, ddID: ddID, sdTokenID: 601301, sdAddress: addrA})
+		h.identity.setVehicle(501302, idVehicle{owner: walletB, ddID: ddID, sdTokenID: 601302, sdAddress: addrB})
+		status := func(vehicleID int) string {
+			var s string
+			require.NoError(t, h.db.QueryRowContext(h.ctx, `SELECT subscription_status FROM tesla_oracle.synthetic_devices WHERE vehicle_token_id=$1`, vehicleID).Scan(&s))
+			return s
+		}
+
+		// Wallet A's subscription ends (the backend's Stripe webhook or expired-trial cleanup).
+		code, raw := h.call(http.MethodPost, "/v1/telemetry/unsubscribe/501301", jwtDev, nil)
+		require.Equal(t, http.StatusOK, code, string(raw))
+		require.Equal(t, 0, h.tesla.configDeleteCount(vin13), "B is still active: Tesla's config for the car must stay")
+		require.Equal(t, "inactive", status(501301))
+		require.Equal(t, "active", status(501302))
+
+		// Then B's ends too: nobody is left, so the config goes.
+		code, raw = h.call(http.MethodPost, "/v1/telemetry/unsubscribe/501302", jwtDev, nil)
+		require.Equal(t, http.StatusOK, code, string(raw))
+		require.Equal(t, 1, h.tesla.configDeleteCount(vin13))
+		require.Equal(t, "inactive", status(501302))
+	})
 }
 
 // --- a minimal sarama session and claim to drive the contract-event consumer ---

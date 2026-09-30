@@ -102,6 +102,7 @@ type fakeTesla struct {
 	flushedRefresh map[string]bool     // refresh tokens Tesla answers with login_required
 	fleet          map[string]fleetFixture
 	refreshCalls   map[string]int
+	configDeletes  map[string]int // VIN -> DELETE fleet_telemetry_config calls
 	wakes          int
 	scopes         []string
 }
@@ -114,6 +115,7 @@ func newFakeTesla(t *testing.T, scopes []string) *fakeTesla {
 		flushedRefresh: map[string]bool{},
 		fleet:          map[string]fleetFixture{},
 		refreshCalls:   map[string]int{},
+		configDeletes:  map[string]int{},
 		scopes:         scopes,
 	}
 	mux := http.NewServeMux()
@@ -287,6 +289,12 @@ func (f *fakeTesla) fleetStatus(w http.ResponseWriter, r *http.Request) {
 	}})
 }
 
+func (f *fakeTesla) configDeleteCount(vin string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.configDeletes[vin]
+}
+
 func (f *fakeTesla) wakeCount() int {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -312,6 +320,9 @@ func (f *fakeTesla) vehicleSubresource(w http.ResponseWriter, r *http.Request) {
 	fx := f.fleet[parts[0]]
 	f.mu.Unlock()
 	if r.Method == http.MethodDelete {
+		f.mu.Lock()
+		f.configDeletes[parts[0]]++
+		f.mu.Unlock()
 		writeJSON(w, http.StatusOK, map[string]any{"response": map[string]any{"updated_vehicles": 1}})
 		return
 	}
@@ -330,6 +341,7 @@ type idVehicle struct {
 	owner     common.Address
 	ddID      string
 	sdTokenID int64
+	sdAddress common.Address
 	visibleAt time.Time // identity-api hasn't indexed the mint before this
 	// sdVisibleAt: identity-api shows the vehicle without its SD before this (an SD
 	// minted onto an existing vehicle, not indexed yet).
@@ -364,7 +376,7 @@ func (f *fakeIdentity) setVehicle(tokenID int64, v idVehicle) {
 func (f *fakeIdentity) vehicleJSON(tokenID int64, v *idVehicle) map[string]any {
 	var sd any
 	if v.sdTokenID != 0 && !time.Now().Before(v.sdVisibleAt) {
-		sd = map[string]any{"id": "sd", "tokenId": v.sdTokenID, "mintedAt": time.Now().UTC().Format(time.RFC3339)}
+		sd = map[string]any{"id": "sd", "tokenId": v.sdTokenID, "mintedAt": time.Now().UTC().Format(time.RFC3339), "address": v.sdAddress.Hex()}
 	}
 	return map[string]any{
 		"id":              "v",
