@@ -809,6 +809,39 @@ func TestTeslaOnboardingE2E(t *testing.T) {
 		require.Equal(t, 1, h.tesla.configDeleteCount(vin14))
 		require.Equal(t, "inactive", status(501402))
 	})
+
+	t.Run("15 starting data flow again makes an unsubscribed connection live", func(t *testing.T) {
+		h := h.with(t)
+		// A driver whose connection was unsubscribed comes back and starts data flow.
+		// The car streams to the connection again, so it has to count as live, or
+		// another connection's unsubscribe would delete the car's config.
+		const vin15 = "7SAYGDEE1SA000015"
+		h.tesla.setFleet(vin15, fleetFixture{VCP: true, KeyPaired: true, Firmware: "2025.32.3"})
+		h.tesla.mu.Lock()
+		access := h.tesla.accessToken("device")
+		h.tesla.mu.Unlock()
+		h.insertDevice(common.HexToAddress("0x0000000000000000000000000000000000001501"), vin15, 501501, ptr(int64(601501)), ptr(int64(1501)), access, "rt-15", time.Now().Add(time.Hour), "inactive")
+		h.identity.setVehicle(501501, idVehicle{owner: walletA, ddID: ddID, sdTokenID: 601501})
+
+		code, raw := h.call(http.MethodPost, "/v1/telemetry/501501/start", jwtA, nil)
+		require.Equal(t, http.StatusOK, code, string(raw))
+		require.Equal(t, 1, h.count(`SELECT count(*) FROM tesla_oracle.synthetic_devices WHERE vehicle_token_id=501501 AND subscription_status='pending'`))
+	})
+
+	t.Run("16 unsubscribing a car with no Tesla config marks it inactive", func(t *testing.T) {
+		h := h.with(t)
+		// Tesla has nothing to delete (the car never streamed, or its config is gone).
+		const vin16 = "7SAYGDEE1SA000016"
+		addr := common.HexToAddress("0x0000000000000000000000000000000000001601")
+		h.tesla.setFleet(vin16, fleetFixture{NoConfig: true})
+		h.insertDevice(addr, vin16, 501601, ptr(int64(601601)), ptr(int64(1601)), "", "", time.Time{}, "pending")
+		h.identity.setVehicle(501601, idVehicle{owner: walletA, ddID: ddID, sdTokenID: 601601, sdAddress: addr})
+
+		code, raw := h.call(http.MethodPost, "/v1/telemetry/unsubscribe/501601", jwtDev, nil)
+		require.Equal(t, http.StatusOK, code, string(raw))
+		require.Equal(t, 1, h.tesla.configDeleteCount(vin16))
+		require.Equal(t, 1, h.count(`SELECT count(*) FROM tesla_oracle.synthetic_devices WHERE vehicle_token_id=501601 AND subscription_status='inactive'`))
+	})
 }
 
 // --- a minimal sarama session and claim to drive the contract-event consumer ---

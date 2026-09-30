@@ -70,6 +70,8 @@ func TestUnsubscribeFromTelemetrySharedVIN(t *testing.T) {
 		}
 	}
 	const thisAddr = "0x0000000000000000000000000000000000001301"
+	// What Tesla answers the config delete with; a subtest can change it.
+	var unsubErr error
 
 	setup := func(t *testing.T, others dbmodels.SyntheticDeviceSlice, lookupErr error) (*TeslaService, *mockVehicleRepository, *repository_test_MockTeslaFleetAPIServiceAdapter, *dbmodels.SyntheticDevice) {
 		vehicleRepo := new(mockVehicleRepository)
@@ -90,7 +92,7 @@ func TestUnsubscribeFromTelemetrySharedVIN(t *testing.T) {
 			// The VIN's connected rows include this one.
 			vehicleRepo.On("GetSyntheticDevicesByVIN", mock.Anything, vin).Return(append(dbmodels.SyntheticDeviceSlice{this}, others...), nil)
 		}
-		fleetAPI.On("UnSubscribeFromTelemetryData", mock.Anything, partnerToken, vin).Return(nil).Maybe()
+		fleetAPI.On("UnSubscribeFromTelemetryData", mock.Anything, partnerToken, vin).Return(unsubErr).Maybe()
 		vehicleRepo.On("UpdateSyntheticDeviceSubscriptionStatus", mock.Anything, this, "inactive").Return(nil).Maybe()
 
 		cip := new(cipher.ROT13Cipher)
@@ -154,6 +156,28 @@ func TestUnsubscribeFromTelemetrySharedVIN(t *testing.T) {
 
 		fleetAPI.AssertCalled(t, "UnSubscribeFromTelemetryData", mock.Anything, partnerToken, vin)
 		vehicleRepo.AssertCalled(t, "UpdateSyntheticDeviceSubscriptionStatus", mock.Anything, this, "inactive")
+	})
+
+	t.Run("a car with no Tesla config still goes inactive", func(t *testing.T) {
+		unsubErr = core.ErrNoTelemetryConfig
+		defer func() { unsubErr = nil }()
+		svc, vehicleRepo, fleetAPI, this := setup(t, nil, nil)
+
+		require.NoError(t, svc.UnsubscribeFromTelemetry(ctx, 501301, devLicense))
+
+		fleetAPI.AssertCalled(t, "UnSubscribeFromTelemetryData", mock.Anything, partnerToken, vin)
+		vehicleRepo.AssertCalled(t, "UpdateSyntheticDeviceSubscriptionStatus", mock.Anything, this, "inactive")
+	})
+
+	t.Run("a failed config delete changes nothing, so the caller retries", func(t *testing.T) {
+		unsubErr = errors.New("tesla: 503")
+		defer func() { unsubErr = nil }()
+		svc, vehicleRepo, _, this := setup(t, nil, nil)
+
+		require.Error(t, svc.UnsubscribeFromTelemetry(ctx, 501301, devLicense))
+
+		vehicleRepo.AssertNotCalled(t, "UpdateSyntheticDeviceSubscriptionStatus", mock.Anything, mock.Anything, mock.Anything)
+		require.Equal(t, "active", this.SubscriptionStatus.String)
 	})
 
 	t.Run("a failed lookup changes nothing, so the caller retries", func(t *testing.T) {

@@ -91,6 +91,7 @@ type fleetFixture struct {
 	Firmware   string
 	Toggle     *bool
 	Configured bool // fleet_telemetry_config already set
+	NoConfig   bool // a config delete finds nothing to remove
 }
 
 type fakeTesla struct {
@@ -323,7 +324,11 @@ func (f *fakeTesla) vehicleSubresource(w http.ResponseWriter, r *http.Request) {
 		f.mu.Lock()
 		f.configDeletes[parts[0]]++
 		f.mu.Unlock()
-		writeJSON(w, http.StatusOK, map[string]any{"response": map[string]any{"updated_vehicles": 1}})
+		updated := 1
+		if fx.NoConfig {
+			updated = 0
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"response": map[string]any{"updated_vehicles": updated}})
 		return
 	}
 	var config any
