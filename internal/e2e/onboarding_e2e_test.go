@@ -779,6 +779,36 @@ func TestTeslaOnboardingE2E(t *testing.T) {
 		require.Equal(t, 1, h.tesla.configDeleteCount(vin13))
 		require.Equal(t, "inactive", status(501302))
 	})
+
+	t.Run("14 a pending connection keeps the car streaming when another is unsubscribed", func(t *testing.T) {
+		h := h.with(t)
+		// Onboarding leaves connections "pending"; the backend's subscribe call is what
+		// makes one "active", so a paying driver's connection is usually still "pending".
+		const vin14 = "7SAYGDEE1SA000014"
+		addrA := common.HexToAddress("0x0000000000000000000000000000000000001401")
+		addrB := common.HexToAddress("0x0000000000000000000000000000000000001402")
+		h.insertDevice(addrA, vin14, 501401, ptr(int64(601401)), ptr(int64(1401)), "at-14a", "rt-14a", time.Now().Add(time.Hour), "pending")
+		h.insertDevice(addrB, vin14, 501402, ptr(int64(601402)), ptr(int64(1402)), "at-14b", "rt-14b", time.Now().Add(time.Hour), "pending")
+		h.identity.setVehicle(501401, idVehicle{owner: walletA, ddID: ddID, sdTokenID: 601401, sdAddress: addrA})
+		h.identity.setVehicle(501402, idVehicle{owner: walletB, ddID: ddID, sdTokenID: 601402, sdAddress: addrB})
+		status := func(vehicleID int) string {
+			var s string
+			require.NoError(t, h.db.QueryRowContext(h.ctx, `SELECT subscription_status FROM tesla_oracle.synthetic_devices WHERE vehicle_token_id=$1`, vehicleID).Scan(&s))
+			return s
+		}
+
+		// A's subscription is cancelled (the backend's nightly cleanup).
+		code, raw := h.call(http.MethodPost, "/v1/telemetry/unsubscribe/501401", jwtDev, nil)
+		require.Equal(t, http.StatusOK, code, string(raw))
+		require.Equal(t, 0, h.tesla.configDeleteCount(vin14), "B never went through the backend's subscribe, but it is still connected")
+		require.Equal(t, "inactive", status(501401))
+		require.Equal(t, "pending", status(501402))
+
+		code, raw = h.call(http.MethodPost, "/v1/telemetry/unsubscribe/501402", jwtDev, nil)
+		require.Equal(t, http.StatusOK, code, string(raw))
+		require.Equal(t, 1, h.tesla.configDeleteCount(vin14))
+		require.Equal(t, "inactive", status(501402))
+	})
 }
 
 // --- a minimal sarama session and claim to drive the contract-event consumer ---
