@@ -683,6 +683,11 @@ func (t *teslaFleetAPIService) UnSubscribeFromTelemetryData(ctx context.Context,
 		return fmt.Errorf("failed to parse response body: %w", err)
 	}
 
+	// Tesla removed nothing: the vehicle had no telemetry config for this app.
+	if response.Response.UpdatedVehicles == 0 {
+		return ErrNoTelemetryConfig
+	}
+
 	// Check if the response indicates success
 	if response.Response.UpdatedVehicles != 1 {
 		return fmt.Errorf("unexpected response: updated_vehicles=%d", response.Response.UpdatedVehicles)
@@ -715,6 +720,9 @@ func (t *teslaFleetAPIService) GetTelemetrySubscriptionStatus(ctx context.Contex
 }
 
 var ErrFleetAPIUnauthorized = errors.New("unauthorized")
+
+// ErrNoTelemetryConfig means Tesla had no telemetry config to delete for the vehicle.
+var ErrNoTelemetryConfig = errors.New("vehicle has no telemetry config")
 
 // performRequest a helper function for making http requests, it adds a timeout context and parses error response
 func (t *teslaFleetAPIService) performRequest(ctx context.Context, url *url.URL, token, method string, body []byte) ([]byte, error) {

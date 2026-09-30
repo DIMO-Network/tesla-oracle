@@ -204,7 +204,11 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 			Msg("Keeping the car's Tesla telemetry config: another connection is still live.")
 	} else {
 		err = ts.fleetAPISvc.UnSubscribeFromTelemetryData(ctx, partnersTokenResp.AccessToken, device.Vin)
-		if err != nil {
+		switch {
+		case errors.Is(err, core.ErrNoTelemetryConfig):
+			// Nothing streams to us for this car, so there is nothing to stop.
+			ts.logger.Info().Str("vin", device.Vin).Int64("vehicleTokenId", tokenID).Msg("The car had no Tesla telemetry config to delete.")
+		case err != nil:
 			ts.logger.Err(err).Str("vin", device.Vin).Msg("Failed to unsubscribe from telemetry data")
 			return fmt.Errorf("%w: %s", core.ErrTelemetryUnsubscribe, err.Error())
 		}
@@ -818,6 +822,15 @@ func (ts *TeslaService) startStreamingOrPolling(ctx context.Context, sd *dbmodel
 		if err := ts.fleetAPISvc.SubscribeForTelemetryData(ctx, accessToken, sd.Vin); err != nil {
 			ts.logger.Err(err).Msg("Error registering for telemetry")
 			return fmt.Errorf("%w: %s", core.ErrTelemetryConfigFailed, err.Error())
+		}
+
+		// The car streams to this connection again, so an unsubscribed row is live.
+		// Only "inactive" (or no status) changes; "active" and "pending" already count.
+		if sd.SubscriptionStatus.String == "inactive" || !sd.SubscriptionStatus.Valid {
+			if err := ts.repositories.Vehicle.UpdateSyntheticDeviceSubscriptionStatus(ctx, sd, "pending"); err != nil {
+				ts.logger.Err(err).Msg("Failed to update subscription status.")
+				return fmt.Errorf("%w: %s", core.ErrSubscriptionStatusUpdate, err.Error())
+			}
 		}
 
 	case ActionStartPolling:
