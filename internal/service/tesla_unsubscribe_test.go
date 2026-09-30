@@ -52,7 +52,7 @@ func (m *mockIdentityService) FetchDeviceDefinitionByID(id string) (*models.Devi
 
 // Several vehicle NFTs, from different wallets, can each hold a connection to the
 // same Tesla. Tesla keeps one fleet_telemetry_config per VIN for our app, so
-// unsubscribing one connection must not delete it while another is still active.
+// unsubscribing one connection must not delete it while another is still live.
 func TestUnsubscribeFromTelemetrySharedVIN(t *testing.T) {
 	ctx := context.Background()
 	logger := zerolog.New(nil)
@@ -111,10 +111,33 @@ func TestUnsubscribeFromTelemetrySharedVIN(t *testing.T) {
 		require.Equal(t, "active", other.SubscriptionStatus.String)
 	})
 
-	t.Run("other connections that aren't active don't keep it", func(t *testing.T) {
+	// Onboarding leaves a connection "pending"; only the backend's subscribe call makes
+	// it "active". A paying driver's connection is usually "pending", and it streams.
+	t.Run("another pending connection keeps Tesla's config", func(t *testing.T) {
+		other := row("0x0000000000000000000000000000000000001302", 501302, 601302, "pending")
+		svc, vehicleRepo, fleetAPI, this := setup(t, dbmodels.SyntheticDeviceSlice{other}, nil)
+
+		require.NoError(t, svc.UnsubscribeFromTelemetry(ctx, 501301, devLicense))
+
+		fleetAPI.AssertNotCalled(t, "UnSubscribeFromTelemetryData", mock.Anything, mock.Anything, mock.Anything)
+		vehicleRepo.AssertCalled(t, "UpdateSyntheticDeviceSubscriptionStatus", mock.Anything, this, "inactive")
+		require.Equal(t, "pending", other.SubscriptionStatus.String)
+	})
+
+	t.Run("another connection with no status keeps Tesla's config", func(t *testing.T) {
+		other := row("0x0000000000000000000000000000000000001302", 501302, 601302, "")
+		other.SubscriptionStatus = null.String{}
+		svc, _, fleetAPI, _ := setup(t, dbmodels.SyntheticDeviceSlice{other}, nil)
+
+		require.NoError(t, svc.UnsubscribeFromTelemetry(ctx, 501301, devLicense))
+
+		fleetAPI.AssertNotCalled(t, "UnSubscribeFromTelemetryData", mock.Anything, mock.Anything, mock.Anything)
+	})
+
+	t.Run("unsubscribed connections don't keep it", func(t *testing.T) {
 		others := dbmodels.SyntheticDeviceSlice{
 			row("0x0000000000000000000000000000000000001302", 501302, 601302, "inactive"),
-			row("0x0000000000000000000000000000000000001303", 501303, 601303, "pending"),
+			row("0x0000000000000000000000000000000000001303", 501303, 601303, "inactive"),
 		}
 		svc, vehicleRepo, fleetAPI, this := setup(t, others, nil)
 

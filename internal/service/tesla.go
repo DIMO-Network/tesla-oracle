@@ -189,19 +189,19 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 
 	// Several vehicle NFTs can each hold a connection to the same car, and Tesla keeps
 	// one telemetry config per VIN for this app. Deleting it while another connection
-	// is active would stop that connection's data too, so only this row goes inactive.
-	otherActive, err := ts.countOtherActiveConnections(ctx, device)
+	// is still live would stop that connection's data too, so only this row goes inactive.
+	otherLive, err := ts.countOtherLiveConnections(ctx, device)
 	if err != nil {
 		ts.logger.Err(err).Str("vin", device.Vin).Msg("Failed to look up the car's other connections.")
 		return fmt.Errorf("%w: %s", core.ErrTelemetryUnsubscribe, err.Error())
 	}
 
-	if otherActive > 0 {
+	if otherLive > 0 {
 		ts.logger.Info().
 			Str("vin", device.Vin).
 			Int64("vehicleTokenId", tokenID).
-			Int("otherActiveConnections", otherActive).
-			Msg("Keeping the car's Tesla telemetry config: another connection is still active.")
+			Int("otherLiveConnections", otherLive).
+			Msg("Keeping the car's Tesla telemetry config: another connection is still live.")
 	} else {
 		err = ts.fleetAPISvc.UnSubscribeFromTelemetryData(ctx, partnersTokenResp.AccessToken, device.Vin)
 		if err != nil {
@@ -220,9 +220,12 @@ func (ts *TeslaService) UnsubscribeFromTelemetry(ctx context.Context, tokenID in
 	return nil
 }
 
-// countOtherActiveConnections counts the connections to device's car, other than
-// device itself, whose subscription is active.
-func (ts *TeslaService) countOtherActiveConnections(ctx context.Context, device *dbmodels.SyntheticDevice) (int, error) {
+// countOtherLiveConnections counts the connections to device's car, other than
+// device itself, that haven't been unsubscribed. A connection is live unless its
+// status is "inactive": onboarding leaves it "pending" and only the backend's
+// subscribe call makes it "active", so most connections that stream are "pending".
+// GetSyntheticDevicesByVIN already skips rows whose SD was burned.
+func (ts *TeslaService) countOtherLiveConnections(ctx context.Context, device *dbmodels.SyntheticDevice) (int, error) {
 	connections, err := ts.repositories.Vehicle.GetSyntheticDevicesByVIN(ctx, device.Vin)
 	if err != nil {
 		return 0, err
@@ -233,9 +236,10 @@ func (ts *TeslaService) countOtherActiveConnections(ctx context.Context, device 
 		if bytes.Equal(other.Address, device.Address) {
 			continue
 		}
-		if other.SubscriptionStatus.Valid && other.SubscriptionStatus.String == "active" {
-			count++
+		if other.SubscriptionStatus.Valid && other.SubscriptionStatus.String == "inactive" {
+			continue
 		}
+		count++
 	}
 	return count, nil
 }
