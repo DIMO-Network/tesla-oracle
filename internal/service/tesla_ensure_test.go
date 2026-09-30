@@ -27,7 +27,11 @@ func (m *mockVehicleRepository) GetSyntheticDeviceByVin(ctx context.Context, vin
 }
 
 func (m *mockVehicleRepository) GetSyntheticDevicesByVIN(ctx context.Context, vin string) (dbmodels.SyntheticDeviceSlice, error) {
-	panic("not implemented")
+	args := m.Called(ctx, vin)
+	if args.Get(0) != nil {
+		return args.Get(0).(dbmodels.SyntheticDeviceSlice), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *mockVehicleRepository) GetSyntheticDevicesByVins(ctx context.Context, vins []string) (dbmodels.SyntheticDeviceSlice, error) {
@@ -51,7 +55,11 @@ func (m *mockVehicleRepository) CompleteOnboarding(ctx context.Context, device *
 }
 
 func (m *mockVehicleRepository) GetSyntheticDeviceByAddress(ctx context.Context, address common.Address) (*dbmodels.SyntheticDevice, error) {
-	panic("not implemented")
+	args := m.Called(ctx, address)
+	if args.Get(0) != nil {
+		return args.Get(0).(*dbmodels.SyntheticDevice), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *mockVehicleRepository) UpdateSyntheticDeviceSubscriptionStatus(ctx context.Context, device *dbmodels.SyntheticDevice, status string) error {
@@ -233,7 +241,8 @@ func (m *repository_test_MockTeslaFleetAPIServiceAdapter) SubscribeForTelemetryD
 }
 
 func (m *repository_test_MockTeslaFleetAPIServiceAdapter) UnSubscribeFromTelemetryData(ctx context.Context, token, vin string) error {
-	panic("not implemented")
+	args := m.Called(ctx, token, vin)
+	return args.Error(0)
 }
 
 func (m *repository_test_MockTeslaFleetAPIServiceAdapter) GetTelemetrySubscriptionStatus(ctx context.Context, token, vin string) (*core.VehicleTelemetryStatus, error) {
@@ -245,7 +254,11 @@ func (m *repository_test_MockTeslaFleetAPIServiceAdapter) GetTelemetrySubscripti
 }
 
 func (m *repository_test_MockTeslaFleetAPIServiceAdapter) GetPartnersToken(ctx context.Context) (*core.PartnersAccessTokenResponse, error) {
-	panic("not implemented")
+	args := m.Called(ctx)
+	if args.Get(0) != nil {
+		return args.Get(0).(*core.PartnersAccessTokenResponse), args.Error(1)
+	}
+	return nil, args.Error(1)
 }
 
 func (m *repository_test_MockTeslaFleetAPIServiceAdapter) RefreshToken(ctx context.Context, refreshToken string) (*core.RefreshTokenResp, error) {
