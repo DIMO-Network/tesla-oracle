@@ -20,7 +20,7 @@ require (
 	github.com/friendsofgo/errors v0.9.2
 	github.com/goccy/go-json v0.10.4
 	github.com/gofiber/contrib/jwt v1.1.2
-	github.com/gofiber/fiber/v2 v2.52.12
+	github.com/gofiber/fiber/v2 v2.52.13
 	github.com/gofiber/swagger v1.1.0
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/grpc-ecosystem/go-grpc-middleware v1.4.0
