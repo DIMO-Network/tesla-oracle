@@ -23,6 +23,8 @@ securityContext:
 env:
   LOG_LEVEL: debug
   ENVIRONMENT: dev
+  TOKEN_EXCHANGE_GRPC_ADDR: token-exchange-api-dev:8086
+  SIGNER_CHECK_MODE: log
   MON_PORT: '8888'
   WEB_PORT: '8080'
   GRPC_PORT: '8086'

@@ -11,6 +11,8 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/middleware"
 	"github.com/DIMO-Network/tesla-oracle/internal/rpc"
 	grpc_oracle "github.com/DIMO-Network/tesla-oracle/pkg/grpc"
+	txgrpc "github.com/DIMO-Network/token-exchange-api/pkg/grpc"
+	"github.com/DIMO-Network/token-exchange-api/pkg/signercheck"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/adaptor"
 	grpc_middleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -21,6 +23,7 @@ import (
 	"github.com/rs/zerolog"
 	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // ServerManager manages all application servers
@@ -44,6 +47,15 @@ func NewServerManager(settings *config.Settings, logger *zerolog.Logger, service
 
 // Initialize sets up all servers
 func (sm *ServerManager) Initialize() error {
+	tokenExchangeConn, err := grpc.NewClient(sm.settings.TokenExchangeGRPCAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		return fmt.Errorf("failed to create token-exchange gRPC client: %w", err)
+	}
+	signerCheck, err := app.SignerCheck(sm.settings, signercheck.NewGRPCChecker(txgrpc.NewTokenExchangeServiceClient(tokenExchangeConn)), sm.logger)
+	if err != nil {
+		return err
+	}
+
 	// Create monitoring server
 	sm.monitoringApp = sm.createMonitoringServer()
 
@@ -55,6 +67,7 @@ func (sm *ServerManager) Initialize() error {
 		sm.services.VehicleOnboardService,
 		sm.services.RiverClient,
 		sm.services.Repositories.Command,
+		signerCheck,
 	)
 
 	// Create gRPC server
