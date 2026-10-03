@@ -20,8 +20,8 @@ github.com/DIMO-Network/shared v1.0.7 h1:LfSgsqJ6R7EUyfo2GTfuhrCpoDcweJqe7eVOa4j
 github.com/DIMO-Network/shared v1.0.7/go.mod h1:lDHUKwwT2LW6Zvd42Nb33dXklRNTmfyOlbUNx2dQfGY=
 github.com/DIMO-Network/synthetic-wallet-instance v0.0.0-20250520010101-f9981f12cbe6 h1:kr2AOLbLgwU3lAjrOxBZ9qOi/Pnx4SeH2wDDIrBPsmg=
 github.com/DIMO-Network/synthetic-wallet-instance v0.0.0-20250520010101-f9981f12cbe6/go.mod h1:VLEDT8Pnx2GGfBlO/0zpBbvQQRFVFEwNLrWl+0RUfTY=
-github.com/DIMO-Network/token-exchange-api v0.4.1-0.20261003024818-ccd2cadc2dac h1:6YSdo9N1rbYwVHMy5Bm2frDe41sqOsDKFdhMSoDnzXQ=
-github.com/DIMO-Network/token-exchange-api v0.4.1-0.20261003024818-ccd2cadc2dac/go.mod h1:QhyhSYXwupZNIB+hPk63p/n/J4TBGCmD1XYc5/3857Q=
+github.com/DIMO-Network/token-exchange-api v0.4.1-0.20261003032931-24b46c97a0fb h1:TMLHVfKy/pG042Z0S4qMd5P5KdOIKGwgH2+VkfblYZw=
+github.com/DIMO-Network/token-exchange-api v0.4.1-0.20261003032931-24b46c97a0fb/go.mod h1:QhyhSYXwupZNIB+hPk63p/n/J4TBGCmD1XYc5/3857Q=
 github.com/DIMO-Network/yaml v0.1.0 h1:KQ3oKHUZETchR6Pxbmmol3e4ewrPv/q8cEwqxfwyZbU=
 github.com/DIMO-Network/yaml v0.1.0/go.mod h1:KkiehcbkVzH8Pf8f9dja8B2aW81gYYZSqfwzSj9yN68=
 github.com/DataDog/zstd v1.4.5 h1:EndNeuB0l9syBZhut0wns3gV1hL8zX8LIu6ZiVHWLIQ=

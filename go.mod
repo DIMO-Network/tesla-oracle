@@ -7,7 +7,7 @@ require (
 	github.com/DIMO-Network/go-transactions v0.3.4
 	github.com/DIMO-Network/go-zerodev v0.4.2
 	github.com/DIMO-Network/shared v1.0.7
-	github.com/DIMO-Network/token-exchange-api v0.4.1-0.20261003024818-ccd2cadc2dac
+	github.com/DIMO-Network/token-exchange-api v0.4.1-0.20261003032931-24b46c97a0fb
 	github.com/IBM/sarama v1.43.3
 	github.com/aarondl/null/v8 v8.1.3
 	github.com/aarondl/sqlboiler/v4 v4.19.5
