@@ -30,6 +30,7 @@ func App(
 	vehicleOnboardService service.VehicleOnboardService,
 	riverClient *river.Client[pgx.Tx],
 	commandRepo repository.CommandRepository,
+	signerCheck fiber.Handler,
 ) *fiber.App {
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
@@ -113,7 +114,7 @@ func App(
 	vehicleGroup.Post("/mint", onboardCtrl.SubmitMintDataForVins)
 	vehicleGroup.Post("/finalize", onboardCtrl.FinalizeOnboarding)
 
-	telemetryGroup := app.Group("/v1/telemetry", jwtAuth, walletMdw)
+	telemetryGroup := app.Group("/v1/telemetry", jwtAuth, walletMdw, signerCheck)
 	telemetryGroup.Post("/subscribe/:vehicleTokenId", teslaCtrl.TelemetrySubscribe)
 	telemetryGroup.Post("/unsubscribe/:vehicleTokenId", teslaCtrl.UnsubscribeTelemetry)
 	telemetryGroup.Post("/:vehicleTokenId/start", teslaCtrl.StartDataFlow)

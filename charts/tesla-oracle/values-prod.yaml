@@ -6,6 +6,8 @@ image:
 env:
   LOG_LEVEL: info
   ENVIRONMENT: prod
+  TOKEN_EXCHANGE_GRPC_ADDR: token-exchange-api-prod:8086
+  SIGNER_CHECK_MODE: log
   CHAIN_ID: 137
   USE_LOCAL_TLS: false
   KAFKA_BROKERS: kafka-prod-dimo-kafka-kafka-brokers:9092

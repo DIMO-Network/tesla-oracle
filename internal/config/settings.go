@@ -81,6 +81,10 @@ type Settings struct {
 	PartnersTeslaFleetURL string `yaml:"PARTNERS_FLEET_URL"`
 
 	MobileAppDevLicense common.Address `yaml:"MOBILE_APP_DEV_LICENSE"`
+	// TokenExchangeGRPCAddr is token-exchange-api's gRPC address, for SignerCheck.
+	TokenExchangeGRPCAddr string `yaml:"TOKEN_EXCHANGE_GRPC_ADDR"`
+	// SignerCheckMode is enforce (default), log or off.
+	SignerCheckMode string `yaml:"SIGNER_CHECK_MODE"`
 }
 
 func (app *Settings) IsProduction() bool {

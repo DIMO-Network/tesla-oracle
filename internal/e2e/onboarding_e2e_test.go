@@ -90,6 +90,7 @@ func newHarness(t *testing.T) *harness {
 	settings.Environment = "test" // not dev/prod: bootstrap picks the ROT13 test cipher
 	settings.JwtKeySetURL = h.jwt.server.URL
 	settings.TokenExchangeJWTKeySetURL = h.jwt.server.URL
+	settings.SignerCheckMode = "off" // no token-exchange-api here; the signer check has its own tests
 	settings.ChainID = 137
 	settings.RPCURL = mustURL(t, h.chain.server.URL)
 	settings.BundlerURL = mustURL(t, h.chain.server.URL)
@@ -146,7 +147,9 @@ func newHarness(t *testing.T) *harness {
 		_ = services.RiverClient.Stop(stopCtx)
 	})
 
-	h.app = app.App(&h.settings, &logger, services.TeslaService, services.VehicleOnboardService, services.RiverClient, services.Repositories.Command)
+	signerCheck, err := app.SignerCheck(&h.settings, nil, &logger)
+	require.NoError(t, err)
+	h.app = app.App(&h.settings, &logger, services.TeslaService, services.VehicleOnboardService, services.RiverClient, services.Repositories.Command, signerCheck)
 	return h
 }
 
