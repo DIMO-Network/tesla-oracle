@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -153,7 +154,7 @@ func AuthInjectorTestHandler(userID string, userEthAddr *common.Address) fiber.H
 }
 
 func BuildRequest(method, url, body string) *http.Request {
-	req, _ := http.NewRequest(
+	req := httptest.NewRequest(
 		method,
 		url,
 		strings.NewReader(body),
