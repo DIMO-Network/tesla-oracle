@@ -15,7 +15,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 
 	"github.com/DIMO-Network/shared/pkg/db"
-	"github.com/docker/go-connections/nat"
+	"github.com/moby/moby/api/types/network"
 	"github.com/pkg/errors"
 	"github.com/pressly/goose/v3"
 	"github.com/testcontainers/testcontainers-go"
@@ -28,15 +28,15 @@ const testDbName = "tesla_oracle"
 func StartContainerDatabase(ctx context.Context, t *testing.T, migrationsDirRelPath string) (db.Store, testcontainers.Container, config.Settings) {
 	settings := GetTestDbSettings()
 	pgPort := "5432/tcp"
-	dbURL := func(_ string, port nat.Port) string {
-		return fmt.Sprintf("postgres://%s:%s@localhost:%s/%s?sslmode=disable", settings.DB.User, settings.DB.Password, port.Port(), settings.DB.Name)
+	dbURL := func(_ string, port network.Port) string {
+		return fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable", settings.DB.User, settings.DB.Password, port.Num(), settings.DB.Name)
 	}
 	cr := testcontainers.ContainerRequest{
 		Image:        "postgres:16.6-alpine",
 		Env:          map[string]string{"POSTGRES_USER": settings.DB.User, "POSTGRES_PASSWORD": settings.DB.Password, "POSTGRES_DB": settings.DB.Name},
 		ExposedPorts: []string{pgPort},
 		Cmd:          []string{"postgres", "-c", "fsync=off"},
-		WaitingFor:   wait.ForSQL(nat.Port(pgPort), "postgres", dbURL),
+		WaitingFor:   wait.ForSQL(pgPort, "postgres", dbURL),
 	}
 
 	pgContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
@@ -46,7 +46,7 @@ func StartContainerDatabase(ctx context.Context, t *testing.T, migrationsDirRelP
 	if err != nil {
 		return handleContainerStartErr(ctx, err, pgContainer, settings, t)
 	}
-	mappedPort, err := pgContainer.MappedPort(ctx, nat.Port(pgPort))
+	mappedPort, err := pgContainer.MappedPort(ctx, pgPort)
 	if err != nil {
 		return handleContainerStartErr(ctx, errors.Wrap(err, "failed to get container external port"), pgContainer, settings, t)
 	}

@@ -10,7 +10,7 @@ export interface OpenMessageData {
 export class LinkingService {
     private static instance: LinkingService;
     private messageService?: MessageService;
-    private waitForOpenTimeout?: NodeJS.Timeout;
+    private waitForOpenTimeout?: ReturnType<typeof setTimeout>;
     private waitForOpenResolve?: ResolveFn;
 
     private constructor() {}
