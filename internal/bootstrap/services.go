@@ -158,6 +158,12 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 	}
 	logger.Debug().Msg("Added onboarding worker")
 
+	mintRecovery := service.NewMintRecovery(&logger, service.NewRegistryMintLookup(tr), ws, repositories.Onboarding)
+	if err := river.AddWorkerSafely(workers, onboarding.NewMintRecoveryWorker(mintRecovery)); err != nil {
+		return nil, nil, fmt.Errorf("failed to add mint recovery worker: %w", err)
+	}
+	logger.Debug().Msg("Added mint recovery worker")
+
 	// Create and register Tesla command worker
 
 	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger, 1*time.Minute)
@@ -184,6 +190,7 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 		},
 		Workers:      workers,
 		ErrorHandler: errorHandler,
+		PeriodicJobs: []*river.PeriodicJob{onboarding.NewMintRecoveryPeriodicJob()},
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create river client: %w", err)
