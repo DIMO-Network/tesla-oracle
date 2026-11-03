@@ -198,6 +198,9 @@ tolerations: []
 affinity: {}
 podDisruptionBudget:
   minAvailable: 0
+# Shutdown waits for running River jobs. A mint killed here stays stuck at
+# ConnectSuccess, and its receipt polling alone can take 240s.
+terminationGracePeriodSeconds: 300
 kafka:
   clusterName: kafka-dev-dimo-kafka
   topics: []
