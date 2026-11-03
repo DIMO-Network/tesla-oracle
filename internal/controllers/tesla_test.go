@@ -619,7 +619,7 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 
 	// then
 	app := s.setupFiberApp("/v1/virtual-key", "GET", controller.GetVirtualKeyStatus)
-	req, _ := createRequest("GET", "/v1/virtual-key?vin="+vin, "")
+	req := test.BuildRequest("GET", "/v1/virtual-key?vin="+vin, "")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
@@ -808,7 +808,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			app := s.setupTestApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 			// then
-			req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
+			req := test.BuildRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 			req.Header.Set("Authorization", "Bearer mockToken")
 
 			resp, err := app.Test(req, -1)
@@ -866,7 +866,7 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 	app := s.setupFiberApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 	// then
-	req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
+	req := test.BuildRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 	err := generateJWT(req)
 	assert.NoError(s.T(), err)
 
@@ -1033,7 +1033,7 @@ func (s *TeslaControllerTestSuite) TestGetStatusWithTokenRefreshErrors() {
 			app := s.setupTestApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 			// when
-			req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
+			req := test.BuildRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 			req.Header.Set("Authorization", "Bearer mockToken")
 
 			resp, err := app.Test(req, -1)
@@ -1867,17 +1867,6 @@ func (s *TeslaControllerTestSuite) setupFiberApp(route string, method string, ha
 		app.Delete(route, handler)
 	}
 	return app
-}
-
-func createRequest(method, url, body string) (*http.Request, error) {
-	var req *http.Request
-	if body != "" {
-		req = httptest.NewRequest(method, url, strings.NewReader(body))
-	} else {
-		req = httptest.NewRequest(method, url, nil)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return req, nil
 }
 
 func parseResponse(resp *http.Response, target interface{}) error {
