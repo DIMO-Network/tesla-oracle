@@ -109,7 +109,9 @@ func handleMigration(logger *zerolog.Logger, settings *config.Settings) {
 		}
 	}
 	logger.Info().Msg("Starting migration")
-	migrateDatabase(*logger, settings, command)
+	if err := migrateDatabase(*logger, settings, command); err != nil {
+		logger.Fatal().Err(err).Msg("failed to migrate database")
+	}
 	logger.Info().Msg("Migration complete")
 }
 
