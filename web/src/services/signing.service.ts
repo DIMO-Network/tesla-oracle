@@ -10,7 +10,7 @@ type ResolveFn = (value: SignatureMessageData | PromiseLike<SignatureMessageData
 export class SigningService {
     private static instance: SigningService;
     private messageService?: MessageService;
-    private waitForSignatureTimeout?: NodeJS.Timeout;
+    private waitForSignatureTimeout?: ReturnType<typeof setTimeout>;
     private waitForSignatureResolve?: ResolveFn;
 
     private constructor() {}

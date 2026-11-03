@@ -36,6 +36,7 @@ spec:
       serviceAccountName: {{ include "tesla-oracle.serviceAccountName" . }}
       securityContext:
         {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
       initContainers:
         - name: migrate
           securityContext:

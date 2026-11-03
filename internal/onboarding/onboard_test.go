@@ -111,6 +111,7 @@ func TestMintWithLostResult(t *testing.T) {
 				identity: identity,
 				dbs:      &pdb,
 				tr:       tr,
+				chain:    newFakeChain(),
 				ws:       wallet.NewSDWalletsService(logger, "cabaabd8c7c7d27347349e48fb11319bc6656cb6cc1bdc717e94dae8db7e6bc2"),
 			}
 

@@ -14,20 +14,27 @@ import (
 	"github.com/rs/zerolog"
 )
 
-func migrateDatabase(logger zerolog.Logger, settings *config.Settings, command string) {
+// migrationLockTimeout is how long a migration waits for a table lock, in
+// milliseconds. Postgres queues every later query on the table behind a waiting
+// ALTER TABLE, so without a limit one long transaction stops all job traffic. On
+// timeout the migration rolls back and the init container retries.
+const migrationLockTimeout = 5000
+
+func migrateDatabase(logger zerolog.Logger, settings *config.Settings, command string) error {
 	var db *sql.DB
 	// setup database
-	db, err := sql.Open("postgres", settings.DB.BuildConnectionString(true))
+	dsn := fmt.Sprintf("%s lock_timeout=%d", settings.DB.BuildConnectionString(true), migrationLockTimeout)
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		return fmt.Errorf("failed to open db connection: %w", err)
+	}
 	defer func() {
 		if err := db.Close(); err != nil {
-			logger.Fatal().Msgf("goose: failed to close DB: %v\n", err)
+			logger.Error().Err(err).Msg("goose: failed to close DB")
 		}
 	}()
-	if err != nil {
-		logger.Fatal().Msgf("failed to open db connection: %v\n", err)
-	}
 	if err = db.Ping(); err != nil {
-		logger.Fatal().Msgf("failed to ping db: %v\n", err)
+		return fmt.Errorf("failed to ping db: %w", err)
 	}
 	// set default
 	if command == "" {
@@ -36,20 +43,21 @@ func migrateDatabase(logger zerolog.Logger, settings *config.Settings, command s
 
 	_, err = db.Exec("CREATE SCHEMA IF NOT EXISTS tesla_oracle;")
 	if err != nil {
-		logger.Fatal().Err(err).Msg("could not create schema")
+		return fmt.Errorf("could not create schema: %w", err)
 	}
 
 	if err := migrateRiver(context.Background(), db); err != nil {
-		logger.Fatal().Err(err).Msg("failed to migrate river")
+		return fmt.Errorf("failed to migrate river: %w", err)
 	}
 
 	goose.SetTableName("tesla_oracle.migrations")
 	goose.SetBaseFS(migrations.FileOS)
 	// print dirs in migrations
 	if err := goose.RunContext(context.Background(), command, db, "."); err != nil {
-		logger.Fatal().Msgf("failed to apply go code migrations: %v\n", err)
+		return fmt.Errorf("failed to apply go code migrations: %w", err)
 	}
 
+	return nil
 }
 
 func migrateRiver(ctx context.Context, db *sql.DB) error {

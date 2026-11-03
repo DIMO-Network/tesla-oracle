@@ -262,6 +262,32 @@ func (r *onboardingRepository) InsertOrUpdateOnboarding(ctx context.Context, vin
 	return nil
 }
 
+// GetOnboardingsByStatusRange retrieves the records whose status is in the range.
+func (r *onboardingRepository) GetOnboardingsByStatusRange(ctx context.Context, minStatus, maxStatus int) (dbmodels.OnboardingSlice, error) {
+	return dbmodels.Onboardings(
+		dbmodels.OnboardingWhere.OnboardingStatus.GTE(minStatus),
+		dbmodels.OnboardingWhere.OnboardingStatus.LTE(maxStatus),
+	).All(ctx, r.db.DBS().Writer)
+}
+
+// UpdateOnboardingIfStatus saves the record's status and token IDs if its status in
+// the database is still the given one, and reports whether it did. Its wallet index
+// is left alone: a mint job may be setting it.
+func (r *onboardingRepository) UpdateOnboardingIfStatus(ctx context.Context, vin *dbmodels.Onboarding, status int) (bool, error) {
+	updated, err := dbmodels.Onboardings(
+		dbmodels.OnboardingWhere.Vin.EQ(vin.Vin),
+		dbmodels.OnboardingWhere.OnboardingStatus.EQ(status),
+	).UpdateAll(ctx, r.db.DBS().Writer, dbmodels.M{
+		dbmodels.OnboardingColumns.OnboardingStatus: vin.OnboardingStatus,
+		dbmodels.OnboardingColumns.VehicleTokenID:   vin.VehicleTokenID,
+		dbmodels.OnboardingColumns.SyntheticTokenID: vin.SyntheticTokenID,
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to update VIN record: %w", err)
+	}
+	return updated == 1, nil
+}
+
 // GetOnboardingsByTokenIDs retrieves VINs where VehicleTokenID is in the provided token IDs.
 func (r *onboardingRepository) GetOnboardingsByTokenIDs(ctx context.Context, tokenIDsToCheck []int64) (dbmodels.OnboardingSlice, error) {
 	vins, err := dbmodels.Onboardings(dbmodels.OnboardingWhere.VehicleTokenID.IN(tokenIDsToCheck)).All(ctx, r.db.DBS().Reader)
