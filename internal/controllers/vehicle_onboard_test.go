@@ -19,6 +19,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
@@ -95,6 +96,9 @@ const vehicleTokenIDwithSDOtherOwner = 140
 const sdTokenIDOtherOwner = 445
 const sdTokenIDFinalize = 456
 
+// vehicleTokenIDBurned is a vehicle identity-api doesn't have: it was burned.
+const vehicleTokenIDBurned = 150
+
 const vehicleTokenIDnoSDInvalidDD = 200
 const vehicleTokenIDwithSDInvalidDD = 220
 
@@ -170,6 +174,8 @@ func createMockDependencies(_ *testing.T) deps {
 		SyntheticDevice: mods.SyntheticDevice{TokenID: sdTokenIDFinalize},
 		Definition:      mods.Definition{ID: "test-dd-2025"},
 	}, nil)
+
+	identity.On("FetchVehicleByTokenID", int64(vehicleTokenIDBurned)).Return(nil, fmt.Errorf("%w: No vehicle with token id %d.", core.ErrVehicleNotFound, vehicleTokenIDBurned))
 
 	credsStore := new(test.MockCredStore)
 
@@ -736,6 +742,43 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		assert.NilError(t, err)
 		response, _ := app.Test(test.BuildRequest("POST", "/vehicle/verify", string(payloadJSON)))
 		assert.Equal(t, fiber.StatusBadRequest, response.StatusCode)
+	})
+
+	// A mint that succeeded and was never finalized, whose vehicle was burned since
+	// (its owner deleted it). The record can never be finalized, and verify used to
+	// refuse the VIN forever. It now starts over with a new vehicle and SD.
+	s.Run("Restarts a minted onboarding whose vehicle was burned", func() {
+		t := s.T()
+		minted := dbmodels.Onboarding{
+			Vin:                "ABCDEFG1234567812",
+			VehicleTokenID:     null.Int64From(vehicleTokenIDBurned),
+			SyntheticTokenID:   null.Int64From(446),
+			WalletIndex:        null.Int64From(8),
+			OnboardingStatus:   53, // OnboardingStatusMintSuccess
+			DeviceDefinitionID: null.StringFrom("test-dd-2025"),
+		}
+		require.NoError(t, minted.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+		t.Cleanup(func() { _, _ = minted.Delete(s.ctx, s.pdb.DBS().Writer) })
+
+		payloadJSON, err := json.Marshal(VinsVerifyParams{Vins: []service.VinWithTokenID{{Vin: "ABCDEFG1234567812"}}})
+		assert.NilError(t, err)
+		response, _ := app.Test(test.BuildRequest("POST", "/vehicle/verify", string(payloadJSON)))
+		body, _ := io.ReadAll(response.Body)
+		assert.Equal(t, fiber.StatusOK, response.StatusCode, string(body))
+
+		expectedJSON, err := json.Marshal(StatusForVinsResponse{Statuses: []service.VinStatus{
+			{Vin: "ABCDEFG1234567812", Status: "Success", Details: "Ready to mint Vehicle and Synthetic Device"},
+		}})
+		assert.NilError(t, err)
+		assert.Equal(t, string(body), string(expectedJSON))
+
+		record, err := dbmodels.FindOnboarding(s.ctx, s.pdb.DBS().Reader, "ABCDEFG1234567812")
+		require.NoError(t, err)
+		assert.Equal(t, 23, record.OnboardingStatus) // OnboardingStatusVendorValidationSuccess
+		assert.Assert(t, !record.VehicleTokenID.Valid, "burned vehicle token ID kept")
+		assert.Assert(t, !record.SyntheticTokenID.Valid, "burned synthetic token ID kept")
+		assert.Assert(t, !record.WalletIndex.Valid, "burned SD's wallet index kept")
+		assert.Equal(t, "test-dd-2025", record.DeviceDefinitionID.String)
 	})
 }
 
