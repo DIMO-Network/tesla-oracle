@@ -69,10 +69,21 @@ func (i *identityAPIService) FetchVehicleByTokenID(tokenID int64) (*models.Vehic
 		return nil, err
 	}
 
-	var af models.GraphQlData[models.SingleVehicle]
+	var af struct {
+		models.GraphQlData[models.SingleVehicle]
+		Errors []graphQLError `json:"errors"`
+	}
 
 	if err = json.Unmarshal(body, &af); err != nil {
 		return nil, err
+	}
+
+	// identity-api answers a token ID with no vehicle, such as a burned one, with a
+	// NOT_FOUND error and a 200. Without this check it would look like an empty vehicle.
+	for _, gqlErr := range af.Errors {
+		if gqlErr.Extensions.Code == "NOT_FOUND" {
+			return nil, fmt.Errorf("%w: %s", core.ErrVehicleNotFound, gqlErr.Message)
+		}
 	}
 
 	// Store response in cache
@@ -158,6 +169,14 @@ func (i *identityAPIService) FetchDeviceDefinitionByID(id string) (*models.Devic
 	i.cache.Set(fmt.Sprintf("dd_%s", id), &af.Data.DeviceDefinition, cache.DefaultExpiration)
 
 	return &af.Data.DeviceDefinition, nil
+}
+
+// graphQLError is an entry of a GraphQL response's errors.
+type graphQLError struct {
+	Message    string `json:"message"`
+	Extensions struct {
+		Code string `json:"code"`
+	} `json:"extensions"`
 }
 
 func (i *identityAPIService) Query(graphqlQuery string) ([]byte, error) {

@@ -19,6 +19,7 @@ import (
 	"github.com/DIMO-Network/go-zerodev"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
@@ -312,13 +313,20 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 			}
 
 			if isMinted(dbVin.OnboardingStatus) {
-				// A mint that succeeded but was never finalized: the caller can finish it,
-				// if the minted vehicle is theirs and its SD is still the one minted.
-				if !s.isResumableMint(ctx, dbVin, walletAddress) {
-					return nil, errors.New("some of the VINs are not verified or already onboarded")
+				restarted, err := s.restartBurnedMint(ctx, dbVin)
+				if err != nil {
+					return nil, err
 				}
-				statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: DetailsReadyToFinalize})
-				continue
+				if !restarted {
+					// A mint that succeeded but was never finalized: the caller can finish it,
+					// if the minted vehicle is theirs and its SD is still the one minted.
+					if !s.isResumableMint(ctx, dbVin, walletAddress) {
+						return nil, errors.New("some of the VINs are not verified or already onboarded")
+					}
+					statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: DetailsReadyToFinalize})
+					continue
+				}
+				// The minted vehicle was burned: the record is ready to mint again.
 			}
 
 			if vehicle.VehicleTokenID != 0 {
@@ -920,6 +928,43 @@ func (s *vehicleOnboardService) requireMintedToWallet(ctx context.Context, recor
 		case <-time.After(identityWaitDelay):
 		}
 	}
+}
+
+// restartBurnedMint restarts a minted, unfinalized record whose vehicle identity-api
+// says doesn't exist, so the VIN can be onboarded again with a new vehicle and SD.
+// That vehicle was burned after the mint, for example by its owner deleting it, and
+// the record can never be finalized. A mint from moments ago may just not be indexed
+// yet, so a record with a recent mint job is left alone, as is one that changed
+// since it was read. It reports whether it restarted the record, and updates it.
+func (s *vehicleOnboardService) restartBurnedMint(ctx context.Context, record *dbmodels.Onboarding) (bool, error) {
+	if !record.VehicleTokenID.Valid {
+		return false, nil
+	}
+	if _, err := s.identitySvc.FetchVehicleByTokenID(record.VehicleTokenID.Int64); !errors.Is(err, core.ErrVehicleNotFound) {
+		return false, nil
+	}
+	if s.mintedRecently(ctx, record.Vin) {
+		return false, nil
+	}
+
+	restarted, err := s.repositories.Onboarding.RestartOnboardingIfStatus(ctx, record.Vin, record.OnboardingStatus, OnboardingStatusVendorValidationSuccess)
+	if err != nil {
+		return false, fmt.Errorf("failed to restart the onboarding of VIN %s: %w", record.Vin, err)
+	}
+	if !restarted {
+		return false, nil
+	}
+
+	s.logger.Warn().Str(logfields.VIN, record.Vin).
+		Int64(logfields.VehicleTokenID, record.VehicleTokenID.Int64).
+		Int64("syntheticDeviceTokenId", record.SyntheticTokenID.Int64).
+		Msg("Minted vehicle of an unfinalized onboarding no longer exists. Restarted the onboarding so the VIN can be minted again.")
+
+	record.OnboardingStatus = OnboardingStatusVendorValidationSuccess
+	record.VehicleTokenID = null.Int64{}
+	record.SyntheticTokenID = null.Int64{}
+	record.WalletIndex = null.Int64{}
+	return true, nil
 }
 
 // isResumableMint reports whether a minted, unfinalized record can be finalized by

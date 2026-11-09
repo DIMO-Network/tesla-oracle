@@ -43,6 +43,7 @@ type OnboardingRepository interface {
 	InsertOrUpdateOnboarding(ctx context.Context, vin *dbmodels.Onboarding) error
 	GetOnboardingsByStatusRange(ctx context.Context, minStatus, maxStatus int) (dbmodels.OnboardingSlice, error)
 	UpdateOnboardingIfStatus(ctx context.Context, vin *dbmodels.Onboarding, status int) (bool, error)
+	RestartOnboardingIfStatus(ctx context.Context, vin string, fromStatus, toStatus int) (bool, error)
 	GetOnboardingsByTokenIDs(ctx context.Context, tokenIDs []int64) (dbmodels.OnboardingSlice, error)
 	GetOnboardings(ctx context.Context) (dbmodels.OnboardingSlice, error)
 	DeleteOnboarding(ctx context.Context, record *dbmodels.Onboarding) error
