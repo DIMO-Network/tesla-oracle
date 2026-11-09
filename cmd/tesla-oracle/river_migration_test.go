@@ -6,9 +6,15 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DIMO-Network/shared/pkg/db"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverdatabasesql"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
+	"github.com/riverqueue/river/rivermigrate"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -16,7 +22,9 @@ import (
 
 const dbName = "tesla_oracle"
 
-func TestRiverMigrations(t *testing.T) {
+// startTestDatabase runs an empty Postgres for the length of the test.
+func startTestDatabase(t *testing.T) *config.Settings {
+	t.Helper()
 	ctx := context.Background()
 
 	// Setup test container
@@ -28,18 +36,18 @@ func TestRiverMigrations(t *testing.T) {
 		postgres.BasicWaitStrategies(),
 	)
 	require.NoError(t, err)
-	defer func() {
+	t.Cleanup(func() {
 		if err := container.Terminate(ctx); err != nil {
 			t.Logf("failed to terminate container: %s", err)
 		}
-	}()
+	})
 
 	host, err := container.Host(ctx)
 	require.NoError(t, err)
 	port, err := container.MappedPort(ctx, "5432")
 	require.NoError(t, err)
 
-	settings := &config.Settings{
+	return &config.Settings{
 		DB: db.Settings{
 			Host:     host,
 			Port:     port.Port(),
@@ -49,10 +57,14 @@ func TestRiverMigrations(t *testing.T) {
 			SSLMode:  "disable",
 		},
 	}
+}
+
+func TestRiverMigrations(t *testing.T) {
+	settings := startTestDatabase(t)
 
 	// Run migrations
 	logger := zerolog.New(os.Stdout).Level(zerolog.DebugLevel)
-	migrateDatabase(logger, settings, "up")
+	require.NoError(t, migrateDatabase(logger, settings, "up"))
 	// Connect to database
 	dbConn, err := sql.Open("postgres", settings.DB.BuildConnectionString(true))
 	require.NoError(t, err)
@@ -77,8 +89,20 @@ func TestRiverMigrations(t *testing.T) {
 		verifyRiverQueueTable(t, dbConn)
 	})
 
-	t.Run("Verify River Client Tables", func(t *testing.T) {
-		verifyRiverClientTables(t, dbConn)
+	t.Run("Verify River Migration Versions", func(t *testing.T) {
+		verifyRiverMigrationVersions(t, dbConn)
+	})
+
+	t.Run("Verify River Client Tables Dropped", func(t *testing.T) {
+		verifyRiverClientTablesDropped(t, dbConn)
+	})
+
+	t.Run("Verify River Notification Table", func(t *testing.T) {
+		verifyRiverNotificationTable(t, dbConn)
+	})
+
+	t.Run("Verify River Column Defaults", func(t *testing.T) {
+		verifyRiverColumnDefaults(t, dbConn)
 	})
 
 	t.Run("Verify River Functions", func(t *testing.T) {
@@ -88,6 +112,241 @@ func TestRiverMigrations(t *testing.T) {
 	t.Run("Verify River Indexes", func(t *testing.T) {
 		verifyRiverIndexes(t, dbConn)
 	})
+}
+
+// TestRiverUpgradeWithJobsInFlight starts from the schema River v0.23.1 left in
+// production (version 6) with available, running, retryable and scheduled jobs, and
+// runs the same migrate step the init container runs. No job may be touched, and
+// a job queued before the upgrade must still complete after it. It then takes the
+// rollback path down to version 6 and back up.
+func TestRiverUpgradeWithJobsInFlight(t *testing.T) {
+	ctx := context.Background()
+	settings := startTestDatabase(t)
+
+	dbConn, migrator := openRiverAtPreUpgradeVersion(t, settings)
+
+	// Written as v0.23.1 wrote them, with max_attempts given explicitly: the column
+	// has no default at version 6.
+	queued := insertRiverJob(t, dbConn, "available", "default", upgradeProbeArgs{}.Kind(), `{"id": 1}`)
+	insertRiverJob(t, dbConn, "running", "tesla_commands", "tesla_command", `{"vin": "running"}`)
+	insertRiverJob(t, dbConn, "retryable", "tesla_commands", "tesla_command", `{"vin": "retryable"}`)
+	insertRiverJob(t, dbConn, "scheduled", "tesla_polls", "tesla_legacy_poll", `{"vin": "scheduled"}`)
+	before := riverJobSnapshot(t, dbConn)
+
+	logger := zerolog.New(os.Stdout).Level(zerolog.DebugLevel)
+	require.NoError(t, migrateDatabase(logger, settings, "up"))
+
+	requireRiverVersions(t, dbConn, 1, 2, 3, 4, 5, 6, 7, 8)
+	require.Equal(t, before, riverJobSnapshot(t, dbConn), "migrating must not change queued or in-flight jobs")
+	verifyRiverClientTablesDropped(t, dbConn)
+	verifyRiverNotificationTable(t, dbConn)
+
+	// The up migration is safe to repeat: a failed rollout re-runs the init container.
+	require.NoError(t, migrateDatabase(logger, settings, "up"))
+	requireRiverVersions(t, dbConn, 1, 2, 3, 4, 5, 6, 7, 8)
+	require.Equal(t, before, riverJobSnapshot(t, dbConn), "repeating the migration must not change jobs")
+
+	// A job queued by the old version is worked by the new client. The rows above
+	// have no registered worker here, and their queues aren't configured.
+	pool, err := pgxpool.New(ctx, settings.DB.BuildConnectionString(true))
+	require.NoError(t, err)
+	defer pool.Close()
+
+	worked := make(chan int64, 1)
+	workers := river.NewWorkers()
+	river.AddWorker(workers, river.WorkFunc(func(_ context.Context, job *river.Job[upgradeProbeArgs]) error {
+		select {
+		case worked <- job.ID:
+		default: // a retry must not block client.Stop
+		}
+		return nil
+	}))
+	client, err := river.NewClient(riverpgxv5.New(pool), &river.Config{
+		Queues:  map[string]river.QueueConfig{river.QueueDefault: {MaxWorkers: 1}},
+		Workers: workers,
+	})
+	require.NoError(t, err)
+	require.NoError(t, client.Start(ctx))
+	defer func() {
+		if err := client.Stop(ctx); err != nil {
+			t.Logf("failed to stop river client: %s", err)
+		}
+	}()
+
+	select {
+	case id := <-worked:
+		require.Equal(t, queued, id)
+	case <-time.After(30 * time.Second):
+		require.Fail(t, "job queued before the upgrade was not worked after it")
+	}
+	require.Eventually(t, func() bool {
+		var state string
+		err := dbConn.QueryRow(`SELECT state::text FROM tesla_oracle.river_job WHERE id = $1`, queued).Scan(&state)
+		return err == nil && state == "completed"
+	}, 30*time.Second, 100*time.Millisecond, "job queued before the upgrade did not complete after it")
+
+	// The rollback path: back to version 6 with the jobs still there, then forward.
+	// Nothing else can change the rows now: the only job this client works is done.
+	beforeRollback := riverJobSnapshot(t, dbConn)
+	_, err = migrator.Migrate(ctx, rivermigrate.DirectionDown, &rivermigrate.MigrateOpts{TargetVersion: riverVersionBeforeUpgrade})
+	require.NoError(t, err)
+	requireRiverVersions(t, dbConn, 1, 2, 3, 4, 5, 6)
+	requireTableExists(t, dbConn, "river_client", true)
+	requireTableExists(t, dbConn, "river_client_queue", true)
+	requireTableExists(t, dbConn, "river_notification", false)
+	require.Equal(t, beforeRollback, riverJobSnapshot(t, dbConn), "migrating down must not change jobs")
+
+	require.NoError(t, migrateDatabase(logger, settings, "up"))
+	requireRiverVersions(t, dbConn, 1, 2, 3, 4, 5, 6, 7, 8)
+	require.Equal(t, beforeRollback, riverJobSnapshot(t, dbConn), "migrating back up must not change jobs")
+}
+
+// TestRiverMigrationGivesUpOnBlockedLock holds a lock the upgrade needs, as a long
+// transaction would, and checks the migrate step fails on its own and leaves the
+// schema as it was, rather than waiting and stopping all job traffic behind it.
+func TestRiverMigrationGivesUpOnBlockedLock(t *testing.T) {
+	ctx := context.Background()
+	settings := startTestDatabase(t)
+
+	dbConn, _ := openRiverAtPreUpgradeVersion(t, settings)
+
+	blocker, err := dbConn.BeginTx(ctx, nil)
+	require.NoError(t, err)
+	defer func() { _ = blocker.Rollback() }()
+	_, err = blocker.Exec(`LOCK TABLE tesla_oracle.river_job IN ACCESS SHARE MODE`)
+	require.NoError(t, err)
+
+	logger := zerolog.New(os.Stdout).Level(zerolog.DebugLevel)
+	err = migrateDatabase(logger, settings, "up")
+	require.ErrorContains(t, err, "lock timeout")
+	requireRiverVersions(t, dbConn, 1, 2, 3, 4, 5, 6)
+	requireTableExists(t, dbConn, "river_client", true)
+
+	// A retry works once the lock has gone, which is what the init container does.
+	require.NoError(t, blocker.Rollback())
+	require.NoError(t, migrateDatabase(logger, settings, "up"))
+	requireRiverVersions(t, dbConn, 1, 2, 3, 4, 5, 6, 7, 8)
+}
+
+// riverVersionBeforeUpgrade is the newest schema River v0.23.1 knows about.
+const riverVersionBeforeUpgrade = 6
+
+// openRiverAtPreUpgradeVersion connects to an empty database and migrates it to the
+// schema River v0.23.1 left in production.
+func openRiverAtPreUpgradeVersion(t *testing.T, settings *config.Settings) (*sql.DB, *rivermigrate.Migrator[*sql.Tx]) {
+	t.Helper()
+
+	dbConn, err := sql.Open("postgres", settings.DB.BuildConnectionString(true))
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		if err := dbConn.Close(); err != nil {
+			t.Logf("failed to close db: %s", err)
+		}
+	})
+	_, err = dbConn.Exec("CREATE SCHEMA IF NOT EXISTS tesla_oracle;")
+	require.NoError(t, err)
+
+	migrator, err := rivermigrate.New(riverdatabasesql.New(dbConn), &rivermigrate.Config{Schema: "tesla_oracle"})
+	require.NoError(t, err)
+
+	_, err = migrator.Migrate(context.Background(), rivermigrate.DirectionUp, &rivermigrate.MigrateOpts{TargetVersion: riverVersionBeforeUpgrade})
+	require.NoError(t, err)
+	requireRiverVersions(t, dbConn, 1, 2, 3, 4, 5, 6)
+	requireTableExists(t, dbConn, "river_client", true)
+	requireTableExists(t, dbConn, "river_client_queue", true)
+
+	return dbConn, migrator
+}
+
+// upgradeProbeArgs is a job kind only TestRiverUpgradeWithJobsInFlight registers.
+type upgradeProbeArgs struct {
+	ID int `json:"id"`
+}
+
+func (upgradeProbeArgs) Kind() string { return "river_upgrade_probe" }
+
+func insertRiverJob(t *testing.T, db *sql.DB, state, queue, kind, args string) int64 {
+	t.Helper()
+
+	var attemptedAt, attemptedBy any
+	attempt := 0
+	if state == "running" || state == "retryable" {
+		attempt = 1
+		attemptedAt = time.Now()
+		attemptedBy = `{old-pod}`
+	}
+	scheduledAt := time.Now()
+	if state == "scheduled" || state == "retryable" {
+		scheduledAt = scheduledAt.Add(time.Hour)
+	}
+
+	var id int64
+	err := db.QueryRow(`
+		INSERT INTO tesla_oracle.river_job (args, attempt, attempted_at, attempted_by, kind, max_attempts, priority, queue, scheduled_at, state)
+		VALUES ($1, $2, $3, $4, $5, 25, 1, $6, $7, $8::tesla_oracle.river_job_state)
+		RETURNING id
+	`, args, attempt, attemptedAt, attemptedBy, kind, queue, scheduledAt, state).Scan(&id)
+	require.NoError(t, err)
+	return id
+}
+
+// riverJobSnapshot returns every river_job row as text, so a test can tell whether
+// any column of any job changed.
+func riverJobSnapshot(t *testing.T, db *sql.DB) []string {
+	t.Helper()
+
+	rows, err := db.Query(`SELECT j::text FROM tesla_oracle.river_job j ORDER BY id`)
+	require.NoError(t, err)
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Logf("failed to close rows: %s", err)
+		}
+	}()
+
+	var snapshot []string
+	for rows.Next() {
+		var row string
+		require.NoError(t, rows.Scan(&row))
+		snapshot = append(snapshot, row)
+	}
+	require.NoError(t, rows.Err())
+	return snapshot
+}
+
+func requireRiverVersions(t *testing.T, db *sql.DB, expected ...int) {
+	t.Helper()
+
+	rows, err := db.Query(`SELECT version FROM tesla_oracle.river_migration WHERE line = 'main' ORDER BY version`)
+	require.NoError(t, err)
+	defer func() {
+		if err := rows.Close(); err != nil {
+			t.Logf("failed to close rows: %s", err)
+		}
+	}()
+
+	var versions []int
+	for rows.Next() {
+		var version int
+		require.NoError(t, rows.Scan(&version))
+		versions = append(versions, version)
+	}
+	require.NoError(t, rows.Err())
+	require.Equal(t, expected, versions)
+}
+
+func requireTableExists(t *testing.T, db *sql.DB, table string, expected bool) {
+	t.Helper()
+
+	var exists bool
+	err := db.QueryRow(`
+		SELECT EXISTS (
+			SELECT FROM information_schema.tables
+			WHERE table_schema = 'tesla_oracle'
+			AND table_name = $1
+		)
+	`, table).Scan(&exists)
+	require.NoError(t, err)
+	require.Equal(t, expected, exists, "table %s existence", table)
 }
 
 func verifyRiverEnumTypes(t *testing.T, db *sql.DB) {
@@ -269,44 +528,58 @@ func verifyRiverQueueTable(t *testing.T, db *sql.DB) {
 	}
 }
 
-func verifyRiverClientTables(t *testing.T, db *sql.DB) {
-	// Verify river_client table exists
-	var exists bool
-	err := db.QueryRow(`
-		SELECT EXISTS (
-			SELECT FROM information_schema.tables 
-			WHERE table_schema = 'tesla_oracle' 
-			AND table_name = 'river_client'
-		)
-	`).Scan(&exists)
-	require.NoError(t, err)
-	require.True(t, exists, "river_client table should exist")
+func verifyRiverMigrationVersions(t *testing.T, db *sql.DB) {
+	requireRiverVersions(t, db, 1, 2, 3, 4, 5, 6, 7, 8)
+}
 
-	// Verify river_client_queue table exists
-	err = db.QueryRow(`
-		SELECT EXISTS (
-			SELECT FROM information_schema.tables 
-			WHERE table_schema = 'tesla_oracle' 
-			AND table_name = 'river_client_queue'
-		)
-	`).Scan(&exists)
-	require.NoError(t, err)
-	require.True(t, exists, "river_client_queue table should exist")
+// verifyRiverClientTablesDropped checks migration 7 removed the two tables River
+// created but never used.
+func verifyRiverClientTablesDropped(t *testing.T, db *sql.DB) {
+	requireTableExists(t, db, "river_client", false)
+	requireTableExists(t, db, "river_client_queue", false)
+}
 
-	// Verify river_client_queue has foreign key to river_client
-	err = db.QueryRow(`
-		SELECT EXISTS (
-			SELECT FROM information_schema.table_constraints tc
-			JOIN information_schema.key_column_usage kcu 
-				ON tc.constraint_name = kcu.constraint_name
-			WHERE tc.table_schema = 'tesla_oracle'
-			AND tc.table_name = 'river_client_queue'
-			AND tc.constraint_type = 'FOREIGN KEY'
-			AND kcu.column_name = 'river_client_id'
-		)
-	`).Scan(&exists)
-	require.NoError(t, err)
-	require.True(t, exists, "river_client_queue should have foreign key to river_client")
+// verifyRiverNotificationTable checks the table migration 7 adds on Postgres too,
+// although River's changelog lists it as SQLite only.
+func verifyRiverNotificationTable(t *testing.T, db *sql.DB) {
+	requireTableExists(t, db, "river_notification", true)
+
+	expectedIndexes := []string{"river_notification_created_at_idx", "river_notification_topic_id_idx"}
+	for _, indexName := range expectedIndexes {
+		var exists bool
+		err := db.QueryRow(`
+			SELECT EXISTS (
+				SELECT FROM pg_indexes
+				WHERE schemaname = 'tesla_oracle'
+				AND tablename = 'river_notification'
+				AND indexname = $1
+			)
+		`, indexName).Scan(&exists)
+		require.NoError(t, err)
+		require.True(t, exists, "Index %s should exist on river_notification table", indexName)
+	}
+}
+
+// verifyRiverColumnDefaults checks the two defaults migration 7 adds. v0.23.1
+// always writes both columns, so a pod still running it doesn't notice them.
+func verifyRiverColumnDefaults(t *testing.T, db *sql.DB) {
+	expectedDefaults := map[string]string{
+		"river_job.max_attempts": "25",
+		"river_queue.updated_at": "CURRENT_TIMESTAMP",
+	}
+	for column, expected := range expectedDefaults {
+		table, name, _ := strings.Cut(column, ".")
+		var columnDefault sql.NullString
+		err := db.QueryRow(`
+			SELECT column_default
+			FROM information_schema.columns
+			WHERE table_schema = 'tesla_oracle'
+			AND table_name = $1
+			AND column_name = $2
+		`, table, name).Scan(&columnDefault)
+		require.NoError(t, err)
+		require.Equal(t, expected, columnDefault.String, "Default of %s", column)
+	}
 }
 
 func verifyRiverFunctions(t *testing.T, db *sql.DB) {

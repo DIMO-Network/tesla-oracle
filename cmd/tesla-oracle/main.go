@@ -109,7 +109,9 @@ func handleMigration(logger *zerolog.Logger, settings *config.Settings) {
 		}
 	}
 	logger.Info().Msg("Starting migration")
-	migrateDatabase(*logger, settings, command)
+	if err := migrateDatabase(*logger, settings, command); err != nil {
+		logger.Fatal().Err(err).Msg("failed to migrate database")
+	}
 	logger.Info().Msg("Migration complete")
 }
 
@@ -126,6 +128,10 @@ func runRiver(ctx context.Context, logger zerolog.Logger, riverClient *river.Cli
 	group.Go(func() error {
 		<-ctx.Done()
 		logger.Debug().Msg("Stopping river client")
+		// Stop waits for running jobs. Don't use StopAndCancel or
+		// Config.SoftStopTimeout here: River puts a job cancelled by a stopping
+		// client back to available without using an attempt, so a mint job
+		// (MaxAttempts: 1) would run a second time.
 		if err := riverClient.Stop(runCtx); err != nil {
 			return fmt.Errorf("failed stop river client: %w", err)
 		}

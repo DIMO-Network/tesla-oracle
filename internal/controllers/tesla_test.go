@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -181,7 +182,7 @@ func (s *TeslaControllerTestSuite) TestTelemetrySubscribe() {
 			app := s.setupTestApp("/v1/telemetry/subscribe/:vehicleTokenId", "POST", controller.TelemetrySubscribe)
 
 			//  then
-			req, _ := http.NewRequest("POST", "/v1/telemetry/subscribe/789", nil)
+			req := httptest.NewRequest("POST", "/v1/telemetry/subscribe/789", nil)
 			req.Header.Set("Content-Type", "application/json")
 			assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -271,7 +272,7 @@ func (s *TeslaControllerTestSuite) TestStartDataFlow() {
 			app := s.setupTestApp("/v1/telemetry/:vehicleTokenId/start", "POST", controller.StartDataFlow)
 
 			// then
-			req, _ := http.NewRequest("POST", "/v1/telemetry/789/start", nil)
+			req := httptest.NewRequest("POST", "/v1/telemetry/789/start", nil)
 			req.Header.Set("Content-Type", "application/json")
 			assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -401,7 +402,7 @@ func (s *TeslaControllerTestSuite) TestTelemetryUnSubscribe() {
 
 	// then
 	app := s.setupTestApp("/v1/telemetry/unsubscribe/:vehicleTokenId", "POST", controller.UnsubscribeTelemetry)
-	req, _ := http.NewRequest("POST", "/v1/telemetry/unsubscribe/789", nil)
+	req := httptest.NewRequest("POST", "/v1/telemetry/unsubscribe/789", nil)
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
@@ -449,7 +450,7 @@ func (s *TeslaControllerTestSuite) TestListVehicles() {
 
 	// then
 	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
-	req, _ := http.NewRequest("POST", "/v1/vehicles", strings.NewReader(requestBody))
+	req := httptest.NewRequest("POST", "/v1/vehicles", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -510,7 +511,7 @@ func (s *TeslaControllerTestSuite) TestReauthenticate() {
 
 	// then
 	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
-	req, _ := http.NewRequest("POST", "/v1/reauthenticate", strings.NewReader(requestBody))
+	req := httptest.NewRequest("POST", "/v1/reauthenticate", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -581,7 +582,7 @@ func (s *TeslaControllerTestSuite) TestReauthenticateSharedVin() {
 
 	// then
 	requestBody := `{"authorizationCode": "testAuthCode", "redirectUri": "https://example.com/callback"}`
-	req, _ := http.NewRequest("POST", "/v1/reauthenticate", strings.NewReader(requestBody))
+	req := httptest.NewRequest("POST", "/v1/reauthenticate", strings.NewReader(requestBody))
 	req.Header.Set("Content-Type", "application/json")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
@@ -618,7 +619,7 @@ func (s *TeslaControllerTestSuite) TestGetVirtualKeyStatus() {
 
 	// then
 	app := s.setupFiberApp("/v1/virtual-key", "GET", controller.GetVirtualKeyStatus)
-	req, _ := createRequest("GET", "/v1/virtual-key?vin="+vin, "")
+	req := test.BuildRequest("GET", "/v1/virtual-key?vin="+vin, "")
 	assert.NoError(s.T(), test.GenerateJWT(req))
 
 	resp, err := app.Test(req)
@@ -807,7 +808,7 @@ func (s *TeslaControllerTestSuite) TestGetStatus() {
 			app := s.setupTestApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 			// then
-			req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
+			req := test.BuildRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 			req.Header.Set("Authorization", "Bearer mockToken")
 
 			resp, err := app.Test(req, -1)
@@ -865,7 +866,7 @@ func (s *TeslaControllerTestSuite) TestGetStatusNotOwner() {
 	app := s.setupFiberApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 	// then
-	req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
+	req := test.BuildRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 	err := generateJWT(req)
 	assert.NoError(s.T(), err)
 
@@ -1032,7 +1033,7 @@ func (s *TeslaControllerTestSuite) TestGetStatusWithTokenRefreshErrors() {
 			app := s.setupTestApp("/v1/:vehicleTokenId/status", "GET", controller.GetStatus)
 
 			// when
-			req, _ := createRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
+			req := test.BuildRequest("GET", fmt.Sprintf("/v1/%d/status", vehicleTokenID), "")
 			req.Header.Set("Authorization", "Bearer mockToken")
 
 			resp, err := app.Test(req, -1)
@@ -1236,7 +1237,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 				requestBody = `{"command": "frunk/open"` // Invalid JSON - missing closing brace
 			}
 
-			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+			req := httptest.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
 			if tc.vehicleOwnerMismatch {
 				// Generate JWT for a different wallet address
@@ -1397,7 +1398,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 
 			// when - submit command
 			requestBody := fmt.Sprintf(`{"command": "%s"}`, tc.command)
-			req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+			req := httptest.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 			req.Header.Set("Content-Type", "application/json")
 			assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1496,7 +1497,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 
 		// when - submit command
 		requestBody := `{"command": "frunk/open"}`
-		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req := httptest.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
 		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1586,7 +1587,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 
 		// when - submit command
 		requestBody := `{"command": "frunk/open"}`
-		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req := httptest.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
 		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1684,7 +1685,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		// when - submit command
 		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 		requestBody := `{"command": "frunk/open"}`
-		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req := httptest.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
 		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1765,7 +1766,7 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		// when - submit command
 		app := s.setupPrivilegeTestApp("POST", controller.SubmitCommand, []privileges.Privilege{privileges.VehicleCommands})
 		requestBody := `{"command": "frunk/open"}`
-		req, _ := http.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
+		req := httptest.NewRequest("POST", fmt.Sprintf("/v1/commands/%d", vehicleTokenID), strings.NewReader(requestBody))
 		req.Header.Set("Content-Type", "application/json")
 		assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
@@ -1866,18 +1867,6 @@ func (s *TeslaControllerTestSuite) setupFiberApp(route string, method string, ha
 		app.Delete(route, handler)
 	}
 	return app
-}
-
-func createRequest(method, url, body string) (*http.Request, error) {
-	var req *http.Request
-	var err error
-	if body != "" {
-		req, err = http.NewRequest(method, url, strings.NewReader(body))
-	} else {
-		req, err = http.NewRequest(method, url, nil)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	return req, err
 }
 
 func parseResponse(resp *http.Response, target interface{}) error {

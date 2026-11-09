@@ -203,6 +203,7 @@ type vehicleOnboardService struct {
 	walletSvc    wallet.SDWalletsAPI
 	transactions *transactions.Client
 	repositories *repository.Repositories
+	mintRecovery *MintRecovery
 }
 
 // NewVehicleOnboardService creates a new VehicleOnboardService
@@ -215,7 +216,7 @@ func NewVehicleOnboardService(
 	transactions *transactions.Client,
 	repositories *repository.Repositories,
 ) VehicleOnboardService {
-	return &vehicleOnboardService{
+	s := &vehicleOnboardService{
 		settings:     settings,
 		logger:       logger,
 		identitySvc:  identitySvc,
@@ -224,6 +225,10 @@ func NewVehicleOnboardService(
 		transactions: transactions,
 		repositories: repositories,
 	}
+	if transactions != nil {
+		s.mintRecovery = NewMintRecovery(logger, NewRegistryMintLookup(transactions), walletSvc, repositories.Onboarding)
+	}
+	return s
 }
 
 // VerifyVins verifies vehicles before onboarding
@@ -259,6 +264,10 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 		if _, err := s.requireTeslaLogin(ctx, walletAddress, validVins); err != nil {
 			return nil, err
 		}
+
+		// A mint whose job died is settled first: one that landed verifies as ready to
+		// finalize, and one that didn't as ready to mint again.
+		s.recoverMints(ctx, validVins)
 
 		// Check for reconnection cases - create onboarding records for disconnected devices
 		for _, vehicle := range vinsData {
@@ -421,12 +430,18 @@ func (s *vehicleOnboardService) createOnboardingRecordForReconnection(ctx contex
 
 	// Create onboarding record for reconnection. The upsert overwrites every column,
 	// so a record left behind by an earlier mint that was never finalized (its SD
-	// since burned) loses its stale synthetic token ID and wallet index.
+	// since burned) loses its stale synthetic token ID and wallet index. A record with
+	// no SD keeps its wallet index: a mint sent with it may still land, and the next
+	// mint must send the same SD address so the registry lets only one of them land.
+	walletIndex := null.Int64{Valid: false} // NULL - the mint allocates a fresh one
+	if record != nil && !record.SyntheticTokenID.Valid {
+		walletIndex = record.WalletIndex
+	}
 	onboardingRecord := &dbmodels.Onboarding{
 		Vin:                vehicle.Vin,
 		VehicleTokenID:     null.Int64From(vehicle.VehicleTokenID),
 		SyntheticTokenID:   null.Int64{Valid: false}, // NULL - needs minting
-		WalletIndex:        null.Int64{Valid: false}, // NULL - the mint allocates a fresh one
+		WalletIndex:        walletIndex,
 		DeviceDefinitionID: null.StringFrom(identityVehicle.Definition.ID),
 		OnboardingStatus:   OnboardingStatusVendorValidationSuccess, // 23 - ready to mint
 	}
@@ -586,6 +601,10 @@ func (s *vehicleOnboardService) SubmitMintDataForVins(ctx context.Context, minti
 			return nil, err
 		}
 
+		// A record whose mint job died looks like a mint in progress, which isn't
+		// submitted again: settle it first.
+		s.recoverMints(ctx, validVins)
+
 		dbVins, err := s.repositories.Onboarding.GetOnboardingsByVins(ctx, validVins)
 		if err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
@@ -656,10 +675,8 @@ func (s *vehicleOnboardService) SubmitMintDataForVins(ctx context.Context, minti
 				})
 			}
 
-			err = s.repositories.Onboarding.InsertOrUpdateOnboarding(ctx, dbVin)
-			if err != nil {
-				return nil, fmt.Errorf("failed to submit verification for mint: %v: %w", mint, err)
-			}
+			// The record isn't saved back here: the job just inserted may already be
+			// saving its SD wallet index to it.
 			localLog.Debug().Str(logfields.VIN, mint.Vin).Msg("Submitted mint for VIN")
 		}
 	}
@@ -968,6 +985,24 @@ func (s *vehicleOnboardService) mintedRecently(ctx context.Context, vin string) 
 		return false
 	}
 	return len(jobs.Jobs) > 0
+}
+
+// recoverMints settles the VINs' records whose mint job died, so they can move on.
+// Without a River client it can't tell a dead job from a live one, and does nothing.
+func (s *vehicleOnboardService) recoverMints(ctx context.Context, vins []string) {
+	if s.mintRecovery == nil || s.riverClient == nil {
+		return
+	}
+	records, err := s.repositories.Onboarding.GetOnboardingsByVins(ctx, vins)
+	if err != nil {
+		s.logger.Warn().Err(err).Msg("Failed to load records to recover mints")
+		return
+	}
+	for _, record := range records {
+		if err := s.mintRecovery.Recover(ctx, s.riverClient, record); err != nil {
+			s.logger.Error().Err(err).Str(logfields.VIN, record.Vin).Msg("Failed to recover a mint.")
+		}
+	}
 }
 
 // Helper methods

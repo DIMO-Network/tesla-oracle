@@ -31,7 +31,9 @@ const (
 	OnboardingStatusConnectFailure = 42
 	OnboardingStatusConnectSuccess = 43
 
-	// 50-59 minting
+	// 50-59 minting. A mint job marks the record MintPending, with its SD wallet
+	// index, right before it sends the mint, and MintUnknown if the mint was sent but
+	// its receipt lost: either way the mint may be on chain.
 	OnboardingStatusMintUnknown = 50
 	OnboardingStatusMintPending = 51
 	OnboardingStatusMintFailure = 52

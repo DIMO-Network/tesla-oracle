@@ -12,7 +12,8 @@ import (
 	"github.com/rs/zerolog"
 )
 
-// TeslaCommandErrorHandler handles errors and final failures for Tesla command jobs
+// TeslaCommandErrorHandler logs failed attempts of every job kind and handles
+// errors and final failures for Tesla command jobs
 type TeslaCommandErrorHandler struct {
 	logger       zerolog.Logger
 	repositories *repository.Repositories
@@ -26,8 +27,27 @@ func NewTeslaCommandErrorHandler(logger zerolog.Logger, repositories *repository
 	}
 }
 
-// HandleError handles final job failures and updates command status accordingly
+// logJobError records a failed attempt. River logs these at Info since v0.33, and
+// its default logger only prints Warn and above, so nothing else reports them.
+func (h *TeslaCommandErrorHandler) logJobError(job *rivertype.JobRow, err error) {
+	event := h.logger.Warn()
+	// job.State is still running here, even on the last attempt.
+	if job.Attempt >= job.MaxAttempts {
+		event = h.logger.Error()
+	}
+	event.Int64("jobId", job.ID).
+		Str("jobKind", job.Kind).
+		Int("attempt", job.Attempt).
+		Int("maxAttempts", job.MaxAttempts).
+		Err(err).
+		Msg("River job attempt failed")
+}
+
+// HandleError logs the failed attempt, handles final job failures and updates
+// command status accordingly
 func (h *TeslaCommandErrorHandler) HandleError(ctx context.Context, job *rivertype.JobRow, err error) *river.ErrorHandlerResult {
+	h.logJobError(job, err)
+
 	// Handle final failures for Tesla command jobs
 	// Somehow jobState not updated to discarded here, so we check both
 	//if job.Kind == "tesla_command" && job.State == rivertype.JobStateDiscarded {
