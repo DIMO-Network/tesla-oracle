@@ -19,6 +19,7 @@ import (
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/helpers"
 	"github.com/DIMO-Network/tesla-oracle/internal/controllers/test"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	mods "github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/service"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
@@ -28,7 +29,9 @@ import (
 	"github.com/gofiber/fiber/v2"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/riverqueue/river"
+	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -46,6 +49,7 @@ type VehicleControllerTestSuite struct {
 	container testcontainers.Container
 	ctx       context.Context
 	river     *river.Client[pgx.Tx]
+	riverPool *pgxpool.Pool
 	settings  config.Settings
 	ws        *wallet.SDWalletsService
 	logger    zerolog.Logger
@@ -58,6 +62,15 @@ func (s *VehicleControllerTestSuite) SetupSuite() {
 	s.pdb, s.container, s.settings = test.StartContainerDatabase(context.Background(), s.T(), migrationsDirRelPath)
 	s.ws = wallet.NewSDWalletsService(s.logger, sdWalletsSeed)
 
+	// The onboarding service looks up mint jobs through River. This client only
+	// inserts and lists jobs: with no queues it never works any.
+	require.NoError(s.T(), migrateRiver(s.ctx, s.pdb.DBS().Writer.DB))
+	var err error
+	s.riverPool, err = pgxpool.New(s.ctx, s.settings.DB.BuildConnectionString(true))
+	require.NoError(s.T(), err)
+	s.river, err = river.NewClient(riverpgxv5.New(s.riverPool), &river.Config{})
+	require.NoError(s.T(), err)
+
 	fmt.Println("Suite setup completed.")
 }
 
@@ -69,6 +82,7 @@ func (s *VehicleControllerTestSuite) TearDownTest() {
 
 // TearDownSuite cleanup at end by terminating container
 func (s *VehicleControllerTestSuite) TearDownSuite() {
+	s.riverPool.Close()
 	fmt.Printf("shutting down postgres at with session: %s \n", s.container.SessionID())
 	if err := s.container.Terminate(s.ctx); err != nil {
 		s.T().Fatal(err)
@@ -94,6 +108,9 @@ const vehicleTokenIDwithSDValidDD = 120
 const vehicleTokenIDwithSDOtherOwner = 140
 const sdTokenIDOtherOwner = 445
 const sdTokenIDFinalize = 456
+
+// vehicleTokenIDBurned is a vehicle identity-api doesn't have: it was burned.
+const vehicleTokenIDBurned = 150
 
 const vehicleTokenIDnoSDInvalidDD = 200
 const vehicleTokenIDwithSDInvalidDD = 220
@@ -171,6 +188,8 @@ func createMockDependencies(_ *testing.T) deps {
 		Definition:      mods.Definition{ID: "test-dd-2025"},
 	}, nil)
 
+	identity.On("FetchVehicleByTokenID", int64(vehicleTokenIDBurned)).Return(nil, fmt.Errorf("%w: No vehicle with token id %d.", core.ErrVehicleNotFound, vehicleTokenIDBurned))
+
 	credsStore := new(test.MockCredStore)
 
 	return deps{
@@ -210,36 +229,40 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		Onboarding: onboardingRepo,
 	}
 
-	// Create a mock service for testing
-	mockService := service.NewVehicleOnboardService(
-		&config.Settings{},
-		&mockDeps.logger,
-		mockDeps.identity,
-		s.river,
-		s.ws,
-		nil, // transactions client
-		repos,
-	)
+	// newApp serves verify from an onboarding service with the given River client.
+	newApp := func(riverClient *river.Client[pgx.Tx]) *fiber.App {
+		mockService := service.NewVehicleOnboardService(
+			&config.Settings{},
+			&mockDeps.logger,
+			mockDeps.identity,
+			riverClient,
+			s.ws,
+			nil, // transactions client
+			repos,
+		)
 
-	c := NewVehicleOnboardController(
-		&mockDeps.logger,
-		mockService,
-	)
-	app := fiber.New(fiber.Config{
-		EnableSplittingOnParsers: true,
-	})
-
-	app.Use(func(c *fiber.Ctx) error {
-		// Simulate JWT middleware setting the user in Locals
-		token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-			"ethereum_address": ownerAdd,
+		c := NewVehicleOnboardController(
+			&mockDeps.logger,
+			mockService,
+		)
+		app := fiber.New(fiber.Config{
+			EnableSplittingOnParsers: true,
 		})
-		c.Locals("user", token)
-		return c.Next()
-	})
-	app.Use(helpers.NewWalletMiddleware())
 
-	app.Post("/vehicle/verify", c.VerifyVins)
+		app.Use(func(c *fiber.Ctx) error {
+			// Simulate JWT middleware setting the user in Locals
+			token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+				"ethereum_address": ownerAdd,
+			})
+			c.Locals("user", token)
+			return c.Next()
+		})
+		app.Use(helpers.NewWalletMiddleware())
+
+		app.Post("/vehicle/verify", c.VerifyVins)
+		return app
+	}
+	app := newApp(s.river)
 
 	s.Run("Get verification status for empty VIN list", func() {
 		payloadJSON, err := json.Marshal(VinsVerifyParams{
@@ -737,6 +760,96 @@ func (s *VehicleControllerTestSuite) TestVerifyVins() {
 		response, _ := app.Test(test.BuildRequest("POST", "/vehicle/verify", string(payloadJSON)))
 		assert.Equal(t, fiber.StatusBadRequest, response.StatusCode)
 	})
+
+	// A mint that succeeded and was never finalized, whose vehicle was burned since
+	// (its owner deleted it). The record can never be finalized, and verify used to
+	// refuse the VIN forever. It now starts over with a new vehicle and SD.
+	s.Run("Restarts a minted onboarding whose vehicle was burned", func() {
+		t := s.T()
+		minted := dbmodels.Onboarding{
+			Vin:                "ABCDEFG1234567812",
+			VehicleTokenID:     null.Int64From(vehicleTokenIDBurned),
+			SyntheticTokenID:   null.Int64From(446),
+			WalletIndex:        null.Int64From(8),
+			OnboardingStatus:   53, // OnboardingStatusMintSuccess
+			DeviceDefinitionID: null.StringFrom("test-dd-2025"),
+		}
+		require.NoError(t, minted.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+		t.Cleanup(func() { _, _ = minted.Delete(s.ctx, s.pdb.DBS().Writer) })
+
+		payloadJSON, err := json.Marshal(VinsVerifyParams{Vins: []service.VinWithTokenID{{Vin: "ABCDEFG1234567812"}}})
+		assert.NilError(t, err)
+		response, _ := app.Test(test.BuildRequest("POST", "/vehicle/verify", string(payloadJSON)))
+		body, _ := io.ReadAll(response.Body)
+		assert.Equal(t, fiber.StatusOK, response.StatusCode, string(body))
+
+		expectedJSON, err := json.Marshal(StatusForVinsResponse{Statuses: []service.VinStatus{
+			{Vin: "ABCDEFG1234567812", Status: "Success", Details: "Ready to mint Vehicle and Synthetic Device"},
+		}})
+		assert.NilError(t, err)
+		assert.Equal(t, string(body), string(expectedJSON))
+
+		record, err := dbmodels.FindOnboarding(s.ctx, s.pdb.DBS().Reader, "ABCDEFG1234567812")
+		require.NoError(t, err)
+		assert.Equal(t, 23, record.OnboardingStatus) // OnboardingStatusVendorValidationSuccess
+		assert.Assert(t, !record.VehicleTokenID.Valid, "burned vehicle token ID kept")
+		assert.Assert(t, !record.SyntheticTokenID.Valid, "burned synthetic token ID kept")
+		assert.Assert(t, !record.WalletIndex.Valid, "burned SD's wallet index kept")
+		assert.Equal(t, "test-dd-2025", record.DeviceDefinitionID.String)
+	})
+
+	// identity-api not having the vehicle only means it was burned once the mint is
+	// old enough to have been indexed. Restarting a mint that isn't indexed yet would
+	// mint the VIN a second vehicle, so verify has to be able to rule that out.
+	for _, tc := range []struct {
+		name string
+		// app serves the verify request.
+		app *fiber.App
+		// recentMint queues a mint job for the VIN just before verify.
+		recentMint bool
+	}{
+		{name: "its mint job is recent", app: app, recentMint: true},
+		{name: "there is no River client to look up its mint job", app: newApp(nil)},
+	} {
+		s.Run("Doesn't restart a minted onboarding identity-api doesn't have when "+tc.name, func() {
+			t := s.T()
+			// Verify waits for a recent mint to reach identity-api before it refuses.
+			t.Cleanup(service.SetIdentityWaitForTest(2, time.Millisecond))
+
+			minted := dbmodels.Onboarding{
+				Vin:                "ABCDEFG1234567812",
+				VehicleTokenID:     null.Int64From(vehicleTokenIDBurned),
+				SyntheticTokenID:   null.Int64From(446),
+				WalletIndex:        null.Int64From(8),
+				OnboardingStatus:   53, // OnboardingStatusMintSuccess
+				DeviceDefinitionID: null.StringFrom("test-dd-2025"),
+			}
+			require.NoError(t, minted.Insert(s.ctx, s.pdb.DBS().Writer, boil.Infer()))
+			t.Cleanup(func() { _, _ = minted.Delete(s.ctx, s.pdb.DBS().Writer) })
+
+			if tc.recentMint {
+				_, err := s.river.Insert(s.ctx, service.OnboardingArgs{VIN: minted.Vin}, nil)
+				require.NoError(t, err)
+				t.Cleanup(func() {
+					_, err := s.riverPool.Exec(s.ctx, "DELETE FROM river_job")
+					assert.NilError(t, err)
+				})
+			}
+
+			payloadJSON, err := json.Marshal(VinsVerifyParams{Vins: []service.VinWithTokenID{{Vin: minted.Vin}}})
+			assert.NilError(t, err)
+			response, _ := tc.app.Test(test.BuildRequest("POST", "/vehicle/verify", string(payloadJSON)))
+			body, _ := io.ReadAll(response.Body)
+			assert.Equal(t, fiber.StatusBadRequest, response.StatusCode, string(body))
+
+			record, err := dbmodels.FindOnboarding(s.ctx, s.pdb.DBS().Reader, minted.Vin)
+			require.NoError(t, err)
+			assert.Equal(t, 53, record.OnboardingStatus, "the record was restarted")
+			assert.Equal(t, int64(vehicleTokenIDBurned), record.VehicleTokenID.Int64)
+			assert.Equal(t, int64(446), record.SyntheticTokenID.Int64)
+			assert.Equal(t, int64(8), record.WalletIndex.Int64)
+		})
+	}
 }
 
 func (s *VehicleControllerTestSuite) TestFinalizeOnboarding() {

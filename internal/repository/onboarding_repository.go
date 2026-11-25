@@ -288,6 +288,25 @@ func (r *onboardingRepository) UpdateOnboardingIfStatus(ctx context.Context, vin
 	return updated == 1, nil
 }
 
+// RestartOnboardingIfStatus moves the VIN's record to toStatus with its vehicle and
+// SD token IDs and its SD wallet index cleared, so the next mint makes a new vehicle
+// and SD, if its status in the database is still fromStatus. It reports whether it did.
+func (r *onboardingRepository) RestartOnboardingIfStatus(ctx context.Context, vin string, fromStatus, toStatus int) (bool, error) {
+	updated, err := dbmodels.Onboardings(
+		dbmodels.OnboardingWhere.Vin.EQ(vin),
+		dbmodels.OnboardingWhere.OnboardingStatus.EQ(fromStatus),
+	).UpdateAll(ctx, r.db.DBS().Writer, dbmodels.M{
+		dbmodels.OnboardingColumns.OnboardingStatus: toStatus,
+		dbmodels.OnboardingColumns.VehicleTokenID:   null.Int64{},
+		dbmodels.OnboardingColumns.SyntheticTokenID: null.Int64{},
+		dbmodels.OnboardingColumns.WalletIndex:      null.Int64{},
+	})
+	if err != nil {
+		return false, fmt.Errorf("failed to restart VIN record: %w", err)
+	}
+	return updated == 1, nil
+}
+
 // GetOnboardingsByTokenIDs retrieves VINs where VehicleTokenID is in the provided token IDs.
 func (r *onboardingRepository) GetOnboardingsByTokenIDs(ctx context.Context, tokenIDsToCheck []int64) (dbmodels.OnboardingSlice, error) {
 	vins, err := dbmodels.Onboardings(dbmodels.OnboardingWhere.VehicleTokenID.IN(tokenIDsToCheck)).All(ctx, r.db.DBS().Reader)

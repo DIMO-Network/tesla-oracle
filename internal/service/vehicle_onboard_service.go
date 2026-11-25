@@ -19,6 +19,7 @@ import (
 	"github.com/DIMO-Network/go-zerodev"
 	"github.com/DIMO-Network/shared/pkg/logfields"
 	"github.com/DIMO-Network/tesla-oracle/internal/config"
+	"github.com/DIMO-Network/tesla-oracle/internal/core"
 	"github.com/DIMO-Network/tesla-oracle/internal/models"
 	"github.com/DIMO-Network/tesla-oracle/internal/repository"
 	dbmodels "github.com/DIMO-Network/tesla-oracle/models"
@@ -312,13 +313,20 @@ func (s *vehicleOnboardService) VerifyVins(ctx context.Context, vinsData []VinWi
 			}
 
 			if isMinted(dbVin.OnboardingStatus) {
-				// A mint that succeeded but was never finalized: the caller can finish it,
-				// if the minted vehicle is theirs and its SD is still the one minted.
-				if !s.isResumableMint(ctx, dbVin, walletAddress) {
-					return nil, errors.New("some of the VINs are not verified or already onboarded")
+				restarted, err := s.restartBurnedMint(ctx, dbVin)
+				if err != nil {
+					return nil, err
 				}
-				statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: DetailsReadyToFinalize})
-				continue
+				if !restarted {
+					// A mint that succeeded but was never finalized: the caller can finish it,
+					// if the minted vehicle is theirs and its SD is still the one minted.
+					if !s.isResumableMint(ctx, dbVin, walletAddress) {
+						return nil, errors.New("some of the VINs are not verified or already onboarded")
+					}
+					statuses = append(statuses, VinStatus{Vin: vehicle.Vin, Status: "Success", Details: DetailsReadyToFinalize})
+					continue
+				}
+				// The minted vehicle was burned: the record is ready to mint again.
 			}
 
 			if vehicle.VehicleTokenID != 0 {
@@ -891,6 +899,16 @@ var (
 	identityWaitDelay    = time.Second
 )
 
+// SetIdentityWaitForTest changes how long verify and finalize wait for identity-api,
+// and returns a function that puts the wait back. It is for tests outside this
+// package that reach the wait and can't afford the full 30s. It isn't safe to call
+// while requests are running.
+func SetIdentityWaitForTest(attempts int, delay time.Duration) (restore func()) {
+	prevAttempts, prevDelay := identityWaitAttempts, identityWaitDelay
+	identityWaitAttempts, identityWaitDelay = attempts, delay
+	return func() { identityWaitAttempts, identityWaitDelay = prevAttempts, prevDelay }
+}
+
 // requireMintedToWallet checks the record's minted vehicle belongs to the wallet
 // and still carries the record's SD. A just-minted vehicle can take a few seconds
 // to reach identity-api, so it waits for it.
@@ -920,6 +938,52 @@ func (s *vehicleOnboardService) requireMintedToWallet(ctx context.Context, recor
 		case <-time.After(identityWaitDelay):
 		}
 	}
+}
+
+// restartBurnedMint restarts a minted, unfinalized record whose vehicle identity-api
+// says doesn't exist, so the VIN can be onboarded again with a new vehicle and SD.
+// That vehicle was burned after the mint, for example by its owner deleting it, and
+// the record can never be finalized. A mint from moments ago may just not be indexed
+// yet, so a record with a recent mint job is left alone, as is one that changed
+// since it was read. It reports whether it restarted the record, and updates it.
+func (s *vehicleOnboardService) restartBurnedMint(ctx context.Context, record *dbmodels.Onboarding) (bool, error) {
+	if !record.VehicleTokenID.Valid {
+		return false, nil
+	}
+	if _, err := s.identitySvc.FetchVehicleByTokenID(record.VehicleTokenID.Int64); !errors.Is(err, core.ErrVehicleNotFound) {
+		return false, nil
+	}
+	// Restarting a mint that is merely not indexed yet would mint the VIN a second
+	// vehicle, so a lookup that can't answer leaves the record alone too.
+	recent, err := s.recentMintJob(ctx, record.Vin)
+	if err != nil {
+		s.logger.Warn().Err(err).Str(logfields.VIN, record.Vin).
+			Int64(logfields.VehicleTokenID, record.VehicleTokenID.Int64).
+			Msg("Minted vehicle of an unfinalized onboarding no longer exists, but couldn't rule out a recent mint. Left the onboarding as it is.")
+		return false, nil
+	}
+	if recent {
+		return false, nil
+	}
+
+	restarted, err := s.repositories.Onboarding.RestartOnboardingIfStatus(ctx, record.Vin, record.OnboardingStatus, OnboardingStatusVendorValidationSuccess)
+	if err != nil {
+		return false, fmt.Errorf("failed to restart the onboarding of VIN %s: %w", record.Vin, err)
+	}
+	if !restarted {
+		return false, nil
+	}
+
+	s.logger.Warn().Str(logfields.VIN, record.Vin).
+		Int64(logfields.VehicleTokenID, record.VehicleTokenID.Int64).
+		Int64("syntheticDeviceTokenId", record.SyntheticTokenID.Int64).
+		Msg("Minted vehicle of an unfinalized onboarding no longer exists. Restarted the onboarding so the VIN can be minted again.")
+
+	record.OnboardingStatus = OnboardingStatusVendorValidationSuccess
+	record.VehicleTokenID = null.Int64{}
+	record.SyntheticTokenID = null.Int64{}
+	record.WalletIndex = null.Int64{}
+	return true, nil
 }
 
 // isResumableMint reports whether a minted, unfinalized record can be finalized by
@@ -969,11 +1033,30 @@ func (s *vehicleOnboardService) fetchMintedVehicle(ctx context.Context, record *
 // minted record whose SD identity-api doesn't show had its SD burned.
 const recentMintWindow = 15 * time.Minute
 
+// errNoRiverClient is recentMintJob's error when the service has no River client.
+var errNoRiverClient = errors.New("no River client")
+
 // mintedRecently reports whether a mint job was queued for the VIN within
 // recentMintWindow, so an SD missing from identity-api may just not be indexed yet.
+// It reports false when it can't tell. That suits a caller that only waits longer
+// for a recent mint, not one that changes the record: that one uses recentMintJob.
 func (s *vehicleOnboardService) mintedRecently(ctx context.Context, vin string) bool {
-	if s.riverClient == nil {
+	recent, err := s.recentMintJob(ctx, vin)
+	if err != nil {
+		if !errors.Is(err, errNoRiverClient) {
+			s.logger.Warn().Err(err).Str(logfields.VIN, vin).Msg("Failed to look up recent mint jobs")
+		}
 		return false
+	}
+	return recent
+}
+
+// recentMintJob reports whether a mint job was queued for the VIN within
+// recentMintWindow. It returns an error when it can't tell: the service has no
+// River client, or the lookup failed.
+func (s *vehicleOnboardService) recentMintJob(ctx context.Context, vin string) (bool, error) {
+	if s.riverClient == nil {
+		return false, errNoRiverClient
 	}
 	jobs, err := s.riverClient.JobList(ctx, river.NewJobListParams().
 		Kinds(OnboardingArgs{}.Kind()).
@@ -981,10 +1064,9 @@ func (s *vehicleOnboardService) mintedRecently(ctx context.Context, vin string) 
 			river.NamedArgs{"vin": vin, "window": recentMintWindow.Seconds()}).
 		First(1))
 	if err != nil {
-		s.logger.Warn().Err(err).Str(logfields.VIN, vin).Msg("Failed to look up recent mint jobs")
-		return false
+		return false, fmt.Errorf("failed to look up recent mint jobs: %w", err)
 	}
-	return len(jobs.Jobs) > 0
+	return len(jobs.Jobs) > 0, nil
 }
 
 // recoverMints settles the VINs' records whose mint job died, so they can move on.
