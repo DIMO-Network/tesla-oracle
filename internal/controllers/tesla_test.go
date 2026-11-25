@@ -40,6 +40,7 @@ import (
 	"github.com/riverqueue/river/riverdriver/riverdatabasesql"
 	"github.com/riverqueue/river/riverdriver/riverpgxv5"
 	"github.com/riverqueue/river/rivermigrate"
+	"github.com/riverqueue/river/rivertype"
 	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -1264,11 +1265,38 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand() {
 	}
 }
 
+// testCommandRetryDelay is how long a failed or snoozed command job waits for its
+// next attempt in tests. River's default backoff puts a third attempt about 17s
+// after the first, and a retry that far out also has to wait for River's
+// scheduler, which runs every 5s and only on the elected leader. A delay under
+// the scheduler's interval skips the scheduler: River makes the job available again
+// right away.
+const testCommandRetryDelay = 100 * time.Millisecond
+
+// quickRetryPolicy retries a failed job after testCommandRetryDelay.
+type quickRetryPolicy struct{}
+
+func (quickRetryPolicy) NextRetry(*rivertype.JobRow) time.Time {
+	return time.Now().Add(testCommandRetryDelay)
+}
+
+// waitForCommand waits for the command's job to finish with it, successfully or
+// not, and returns the command request.
+func (s *TeslaControllerTestSuite) waitForCommand(commands repository.CommandRepository, commandID string) *models.DeviceCommandRequest {
+	var commandRequest *models.DeviceCommandRequest
+	require.Eventually(s.T(), func() bool {
+		var err error
+		commandRequest, err = commands.GetCommandRequest(s.ctx, commandID)
+		return err == nil && commandRequest.Status != core.CommandStatusPending
+	}, 30*time.Second, 20*time.Millisecond, "command %s is still pending", commandID)
+	return commandRequest
+}
+
 func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *config.Settings, teslaFleetAPI core.TeslaFleetAPIService, tokenManager *core.TeslaTokenManager, repositories *repository.Repositories) (*river.Client[pgx.Tx], *pgxpool.Pool, error) {
 	workers := river.NewWorkers()
 
 	// Create and register Tesla command worker
-	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger, 5*time.Second)
+	teslaCommandWorker := work.NewTeslaCommandWorker(teslaFleetAPI, tokenManager, repositories.Command, repositories.Vehicle, &logger, testCommandRetryDelay)
 	if err := river.AddWorkerSafely(workers, teslaCommandWorker); err != nil {
 		return nil, nil, fmt.Errorf("failed to add Tesla command worker: %w", err)
 	}
@@ -1293,6 +1321,11 @@ func initializeRiver(ctx context.Context, logger zerolog.Logger, settings *confi
 		},
 		Workers:      workers,
 		ErrorHandler: errorHandler,
+		// Retry and pick up jobs quickly, so a test that needs every attempt
+		// doesn't have to sit through River's backoff.
+		RetryPolicy:       quickRetryPolicy{},
+		FetchCooldown:     10 * time.Millisecond,
+		FetchPollInterval: 50 * time.Millisecond,
 	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create river client: %w", err)
@@ -1402,9 +1435,6 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 			req.Header.Set("Content-Type", "application/json")
 			assert.NoError(s.T(), test.GenerateJWTWithPrivileges(req, []int{2}, fmt.Sprintf("%d", vehicleTokenID)))
 
-			// sleep so river job can start
-			time.Sleep(1 * time.Second)
-
 			resp, err := app.Test(req)
 			assert.NoError(s.T(), err)
 			assert.Equal(s.T(), fiber.StatusOK, resp.StatusCode)
@@ -1419,18 +1449,8 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationJobExecution() {
 			require.NoError(s.T(), err)
 			commandID := response["commandId"].(string)
 
-			// Wait for River job to complete
-			if tc.vehicleState == "asleep" {
-				// If vehicle is sleeping, wait for retry delay (1 minute + processing time)
-				time.Sleep(10 * time.Second)
-			} else {
-				// Wait for immediate job processing
-				time.Sleep(2 * time.Second)
-			}
-
 			// then - verify command request status was updated in database
-			commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
-			require.NoError(s.T(), err)
+			commandRequest := s.waitForCommand(repos.Command, commandID)
 
 			if tc.expectSuccess {
 				assert.Equal(s.T(), core.CommandStatusCompleted, commandRequest.Status)
@@ -1512,12 +1532,8 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationWakeUpRetries() 
 		require.NoError(s.T(), err)
 		commandID := response["commandId"].(string)
 
-		// Wait for all retry attempts (1 minute + processing time)
-		time.Sleep(15 * time.Second)
-
 		// then - verify command failed after max wake attempts
-		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
-		require.NoError(s.T(), err)
+		commandRequest := s.waitForCommand(repos.Command, commandID)
 
 		assert.Equal(s.T(), core.CommandStatusFailed, commandRequest.Status)
 		assert.True(s.T(), commandRequest.ErrorMessage.Valid)
@@ -1602,12 +1618,8 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_IntegrationRetriableErrors(
 		require.NoError(s.T(), err)
 		commandID := response["commandId"].(string)
 
-		// Wait for all retry attempts to complete (with exponential backoff)
-		time.Sleep(30 * time.Second)
-
 		// then - verify command eventually succeeded after retries
-		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
-		require.NoError(s.T(), err)
+		commandRequest := s.waitForCommand(repos.Command, commandID)
 
 		assert.Equal(s.T(), core.CommandStatusCompleted, commandRequest.Status)
 		assert.False(s.T(), commandRequest.ErrorMessage.Valid)
@@ -1700,12 +1712,8 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_WakeUpRetry() {
 		require.NoError(s.T(), err)
 		commandID := response["commandId"].(string)
 
-		// Wait for retries and wake-up attempts (River retries + wake-up snoozing)
-		time.Sleep(30 * time.Second)
-
 		// then - verify command eventually succeeded
-		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
-		require.NoError(s.T(), err)
+		commandRequest := s.waitForCommand(repos.Command, commandID)
 
 		assert.Equal(s.T(), core.CommandStatusCompleted, commandRequest.Status)
 		assert.False(s.T(), commandRequest.ErrorMessage.Valid)
@@ -1781,11 +1789,8 @@ func (s *TeslaControllerTestSuite) TestSubmitCommand_TokenWakeFailed3Times() {
 		require.NoError(s.T(), err)
 		commandID := response["commandId"].(string)
 
-		time.Sleep(20 * time.Second)
-
-		// then - verify command eventually succeeded
-		commandRequest, err := repos.Command.GetCommandRequest(s.ctx, commandID)
-		require.NoError(s.T(), err)
+		// then - verify command failed once the job was out of attempts
+		commandRequest := s.waitForCommand(repos.Command, commandID)
 
 		assert.Equal(s.T(), core.CommandStatusFailed, commandRequest.Status)
 		assert.True(s.T(), commandRequest.ErrorMessage.Valid)
